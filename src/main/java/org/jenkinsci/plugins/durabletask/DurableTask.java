@@ -1,0 +1,55 @@
+/*
+ * The MIT License
+ *
+ * Copyright 2014 CloudBees, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
+package org.jenkinsci.plugins.durabletask;
+
+import hudson.EnvVars;
+import hudson.ExtensionPoint;
+import hudson.FilePath;
+import hudson.Launcher;
+import hudson.model.AbstractDescribableImpl;
+import hudson.model.TaskListener;
+import java.io.IOException;
+
+/**
+ * A task which may be run asynchronously on a build node and withstand disconnection of the slave agent.
+ * Should have a descriptor, and a {@code config.jelly} for form data binding.
+ */
+public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> implements ExtensionPoint {
+
+    @Override public DurableTaskDescriptor getDescriptor() {
+        return (DurableTaskDescriptor) super.getDescriptor();
+    }
+
+    /**
+     * Launches a durable task.
+     * @param env basic environment variables to use during launch
+     * @param workspace the workspace to use
+     * @param launcher a way to start processes
+     * @param listener log output for the build
+     * @return a way to check up on the task’s subsequent status
+     */
+    public abstract Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException;
+
+}
