@@ -6,7 +6,7 @@
         <version>1.532.2</version>
     </parent>
     <artifactId>durable-task</artifactId>
-    <version>0.1-SNAPSHOT</version>
+    <version>0.1</version>
     <packaging>hpi</packaging>
     <name>Durable Task Plugin</name>
     <description>Library offering an extension point for processes which can run outside of Jenkins yet be monitored.</description>
