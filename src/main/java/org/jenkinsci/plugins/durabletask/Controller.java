@@ -31,7 +31,7 @@ import javax.annotation.CheckForNull;
 
 /**
  * Defines how to control the execution of a task after it has started.
- * Expected to be serializable.
+ * Expected to be XStream serializable.
  */
 public abstract class Controller {
 
