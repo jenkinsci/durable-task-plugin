@@ -54,10 +54,17 @@ public final class BourneShellScript extends FileMonitoringTask {
 //        }
         ShellController c = new ShellController(ws);
 
-        c.getScriptFile(ws).write(script, "UTF-8");
+        FilePath shf = c.getScriptFile(ws);
 
-        String cmd = String.format("sh '%s' > '%s' 2>&1; echo $? > '%s'",
-                c.getScriptFile(ws),
+        String s = script;
+        if (!s.startsWith("#!"))
+            s = "#!/bin/sh\n"+s;
+        shf.write(s, "UTF-8");
+        shf.chmod(0755);
+
+
+        String cmd = String.format("'%s' > '%s' 2>&1; echo $? > '%s'",
+                shf,
                 c.getLogFile(ws),
                 c.getResultFile(ws)
                 );
