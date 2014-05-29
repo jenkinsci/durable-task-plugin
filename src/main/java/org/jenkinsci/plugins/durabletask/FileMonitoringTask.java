@@ -35,6 +35,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collections;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,25 +46,18 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
-    /** Workspace-relative filename for {@link #doLaunch}. */
-    protected static final String LOG_FILE = ".jenkins-log.txt";
-
-    /** Workspace-relative filename for {@link #doLaunch}. */
-    protected static final String RESULT_FILE = ".jenkins-result.txt";
-
     private static String id(FilePath workspace) {
         return Util.getDigestOf(workspace.getRemote());
     }
 
     @Override public final Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-        workspace.child(LOG_FILE).delete();
-        workspace.child(RESULT_FILE).delete();
         env.put("JENKINS_SERVER_COOKIE", "durable-" + id(workspace)); // ensure getCharacteristicEnvVars does not match, so Launcher.killAll will leave it alone
         return doLaunch(workspace, launcher, listener, env);
     }
 
     /**
-     * Should start a process which sends output to {@link #LOG_FILE} in the workspace and finally writes its exit code to {@link #RESULT_FILE}.
+     * Should start a process which sends output to {@linkplain FileMonitoringController#getLogFile(FilePath) log file}
+     * in the workspace and finally writes its exit code to {@linkplain FileMonitoringController#getResultFile(FilePath) result file}.
      * @param workspace the workspace to use
      * @param launcher a way to launch processes
      * @param listener build console log
@@ -73,11 +67,23 @@ public abstract class FileMonitoringTask extends DurableTask {
     protected abstract FileMonitoringController doLaunch(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException;
 
     protected static class FileMonitoringController extends Controller {
+        /**
+         * Unique ID among all the {@link Controller}s that share the same workspace.
+         */
+        private final String id = Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8);
 
+        /**
+         * Byte offset in the file that has been reported thus far.
+         */
         private long lastLocation;
 
+        public FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
+            // can't keep ws reference because Controller is expected to be serializable
+            controlDir(ws).mkdirs();
+        }
+
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
-            FilePath log = workspace.child(LOG_FILE);
+            FilePath log = getLogFile(workspace);
             long len = log.length();
             if (len > lastLocation) {
                 // TODO more efficient to use RandomAccessFile or similar in a FileCallable:
@@ -96,7 +102,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public final Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
-            FilePath status = workspace.child(RESULT_FILE);
+            FilePath status = getResultFile(workspace);
             if (status.exists()) {
                 return Integer.parseInt(status.readToString().trim());
             } else {
@@ -109,10 +115,29 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
-            workspace.child(LOG_FILE).delete();
-            workspace.child(RESULT_FILE).delete();
+            controlDir(workspace).deleteRecursive();
         }
 
+        /**
+         * Directory in which this controller can place files.
+         */
+        public FilePath controlDir(FilePath ws) {
+            return ws.child("."+id);
+        }
+
+        /**
+         * File in which the exit code of the process should be reported.
+         */
+        public FilePath getResultFile(FilePath workspace) {
+            return controlDir(workspace).child("jenkins-result.txt");
+        }
+
+        /**
+         * File in which the stdout/stderr
+         */
+        public FilePath getLogFile(FilePath workspace) {
+            return controlDir(workspace).child("jenkins-log.txt");
+        }
     }
 
 }

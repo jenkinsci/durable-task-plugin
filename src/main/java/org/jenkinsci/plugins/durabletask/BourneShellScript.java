@@ -37,8 +37,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
  */
 public final class BourneShellScript extends FileMonitoringTask {
 
-    private static final String BOURNE_SCRIPT_FILE = ".jenkins-script.sh";
-
     private final String script;
 
     @DataBoundConstructor public BourneShellScript(String script) {
@@ -49,24 +47,33 @@ public final class BourneShellScript extends FileMonitoringTask {
         return script;
     }
 
-    @Override protected FileMonitoringController doLaunch(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
-        if (!launcher.isUnix()) {
-            throw new IOException("Bourne shell scripts can only be run on Unix nodes");
-        }
-        workspace.child(BOURNE_SCRIPT_FILE).write(script, "UTF-8");
-        StringBuilder shell = new StringBuilder("sh '").append(workspace).append('/').append(BOURNE_SCRIPT_FILE).append("' >'").append(workspace).append('/').append(LOG_FILE).append("' 2>&1; ");
-        shell.append("echo $? >'").append(workspace).append('/').append(RESULT_FILE).append('\'');
-        launcher.launch().cmds("nohup", "sh", "-c", shell.toString()).envs(envVars).pwd(workspace).start();
-        return new ShellController();
+    @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
+// KK: Commenting out --- Hey, don't forget about Cygwin!
+//        if (!launcher.isUnix()) {
+//            throw new IOException("Bourne shell scripts can only be run on Unix nodes");
+//        }
+        ShellController c = new ShellController(ws);
+
+        c.getScriptFile(ws).write(script, "UTF-8");
+
+        String cmd = String.format("sh '%s' > '%s' 2>&1; echo $? > '%s'",
+                c.getScriptFile(ws),
+                c.getLogFile(ws),
+                c.getResultFile(ws)
+                );
+
+        launcher.launch().cmds("nohup", "sh", "-c", cmd).envs(envVars).pwd(ws).start();
+        return c;
     }
 
     private static final class ShellController extends FileMonitoringController {
-
-        @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
-            super.cleanup(workspace);
-            workspace.child(BOURNE_SCRIPT_FILE).delete();
+        private ShellController(FilePath ws) throws IOException, InterruptedException {
+            super(ws);
         }
 
+        public FilePath getScriptFile(FilePath ws) {
+            return controlDir(ws).child("script.sh");
+        }
     }
 
     @Extension public static final class DescriptorImpl extends DurableTaskDescriptor {

@@ -36,10 +36,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
  * Runs a Windows batch script.
  */
 public final class WindowsBatchScript extends FileMonitoringTask {
-
-    private static final String BATCH_SCRIPT_FILE_1 = ".jenkins-wrap.bat";
-    private static final String BATCH_SCRIPT_FILE_2 = ".jenkins-main.bat";
-
     private final String script;
 
     @DataBoundConstructor public WindowsBatchScript(String script) {
@@ -50,24 +46,35 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         return script;
     }
 
-    @Override protected FileMonitoringController doLaunch(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
+    @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         if (launcher.isUnix()) {
             throw new IOException("Batch scripts can only be run on Windows nodes");
         }
-        workspace.child(BATCH_SCRIPT_FILE_1).write("call " + BATCH_SCRIPT_FILE_2 + " >" + LOG_FILE + " 2>&1\r\necho %ERRORLEVEL% >" + RESULT_FILE + "\r\n", "UTF-8");
-        workspace.child(BATCH_SCRIPT_FILE_2).write(script, "UTF-8");
-        launcher.launch().cmds("cmd", "/c", workspace.child(BATCH_SCRIPT_FILE_1).getRemote()).envs(envVars).pwd(workspace).start();
-        return new BatchController();
+        BatchController c = new BatchController(ws);
+
+        c.getBatchFile1(ws).write(String.format("call %s > %s 2>&1\r\necho %%ERRORLEVEL%% > %s\r\n",
+                c.getBatchFile2(ws),
+                c.getLogFile(ws),
+                c.getResultFile(ws)
+        ), "UTF-8");
+        c.getBatchFile2(ws).write(script, "UTF-8");
+
+        launcher.launch().cmds("cmd", "/c", c.getBatchFile1(ws).getRemote()).envs(envVars).pwd(ws).start();
+        return c;
     }
 
     private static final class BatchController extends FileMonitoringController {
-
-        @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
-            super.cleanup(workspace);
-            workspace.child(BATCH_SCRIPT_FILE_1).delete();
-            workspace.child(BATCH_SCRIPT_FILE_2).delete();
+        private BatchController(FilePath ws) throws IOException, InterruptedException {
+            super(ws);
         }
 
+        public FilePath getBatchFile1(FilePath ws) {
+            return controlDir(ws).child("jenkins-wrap.bat");
+        }
+
+        public FilePath getBatchFile2(FilePath ws) {
+            return controlDir(ws).child("jenkins-main.bat");
+        }
     }
 
     @Extension public static final class DescriptorImpl extends DurableTaskDescriptor {
