@@ -30,6 +30,9 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.TaskListener;
 import java.io.IOException;
+
+import hudson.tasks.Shell;
+import jenkins.model.Jenkins;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
@@ -57,8 +60,10 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath shf = c.getScriptFile(ws);
 
         String s = script;
-        if (!s.startsWith("#!"))
-            s = "#!/bin/sh\n"+s;
+        if (!s.startsWith("#!")) {
+            String defaultShell = Jenkins.getInstance().getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
+            s = "#!"+defaultShell+"\n" + s;
+        }
         shf.write(s, "UTF-8");
         shf.chmod(0755);
 
