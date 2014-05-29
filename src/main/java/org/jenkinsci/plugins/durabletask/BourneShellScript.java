@@ -62,7 +62,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         String s = script;
         if (!s.startsWith("#!")) {
             String defaultShell = Jenkins.getInstance().getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
-            s = "#!"+defaultShell+"\n" + s;
+            s = "#!"+defaultShell+" -xe\n" + s;
         }
         shf.write(s, "UTF-8");
         shf.chmod(0755);
@@ -78,7 +78,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
-    private static final class ShellController extends FileMonitoringController {
+    /*package*/ static final class ShellController extends FileMonitoringController {
         private ShellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
         }
