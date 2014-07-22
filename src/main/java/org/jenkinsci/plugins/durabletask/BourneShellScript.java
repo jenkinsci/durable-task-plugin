@@ -86,6 +86,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         public FilePath getScriptFile(FilePath ws) {
             return controlDir(ws).child("script.sh");
         }
+
+        private static final long serialVersionUID = 1L;
     }
 
     @Extension public static final class DescriptorImpl extends DurableTaskDescriptor {

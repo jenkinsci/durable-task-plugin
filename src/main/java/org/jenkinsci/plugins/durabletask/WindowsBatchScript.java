@@ -75,6 +75,8 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         public FilePath getBatchFile2(FilePath ws) {
             return controlDir(ws).child("jenkins-main.bat");
         }
+
+        private static final long serialVersionUID = 1L;
     }
 
     @Extension public static final class DescriptorImpl extends DurableTaskDescriptor {

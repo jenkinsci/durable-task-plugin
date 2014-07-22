@@ -138,6 +138,8 @@ public abstract class FileMonitoringTask extends DurableTask {
         public FilePath getLogFile(FilePath workspace) {
             return controlDir(workspace).child("jenkins-log.txt");
         }
+
+        private static final long serialVersionUID = 1L;
     }
 
 }

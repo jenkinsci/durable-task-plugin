@@ -27,13 +27,14 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.FilePath;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.Serializable;
 import javax.annotation.CheckForNull;
 
 /**
  * Defines how to control the execution of a task after it has started.
- * Expected to be XStream serializable.
+ * Expected to be XStream and Java serializable.
  */
-public abstract class Controller {
+public abstract class Controller implements Serializable {
 
     /**
      * Obtains any new task log output.
@@ -64,4 +65,5 @@ public abstract class Controller {
      */
     public abstract void cleanup(FilePath workspace) throws IOException, InterruptedException;
 
+    private static final long serialVersionUID = 1L;
 }
