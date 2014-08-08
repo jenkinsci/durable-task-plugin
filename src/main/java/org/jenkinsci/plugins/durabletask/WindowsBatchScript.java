@@ -59,7 +59,16 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         ), "UTF-8");
         c.getBatchFile2(ws).write(script, "UTF-8");
 
-        launcher.launch().cmds("cmd", "/c", c.getBatchFile1(ws).getRemote()).envs(envVars).pwd(ws).start();
+        Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", c.getBatchFile1(ws).getRemote()).envs(envVars).pwd(ws);
+        try {
+            Launcher.ProcStarter.class.getMethod("quiet", boolean.class).invoke(ps, true); // TODO 1.576+ remove reflection
+            listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running batch script"); // details printed by cmd
+        } catch (NoSuchMethodException x) {
+            // older Jenkins, OK
+        } catch (Exception x) { // ?
+            x.printStackTrace(listener.getLogger());
+        }
+        ps.start();
         return c;
     }
 

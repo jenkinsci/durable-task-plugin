@@ -74,7 +74,16 @@ public final class BourneShellScript extends FileMonitoringTask {
                 c.getResultFile(ws)
                 );
 
-        launcher.launch().cmds("nohup", "sh", "-c", cmd).envs(envVars).pwd(ws).start();
+        Launcher.ProcStarter ps = launcher.launch().cmds("nohup", "sh", "-c", cmd).envs(envVars).pwd(ws);
+        try {
+            Launcher.ProcStarter.class.getMethod("quiet", boolean.class).invoke(ps, true); // TODO 1.576+ remove reflection
+            listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
+        } catch (NoSuchMethodException x) {
+            // older Jenkins, OK
+        } catch (Exception x) { // ?
+            x.printStackTrace(listener.getLogger());
+        }
+        ps.start();
         return c;
     }
 
