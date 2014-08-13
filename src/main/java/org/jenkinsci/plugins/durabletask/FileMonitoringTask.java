@@ -104,7 +104,11 @@ public abstract class FileMonitoringTask extends DurableTask {
         @Override public final Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             if (status.exists()) {
-                return Integer.parseInt(status.readToString().trim());
+                try {
+                    return Integer.parseInt(status.readToString().trim());
+                } catch (NumberFormatException x) {
+                    throw new IOException("corrupted content in " + status + ": " + x, x);
+                }
             } else {
                 return null;
             }
