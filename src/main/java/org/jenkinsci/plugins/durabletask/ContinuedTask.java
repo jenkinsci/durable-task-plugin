@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2013-2014, CloudBees, Inc.
+ * Copyright 2014 Jesse Glick.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,67 +24,5 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import hudson.Extension;
-import hudson.model.Label;
-import hudson.model.Node;
-import hudson.model.Queue;
-import hudson.model.queue.CauseOfBlockage;
-import hudson.model.queue.QueueTaskDispatcher;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import org.kohsuke.accmod.Restricted;
-import org.kohsuke.accmod.restrictions.DoNotUse;
-
-/**
- * Marker for tasks which should perhaps “jump ahead” in the queue because they continue an earlier task.
- * Ensures that this task gets scheduled ahead of regular stuff.
- * Use judiciously; an appropriate use case is a task which is intended to be the direct continuation of one currently running
- * or which was running in a previous Jenkins session and is not logically finished.
- */
-public interface ContinuedTask extends Queue.Task {
-
-    /**
-     * True if the task should actually be consider continued now.
-     */
-    boolean isContinued();
-
-    @Restricted(DoNotUse.class) // implementation
-    @Extension class Scheduler extends QueueTaskDispatcher {
-
-        private static boolean isContinued(Queue.Task task) {
-            return task instanceof ContinuedTask && ((ContinuedTask) task).isContinued();
-        }
-
-        @Override public CauseOfBlockage canTake(Node node, Queue.BuildableItem item) {
-            if (isContinued(item.task)) {
-                return null;
-            }
-            for (Queue.BuildableItem other : Queue.getInstance().getBuildableItems()) {
-                if (isContinued(other.task)) {
-                    Label label = other.task.getAssignedLabel();
-                    if (label == null || label.matches(node)) { // conservative; might actually go to a different node
-                        Logger.getLogger(ContinuedTask.class.getName()).log(Level.FINE, "blocking {0} in favor of {1}", new Object[] {item.task, other.task});
-                        return new HoldOnPlease(other.task);
-                    }
-                }
-            }
-            return null;
-        }
-
-        private static final class HoldOnPlease extends CauseOfBlockage {
-
-            private final Queue.Task task;
-
-            HoldOnPlease(Queue.Task task) {
-                this.task = task;
-            }
-
-            @Override public String getShortDescription() {
-                return Messages.ContinuedTask__should_be_allowed_to_run_first(task.getFullDisplayName());
-            }
-
-        }
-
-    }
-
-}
+@Deprecated
+public interface ContinuedTask extends org.jenkinsci.plugins.durabletask.executors.ContinuedTask {}

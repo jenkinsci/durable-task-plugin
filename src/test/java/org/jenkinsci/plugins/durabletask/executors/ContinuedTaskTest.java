@@ -22,7 +22,7 @@
  * THE SOFTWARE.
  */
 
-package org.jenkinsci.plugins.durabletask;
+package org.jenkinsci.plugins.durabletask.executors;
 
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
