@@ -40,6 +40,7 @@ import org.kohsuke.accmod.restrictions.DoNotUse;
  * Ensures that this task gets scheduled ahead of regular stuff.
  * Use judiciously; an appropriate use case is a task which is intended to be the direct continuation of one currently running
  * or which was running in a previous Jenkins session and is not logically finished.
+ * @see ContinuableExecutable
  */
 public interface ContinuedTask extends Queue.Task {
 
