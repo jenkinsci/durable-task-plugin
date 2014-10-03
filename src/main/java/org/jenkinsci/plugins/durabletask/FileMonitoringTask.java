@@ -86,7 +86,8 @@ public abstract class FileMonitoringTask extends DurableTask {
             FilePath log = getLogFile(workspace);
             long len = log.length();
             if (len > lastLocation) {
-                // TODO more efficient to use RandomAccessFile or similar in a FileCallable:
+                // TODO more efficient to use RandomAccessFile or similar in a FileCallable.
+                // Also more robust to do the writing from inside the callable (wrap sink in RemoteOutputStream).
                 InputStream is = log.read();
                 try {
                     IOUtils.skip(is, lastLocation);
