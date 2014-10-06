@@ -29,8 +29,12 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
 import hudson.model.TaskListener;
+import hudson.remoting.RemoteOutputStream;
+import hudson.remoting.VirtualChannel;
 import hudson.util.IOUtils;
 import hudson.util.LogTaskListener;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -84,21 +88,36 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
             FilePath log = getLogFile(workspace);
-            long len = log.length();
-            if (len > lastLocation) {
-                // TODO more efficient to use RandomAccessFile or similar in a FileCallable.
-                // Also more robust to do the writing from inside the callable (wrap sink in RemoteOutputStream).
-                InputStream is = log.read();
-                try {
-                    IOUtils.skip(is, lastLocation);
-                    Util.copyStream(is, sink);
-                } finally {
-                    is.close();
-                }
-                lastLocation = len;
+            Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink)));
+            if (newLocation != null) {
+                lastLocation = newLocation;
                 return true;
             } else {
                 return false;
+            }
+        }
+        private static class WriteLog implements FilePath.FileCallable<Long> {
+            private final long lastLocation;
+            private final OutputStream sink;
+            WriteLog(long lastLocation, OutputStream sink) {
+                this.lastLocation = lastLocation;
+                this.sink = sink;
+            }
+            @Override public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+                long len = f.length();
+                if (len > lastLocation) {
+                    // TODO more efficient to use RandomAccessFile
+                    InputStream is = new FileInputStream(f);
+                    try {
+                        IOUtils.skip(is, lastLocation);
+                        Util.copyStream(is, sink);
+                    } finally {
+                        is.close();
+                    }
+                    return len;
+                } else {
+                    return null;
+                }
             }
         }
 
