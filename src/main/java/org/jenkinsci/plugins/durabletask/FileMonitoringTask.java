@@ -31,13 +31,11 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
-import hudson.util.IOUtils;
 import hudson.util.LogTaskListener;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.util.Collections;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -90,6 +88,7 @@ public abstract class FileMonitoringTask extends DurableTask {
             FilePath log = getLogFile(workspace);
             Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink)));
             if (newLocation != null) {
+                LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, log});
                 lastLocation = newLocation;
                 return true;
             } else {
@@ -106,13 +105,19 @@ public abstract class FileMonitoringTask extends DurableTask {
             @Override public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 long len = f.length();
                 if (len > lastLocation) {
-                    // TODO more efficient to use RandomAccessFile
-                    InputStream is = new FileInputStream(f);
+                    RandomAccessFile raf = new RandomAccessFile(f, "r");
                     try {
-                        IOUtils.skip(is, lastLocation);
-                        Util.copyStream(is, sink);
+                        raf.seek(lastLocation);
+                        long toRead = len - lastLocation;
+                        if (toRead > Integer.MAX_VALUE) { // >2Gb of output at once is unlikely
+                            throw new IOException("large reads not yet implemented");
+                        }
+                        // TODO is this efficient for large amounts of output? Would it be better to stream data, or return a byte[] from the callable?
+                        byte[] buf = new byte[(int) toRead];
+                        raf.readFully(buf);
+                        sink.write(buf);
                     } finally {
-                        is.close();
+                        raf.close();
                     }
                     return len;
                 } else {
@@ -121,6 +126,7 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
+        // TODO would be more efficient to allow API to consolidate writeLog with exitStatus (save an RPC call)
         @Override public final Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             if (status.exists()) {
