@@ -67,12 +67,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         shf.write(s, "UTF-8");
         shf.chmod(0755);
 
-
-        String cmd = String.format("'%s' > '%s' 2>&1; echo $? > '%s'",
+        String cmd = String.format("echo $$ > '%s'; '%s' > '%s' 2>&1; echo $? > '%s'",
+                c.pidFile(ws),
                 shf,
                 c.getLogFile(ws),
                 c.getResultFile(ws)
-                );
+                )./* escape against EnvVars jobEnv in LocalLauncher.launch */replace("$", "$$");
 
         Launcher.ProcStarter ps = launcher.launch().cmds("nohup", "sh", "-c", cmd).envs(envVars).pwd(ws);
         try {
@@ -83,17 +83,52 @@ public final class BourneShellScript extends FileMonitoringTask {
         } catch (Exception x) { // ?
             x.printStackTrace(listener.getLogger());
         }
+        ps.stdout(listener); // for diagnosis in case wrapper script fails
         ps.start();
         return c;
     }
 
     /*package*/ static final class ShellController extends FileMonitoringController {
+
+        private int pid;
+
         private ShellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
         }
 
         public FilePath getScriptFile(FilePath ws) {
             return controlDir(ws).child("script.sh");
+        }
+
+        FilePath pidFile(FilePath ws) {
+            return controlDir(ws).child("pid");
+        }
+
+        private synchronized int pid(FilePath ws) throws IOException, InterruptedException {
+            if (pid == 0) {
+                FilePath pidFile = pidFile(ws);
+                if (pidFile.exists()) {
+                    try {
+                        pid = Integer.parseInt(pidFile.readToString().trim());
+                        ProcessLiveness.reset(ws.getChannel());
+                    } catch (NumberFormatException x) {
+                        throw new IOException("corrupted content in " + pidFile + ": " + x, x);
+                    }
+                }
+            }
+            return pid;
+        }
+
+        @Override public Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
+            Integer status = super.exitStatus(workspace);
+            if (status != null) {
+                return status;
+            }
+            int _pid = pid(workspace);
+            if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid)) {
+                return -1; // arbitrary code to distinguish from 0 (success) and 1+ (observed failure)
+            }
+            return null;
         }
 
         private static final long serialVersionUID = 1L;
