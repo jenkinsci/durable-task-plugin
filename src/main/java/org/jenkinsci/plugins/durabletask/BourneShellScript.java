@@ -110,7 +110,6 @@ public final class BourneShellScript extends FileMonitoringTask {
                 if (pidFile.exists()) {
                     try {
                         pid = Integer.parseInt(pidFile.readToString().trim());
-                        ProcessLiveness.reset(ws.getChannel());
                     } catch (NumberFormatException x) {
                         throw new IOException("corrupted content in " + pidFile + ": " + x, x);
                     }
