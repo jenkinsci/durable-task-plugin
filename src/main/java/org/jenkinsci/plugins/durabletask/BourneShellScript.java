@@ -91,6 +91,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     /*package*/ static final class ShellController extends FileMonitoringController {
 
         private int pid;
+        private transient int exitStatusCount;
 
         private ShellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
@@ -123,9 +124,12 @@ public final class BourneShellScript extends FileMonitoringTask {
             if (status != null) {
                 return status;
             }
-            int _pid = pid(workspace);
-            if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid)) {
-                return -1; // arbitrary code to distinguish from 0 (success) and 1+ (observed failure)
+            // Do not bother checking this the first few times; WorkflowTest.buildShellScriptAcrossDisconnect sometimes fails otherwise, TBD why
+            if (exitStatusCount++ > 10) {
+                int _pid = pid(workspace);
+                if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid)) {
+                    return -1; // arbitrary code to distinguish from 0 (success) and 1+ (observed failure)
+                }
             }
             return null;
         }
