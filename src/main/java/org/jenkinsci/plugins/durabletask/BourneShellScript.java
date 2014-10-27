@@ -83,7 +83,10 @@ public final class BourneShellScript extends FileMonitoringTask {
         } catch (Exception x) { // ?
             x.printStackTrace(listener.getLogger());
         }
-        ps.stdout(listener); // for diagnosis in case wrapper script fails
+        /* Uncomment for diagnosis (and comment following line) in case wrapper script fails. Otherwise skip since it consumes a thread:
+        ps.stdout(listener);
+        */
+        ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
         ps.start();
         return c;
     }
