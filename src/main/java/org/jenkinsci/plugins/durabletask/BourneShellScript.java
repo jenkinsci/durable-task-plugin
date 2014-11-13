@@ -28,10 +28,12 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Util;
 import hudson.model.TaskListener;
 import java.io.IOException;
 
 import hudson.tasks.Shell;
+import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import org.kohsuke.stapler.DataBoundConstructor;
 
@@ -40,10 +42,10 @@ import org.kohsuke.stapler.DataBoundConstructor;
  */
 public final class BourneShellScript extends FileMonitoringTask {
 
-    private final String script;
+    private final @Nonnull String script;
 
     @DataBoundConstructor public BourneShellScript(String script) {
-        this.script = script;
+        this.script = Util.fixNull(script);
     }
     
     public String getScript() {
@@ -51,10 +53,10 @@ public final class BourneShellScript extends FileMonitoringTask {
     }
 
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
-// KK: Commenting out --- Hey, don't forget about Cygwin!
-//        if (!launcher.isUnix()) {
-//            throw new IOException("Bourne shell scripts can only be run on Unix nodes");
-//        }
+        if (script.isEmpty()) {
+            listener.getLogger().println("Warning: was asked to run an empty script");
+        }
+
         ShellController c = new ShellController(ws);
 
         FilePath shf = c.getScriptFile(ws);
