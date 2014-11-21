@@ -133,7 +133,11 @@ public final class BourneShellScript extends FileMonitoringTask {
             if (exitStatusCount++ > 10) {
                 int _pid = pid(workspace);
                 if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid)) {
-                    return -1; // arbitrary code to distinguish from 0 (success) and 1+ (observed failure)
+                    // it looks like the process has disappeared. one last check to make sure it's not a result of a race condition,
+                    // then if we still don't have the exit code, use fake exit code to distinguish from 0 (success) and 1+ (observed failure)
+                    status = super.exitStatus(workspace);
+                    if (status==null)   status = -1;
+                    return status;
                 }
             }
             return null;
