@@ -28,11 +28,15 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Platform;
 import hudson.Util;
 import hudson.model.TaskListener;
-import java.io.IOException;
-
+import hudson.remoting.Callable;
 import hudson.tasks.Shell;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -76,7 +80,12 @@ public final class BourneShellScript extends FileMonitoringTask {
                 c.getResultFile(ws)
                 )./* escape against EnvVars jobEnv in LocalLauncher.launch */replace("$", "$$");
 
-        Launcher.ProcStarter ps = launcher.launch().cmds("nohup", "sh", "-c", cmd).envs(envVars).pwd(ws);
+        List<String> args = new ArrayList<String>();
+        if (!ws.act(new DarwinCheck())) { // JENKINS-25848
+            args.add("nohup");
+        }
+        args.addAll(Arrays.asList("sh", "-c", cmd));
+        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws);
         try {
             Launcher.ProcStarter.class.getMethod("quiet", boolean.class).invoke(ps, true); // TODO 1.576+ remove reflection
             listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
@@ -150,6 +159,12 @@ public final class BourneShellScript extends FileMonitoringTask {
             return Messages.BourneShellScript_bourne_shell();
         }
 
+    }
+
+    private static final class DarwinCheck implements Callable<Boolean,RuntimeException> {
+        @Override public Boolean call() throws RuntimeException {
+            return Platform.isDarwin();
+        }
     }
 
 }
