@@ -31,6 +31,7 @@ import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.EphemeralNode;
 import java.io.IOException;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -41,6 +42,7 @@ import java.util.logging.Logger;
 public final class OnceRetentionStrategy extends CloudRetentionStrategy implements ExecutorListener {
 
     private static final Logger LOGGER = Logger.getLogger(OnceRetentionStrategy.class.getName());
+    ReentrantLock checkLock = new ReentrantLock(false);
 
     /**
      * Creates the retention strategy.
@@ -55,6 +57,19 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
             throw new IllegalStateException("May not use OnceRetentionStrategy on an EphemeralNode: " + c);
         }
         super.start(c);
+    }
+    
+    @Override
+    public long check(AbstractCloudComputer cloudComputer) {
+        if (! checkLock.tryLock()) {
+            return 1;
+        } else {
+            try {
+                return super.check(cloudComputer);
+            } finally {
+                checkLock.unlock();
+            }
+        }
     }
 
     @Override public void taskAccepted(Executor executor, Queue.Task task) {}
@@ -77,12 +92,18 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         LOGGER.log(Level.FINE, "terminating {0} since {1} seems to be finished", new Object[] {c.getName(), exec});
         c.setAcceptingTasks(false); // just in case
         // Best to kill them off ASAP; otherwise NodeProvisioner does nothing until ComputerRetentionWork has run, causing poor throughput:
+        if (!checkLock.tryLock()) {
+            LOGGER.log(Level.WARNING, "Unable to obtain lock on computer {0}", new Object[]{c.getName()});
+            return; // We were unable to obtain the lock.
+        }
         try {
             c.getNode().terminate();
         } catch (InterruptedException x) {
             LOGGER.log(Level.WARNING, null, x);
         } catch (IOException x) {
             LOGGER.log(Level.WARNING, null, x);
+        } finally {
+            checkLock.unlock();
         }
         // TODO calling NodeProvisioner.suggestReviewNow here does not seem to help push things along at all
     }
