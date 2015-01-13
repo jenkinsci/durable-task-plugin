@@ -24,12 +24,16 @@
 
 package org.jenkinsci.plugins.durabletask.executors;
 
+import hudson.model.Computer;
 import hudson.model.Executor;
 import hudson.model.ExecutorListener;
 import hudson.model.Queue;
 import hudson.slaves.AbstractCloudComputer;
+import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.EphemeralNode;
+import jenkins.model.Jenkins;
+
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -41,6 +45,8 @@ import java.util.logging.Logger;
 public final class OnceRetentionStrategy extends CloudRetentionStrategy implements ExecutorListener {
 
     private static final Logger LOGGER = Logger.getLogger(OnceRetentionStrategy.class.getName());
+
+    private transient boolean terminating;
 
     /**
      * Creates the retention strategy.
@@ -68,7 +74,7 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
     }
 
     private void done(Executor executor) {
-        AbstractCloudComputer<?> c = (AbstractCloudComputer) executor.getOwner();
+        final AbstractCloudComputer<?> c = (AbstractCloudComputer) executor.getOwner();
         Queue.Executable exec = executor.getCurrentExecutable();
         if (exec instanceof ContinuableExecutable && ((ContinuableExecutable) exec).willContinue()) {
             LOGGER.log(Level.FINE, "not terminating {0} because {1} says it will be continued", new Object[] {c.getName(), exec});
@@ -76,15 +82,38 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         }
         LOGGER.log(Level.FINE, "terminating {0} since {1} seems to be finished", new Object[] {c.getName(), exec});
         c.setAcceptingTasks(false); // just in case
-        // Best to kill them off ASAP; otherwise NodeProvisioner does nothing until ComputerRetentionWork has run, causing poor throughput:
-        try {
-            c.getNode().terminate();
-        } catch (InterruptedException x) {
-            LOGGER.log(Level.WARNING, null, x);
-        } catch (IOException x) {
-            LOGGER.log(Level.WARNING, null, x);
+        synchronized (this) {
+            if (terminating) {
+                return;
+            }
+            terminating = true;
         }
-        // TODO calling NodeProvisioner.suggestReviewNow here does not seem to help push things along at all
+        Computer.threadPoolForRemoting.submit(new Runnable() {
+            @Override
+            public void run() {
+                final Jenkins jenkins = Jenkins.getInstance();
+                // TODO once the baseline is 1.592+ switch to Queue.withLock
+                Object queue = jenkins == null ? OnceRetentionStrategy.this : jenkins.getQueue();
+                synchronized (queue) {
+                    try {
+                        AbstractCloudSlave node = c.getNode();
+                        if (node != null) {
+                            node.terminate();
+                        }
+                    } catch (InterruptedException e) {
+                        LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
+                        synchronized (OnceRetentionStrategy.this) {
+                            terminating = false;
+                        }
+                    } catch (IOException e) {
+                        LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
+                        synchronized (OnceRetentionStrategy.this) {
+                            terminating = false;
+                        }
+                    }
+                }
+            }
+        });
     }
 
 }
