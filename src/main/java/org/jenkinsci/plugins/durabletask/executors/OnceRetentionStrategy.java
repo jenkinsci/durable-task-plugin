@@ -55,6 +55,53 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
     public OnceRetentionStrategy(int idleMinutes) {
         super(idleMinutes);
     }
+    
+    @Override
+    public long check(final AbstractCloudComputer c) {
+        // When the slave is idle we should disable accepting tasks and check to see if it is already trying to 
+        // terminate. If it's not already trying to terminate then lets terminate manually.
+        if (c.isIdle()) {
+            c.setAcceptingTasks(false); // just in case
+            synchronized (this) {
+                if (terminating) {
+                    // Since the instance is terminating we will check back in 1 minute
+                    // to make sure it's terminating(just in case of errors).
+                    return 1;
+                }
+                
+                terminating = true;
+            }
+            
+            Computer.threadPoolForRemoting.submit(new Runnable() {
+                @Override
+                public void run() {
+                    final Jenkins jenkins = Jenkins.getInstance();
+                    Object queue = jenkins == null ? OnceRetentionStrategy.this : jenkins.getQueue();
+                    synchronized (queue) {
+                        AbstractCloudSlave node = c.getNode();
+                        if (c.isIdle()) {
+                            c.setAcceptingTasks(false);
+                            if (node != null) {
+                                LOGGER.log(Level.INFO, "Disconnecting {0}", c.getName());
+                                try {
+                                    node.terminate();
+                                } catch (InterruptedException e) {
+                                    LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
+                                    terminating = false;
+                                } catch (IOException e) {
+                                    LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
+                                    terminating = false;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Return one because we want to check every minute if idle.
+        return 1;
+    }
 
     @Override public void start(AbstractCloudComputer c) {
         if (c.getNode() instanceof EphemeralNode) {
