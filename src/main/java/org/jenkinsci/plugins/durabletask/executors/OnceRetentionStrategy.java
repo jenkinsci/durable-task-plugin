@@ -32,6 +32,7 @@ import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.EphemeralNode;
+import hudson.util.TimeUnit2;
 import jenkins.model.Jenkins;
 
 import java.io.IOException;
@@ -47,6 +48,8 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
     private static final Logger LOGGER = Logger.getLogger(OnceRetentionStrategy.class.getName());
 
     private transient boolean terminating;
+    
+    private int idleMinutes;
 
     /**
      * Creates the retention strategy.
@@ -54,6 +57,23 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
      */
     public OnceRetentionStrategy(int idleMinutes) {
         super(idleMinutes);
+        this.idleMinutes = idleMinutes;
+    }
+
+    @Override
+    public long check(final AbstractCloudComputer c) {
+        // When the slave is idle we should disable accepting tasks and check to see if it is already trying to
+        // terminate. If it's not already trying to terminate then lets terminate manually.
+        if (c.isIdle() && !disabled) {
+            final long idleMilliseconds = System.currentTimeMillis() - c.getIdleStartMilliseconds();
+            if (idleMilliseconds > TimeUnit2.MINUTES.toMillis(idleMinutes)) {
+                LOGGER.log(Level.FINE, "Disconnecting {0}", c.getName());
+                done(c);
+            }
+        }
+
+        // Return one because we want to check every minute if idle.
+        return 1;
     }
 
     @Override public void start(AbstractCloudComputer c) {
@@ -81,6 +101,10 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
             return;
         }
         LOGGER.log(Level.FINE, "terminating {0} since {1} seems to be finished", new Object[] {c.getName(), exec});
+        done(c);
+    }
+
+    private void done(final AbstractCloudComputer<?> c) {
         c.setAcceptingTasks(false); // just in case
         synchronized (this) {
             if (terminating) {
