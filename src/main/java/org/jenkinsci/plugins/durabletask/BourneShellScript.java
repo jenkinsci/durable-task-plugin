@@ -73,8 +73,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         shf.write(s, "UTF-8");
         shf.chmod(0755);
 
-        String cmd = String.format("echo $$ > '%s'; '%s' > '%s' 2>&1; echo $? > '%s'",
+        // TODO really calls for a better API for doLaunch
+        String jsc = envVars.put("JENKINS_SERVER_COOKIE", "please-do-not-kill-me");
+        // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
+        String cmd = String.format("echo $$ > '%s'; jsc=%s; JENKINS_SERVER_COOKIE=$jsc '%s' > '%s' 2>&1; echo $? > '%s'",
                 c.pidFile(ws),
+                jsc,
                 shf,
                 c.getLogFile(ws),
                 c.getResultFile(ws)
