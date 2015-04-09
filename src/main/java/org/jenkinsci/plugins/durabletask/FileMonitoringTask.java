@@ -31,7 +31,6 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
-import hudson.util.LogTaskListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -140,8 +139,8 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
-        @Override public final void stop(FilePath workspace) throws IOException, InterruptedException {
-            workspace.createLauncher(new LogTaskListener(LOGGER, Level.FINE)).kill(Collections.singletonMap("JENKINS_SERVER_COOKIE", "durable-" + id(workspace)));
+        @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            launcher.kill(Collections.singletonMap("JENKINS_SERVER_COOKIE", "durable-" + id(workspace)));
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {

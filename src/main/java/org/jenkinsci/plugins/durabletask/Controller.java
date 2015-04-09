@@ -25,9 +25,14 @@
 package org.jenkinsci.plugins.durabletask;
 
 import hudson.FilePath;
+import hudson.Launcher;
+import hudson.Util;
+import hudson.util.LogTaskListener;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.CheckForNull;
 
 /**
@@ -55,8 +60,20 @@ public abstract class Controller implements Serializable {
     /**
      * Tries to stop any running task.
      * @param workspace the workspace in use
+     * @param launcher a way to start processes
      */
-    public abstract void stop(FilePath workspace) throws IOException, InterruptedException;
+    public void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+        if (Util.isOverridden(Controller.class, getClass(), "stop", FilePath.class)) {
+            stop(workspace);
+        } else {
+            throw new AbstractMethodError("implement stop(FilePath, Launcher)");
+        }
+    }
+
+    /** @deprecated use {@link #stop(FilePath, Launcher)} instead */
+    public void stop(FilePath workspace) throws IOException, InterruptedException {
+        stop(workspace, workspace.createLauncher(new LogTaskListener(Logger.getLogger(Controller.class.getName()), Level.FINE)));
+    }
 
     /**
      * Cleans up after a task is done.
