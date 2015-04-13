@@ -40,8 +40,8 @@ import java.util.Collections;
 import org.junit.Before;
 
 public class BourneShellScriptTest extends Assert {
-    @Rule
-    public JenkinsRule j = new JenkinsRule();
+
+    @Rule public JenkinsRule j = new JenkinsRule();
 
     @Before public void unix() {
         Assume.assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
