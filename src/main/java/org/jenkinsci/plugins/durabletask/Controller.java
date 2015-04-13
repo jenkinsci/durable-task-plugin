@@ -53,9 +53,21 @@ public abstract class Controller implements Serializable {
     /**
      * Checks whether the task has finished.
      * @param workspace the workspace in use
+     * @param launcher a way to start processes
      * @return an exit code (zero is successful), or null if the task appears to still be running
      */
-    public abstract @CheckForNull Integer exitStatus(FilePath workspace) throws IOException, InterruptedException;
+    public @CheckForNull Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+        if (Util.isOverridden(Controller.class, getClass(), "exitStatus", FilePath.class)) {
+            return exitStatus(workspace);
+        } else {
+            throw new AbstractMethodError("implement exitStatus(FilePath, Launcher)");
+        }
+    }
+
+    /** @deprecated use {@link #exitStatus(FilePath, Launcher)} instead */
+    public @CheckForNull Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
+        return exitStatus(workspace, createLauncher(workspace));
+    }
 
     /**
      * Tries to stop any running task.
@@ -72,7 +84,11 @@ public abstract class Controller implements Serializable {
 
     /** @deprecated use {@link #stop(FilePath, Launcher)} instead */
     public void stop(FilePath workspace) throws IOException, InterruptedException {
-        stop(workspace, workspace.createLauncher(new LogTaskListener(Logger.getLogger(Controller.class.getName()), Level.FINE)));
+        stop(workspace, createLauncher(workspace));
+    }
+
+    private static Launcher createLauncher(FilePath workspace) throws IOException, InterruptedException {
+        return workspace.createLauncher(new LogTaskListener(Logger.getLogger(Controller.class.getName()), Level.FINE));
     }
 
     /**
