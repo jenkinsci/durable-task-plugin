@@ -56,7 +56,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         return script;
     }
 
-    @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
+    @Override protected FileMonitoringController launchWithCookie(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
@@ -73,12 +73,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         shf.write(s, "UTF-8");
         shf.chmod(0755);
 
-        // TODO really calls for a better API for doLaunch
-        String jsc = envVars.put("JENKINS_SERVER_COOKIE", "please-do-not-kill-me");
+        envVars.put(cookieVariable, "please-do-not-kill-me");
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
-        String cmd = String.format("echo $$ > '%s'; jsc=%s; JENKINS_SERVER_COOKIE=$jsc '%s' > '%s' 2>&1; echo $? > '%s'",
+        String cmd = String.format("echo $$ > '%s'; jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s'",
                 c.pidFile(ws),
-                jsc,
+                cookieValue,
+                cookieVariable,
                 shf,
                 c.getLogFile(ws),
                 c.getResultFile(ws)
