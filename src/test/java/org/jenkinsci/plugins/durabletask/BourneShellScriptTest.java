@@ -73,7 +73,8 @@ public class BourneShellScriptTest extends Assert {
     @Test public void stop() throws Exception {
         // Have observed both SIGTERM and SIGCHLD, perhaps depending on which process (the written sh, or sleep) gets the signal first.
         // TODO without the `trap … EXIT` the other handlers do not seem to get run, and we get exit code 143 (~ uncaught SIGTERM). Why?
-        Controller c = new BourneShellScript("trap 'echo got SIGCHLD; exit 99' CHLD; trap 'echo got SIGTERM; exit 99' TERM; trap 'echo exiting' EXIT; sleep 999").launch(new EnvVars(), ws, launcher, listener);
+        // Also on jenkins.ci neither signal trap is encountered, only EXIT.
+        Controller c = new BourneShellScript("trap 'echo got SIGCHLD' CHLD; trap 'echo got SIGTERM' TERM; trap 'echo exiting; exit 99' EXIT; sleep 999").launch(new EnvVars(), ws, launcher, listener);
         Thread.sleep(1000);
         c.stop(ws, launcher);
         while (c.exitStatus(ws, launcher) == null) {
