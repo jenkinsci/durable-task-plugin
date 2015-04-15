@@ -31,7 +31,6 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
-import hudson.util.LogTaskListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -48,13 +47,19 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
-    private static String id(FilePath workspace) {
-        return Util.getDigestOf(workspace.getRemote());
+    private static final String COOKIE = "JENKINS_SERVER_COOKIE";
+
+    private static String cookieFor(FilePath workspace) {
+        return "durable-" + Util.getDigestOf(workspace.getRemote());
     }
 
     @Override public final Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-        env.put("JENKINS_SERVER_COOKIE", "durable-" + id(workspace)); // ensure getCharacteristicEnvVars does not match, so Launcher.killAll will leave it alone
-        return doLaunch(workspace, launcher, listener, env);
+        return launchWithCookie(workspace, launcher, listener, env, COOKIE, cookieFor(workspace));
+    }
+
+    protected FileMonitoringController launchWithCookie(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
+        envVars.put(cookieVariable, cookieValue); // ensure getCharacteristicEnvVars does not match, so Launcher.killAll will leave it alone
+        return doLaunch(workspace, launcher, listener, envVars);
     }
 
     /**
@@ -66,7 +71,9 @@ public abstract class FileMonitoringTask extends DurableTask {
      * @param envVars recommended environment for the subprocess
      * @return a specialized controller
      */
-    protected abstract FileMonitoringController doLaunch(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException;
+    protected FileMonitoringController doLaunch(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
+        throw new AbstractMethodError("override either doLaunch or launchWithCookie");
+    }
 
     protected static class FileMonitoringController extends Controller {
         /**
@@ -79,7 +86,7 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         private long lastLocation;
 
-        public FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
+        protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             controlDir(ws).mkdirs();
         }
@@ -127,7 +134,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         // TODO would be more efficient to allow API to consolidate writeLog with exitStatus (save an RPC call)
-        @Override public Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
+        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             if (status.exists()) {
                 try {
@@ -140,8 +147,8 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
-        @Override public final void stop(FilePath workspace) throws IOException, InterruptedException {
-            workspace.createLauncher(new LogTaskListener(LOGGER, Level.FINE)).kill(Collections.singletonMap("JENKINS_SERVER_COOKIE", "durable-" + id(workspace)));
+        @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {

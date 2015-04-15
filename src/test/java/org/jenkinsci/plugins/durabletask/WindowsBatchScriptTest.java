@@ -26,6 +26,7 @@ package org.jenkinsci.plugins.durabletask;
 
 import hudson.EnvVars;
 import hudson.FilePath;
+import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -42,15 +43,16 @@ public class WindowsBatchScriptTest {
     //@Issue("JENKINS-25678")
     @Test public void spaceInPath() throws Exception {
         Assume.assumeTrue("This test is only for Windows", File.pathSeparatorChar == ';');
-        StreamTaskListener l = StreamTaskListener.fromStdout();
+        StreamTaskListener listener = StreamTaskListener.fromStdout();
         FilePath ws = j.jenkins.getRootPath().child("space in path");
-        Controller c = new WindowsBatchScript("echo hello world").launch(new EnvVars(), ws, j.jenkins.createLauncher(l), l);
-        while (c.exitStatus(ws) == null) {
+        Launcher launcher = j.jenkins.createLauncher(listener);
+        Controller c = new WindowsBatchScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(Integer.valueOf(0), c.exitStatus(ws));
+        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
         String log = baos.toString();
         assertTrue(log, log.contains("hello world"));
         c.cleanup(ws);

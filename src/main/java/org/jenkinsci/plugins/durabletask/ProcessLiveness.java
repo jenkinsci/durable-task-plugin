@@ -24,10 +24,13 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import hudson.Launcher;
 import hudson.remoting.Callable;
 import hudson.remoting.VirtualChannel;
 import java.io.File;
 import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Utility class to track whether a given process is still alive.
@@ -38,10 +41,25 @@ final class ProcessLiveness {
      * Determines whether a process is believed to still be alive.
      * @param channel a connection to the machine on which it would be running
      * @param pid a process ID
+     * @param launcher a way to start processes
      * @return true if it is apparently still alive (or we cannot tell); false if it is believed to not be running
      */
-    public static boolean isAlive(VirtualChannel channel, int pid) throws IOException, InterruptedException {
-        return channel.call(new Liveness(pid));
+    public static boolean isAlive(VirtualChannel channel, int pid, Launcher launcher) throws IOException, InterruptedException {
+        if (launcher instanceof Launcher.LocalLauncher || launcher instanceof Launcher.RemoteLauncher) {
+            return channel.call(new Liveness(pid));
+        } else {
+            // Using a special launcher; let it decide how to do this.
+            // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher:
+            Launcher.ProcStarter ps = launcher.launch().cmds("ps", "-o", "pid=", Integer.toString(pid));
+            try {
+                Launcher.ProcStarter.class.getMethod("quiet", boolean.class).invoke(ps, true); // TODO 1.576+ remove reflection
+            } catch (NoSuchMethodException x) {
+                // older Jenkins, OK
+            } catch (Exception x) { // ?
+                Logger.getLogger(ProcessLiveness.class.getName()).log(Level.WARNING, null, x);
+            }
+            return ps.join() == 0;
+        }
     }
 
     private static final class Liveness implements Callable<Boolean,RuntimeException> {

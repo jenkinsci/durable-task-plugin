@@ -56,7 +56,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         return script;
     }
 
-    @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
+    @Override protected FileMonitoringController launchWithCookie(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
@@ -73,8 +73,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         shf.write(s, "UTF-8");
         shf.chmod(0755);
 
-        String cmd = String.format("echo $$ > '%s'; '%s' > '%s' 2>&1; echo $? > '%s'",
+        envVars.put(cookieVariable, "please-do-not-kill-me");
+        // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
+        String cmd = String.format("echo $$ > '%s'; jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s'",
                 c.pidFile(ws),
+                cookieValue,
+                cookieVariable,
                 shf,
                 c.getLogFile(ws),
                 c.getResultFile(ws)
@@ -132,16 +136,16 @@ public final class BourneShellScript extends FileMonitoringTask {
             return pid;
         }
 
-        @Override public Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
-            Integer status = super.exitStatus(workspace);
+        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            Integer status = super.exitStatus(workspace, launcher);
             if (status != null) {
                 return status;
             }
             int _pid = pid(workspace);
-            if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid)) {
+            if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid, launcher)) {
                 // it looks like the process has disappeared. one last check to make sure it's not a result of a race condition,
                 // then if we still don't have the exit code, use fake exit code to distinguish from 0 (success) and 1+ (observed failure)
-                status = super.exitStatus(workspace);
+                status = super.exitStatus(workspace, launcher);
                 if (status == null) {
                     status = -1;
                 }
