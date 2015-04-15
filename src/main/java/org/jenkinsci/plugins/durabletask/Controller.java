@@ -93,7 +93,7 @@ public abstract class Controller implements Serializable {
 
     /**
      * Cleans up after a task is done.
-     * Should delete any temporary files created by {@link #launch}.
+     * Should delete any temporary files created by {@link DurableTask#launch}.
      * @param workspace the workspace in use
      */
     public abstract void cleanup(FilePath workspace) throws IOException, InterruptedException;
