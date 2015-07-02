@@ -25,6 +25,7 @@
 package org.jenkinsci.plugins.durabletask.executors;
 
 import hudson.model.Computer;
+import hudson.model.Descriptor;
 import hudson.model.Executor;
 import hudson.model.ExecutorListener;
 import hudson.model.Queue;
@@ -32,8 +33,12 @@ import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.EphemeralNode;
+import hudson.slaves.RetentionStrategy;
 import hudson.util.TimeUnit2;
 import jenkins.model.Jenkins;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
+import org.kohsuke.stapler.DataBoundConstructor;
 
 import java.io.IOException;
 import java.util.logging.Level;
@@ -49,12 +54,13 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
 
     private transient boolean terminating;
     
-    private int idleMinutes;
+    protected int idleMinutes;
 
     /**
      * Creates the retention strategy.
      * @param idleMinutes number of minutes of idleness after which to kill the slave; serves a backup in case the strategy fails to detect the end of a task
      */
+    @DataBoundConstructor
     public OnceRetentionStrategy(int idleMinutes) {
         super(idleMinutes);
         this.idleMinutes = idleMinutes;
@@ -140,4 +146,18 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         });
     }
 
+    @Override
+    public DescriptorImpl getDescriptor() {
+        return DESCRIPTOR;
+    }
+
+    @Restricted(NoExternalUse.class)
+    public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
+
+    public static final class DescriptorImpl extends Descriptor<RetentionStrategy<?>> {
+        @Override
+        public String getDisplayName() {
+            return "Once Retention Strategy";
+        }
+    }
 }
