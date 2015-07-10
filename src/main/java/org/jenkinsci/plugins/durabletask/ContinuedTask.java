@@ -24,5 +24,8 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 @Deprecated
+@SuppressFBWarnings(value = "NM_SAME_SIMPLE_NAME_AS_INTERFACE", justification = "Already deprecated.")
 public interface ContinuedTask extends org.jenkinsci.plugins.durabletask.executors.ContinuedTask {}

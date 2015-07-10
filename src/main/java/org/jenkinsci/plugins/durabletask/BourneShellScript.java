@@ -66,8 +66,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath shf = c.getScriptFile(ws);
 
         String s = script;
-        if (!s.startsWith("#!")) {
-            String defaultShell = Jenkins.getInstance().getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
+        final Jenkins jenkins = Jenkins.getInstance();
+        if (!s.startsWith("#!") && jenkins != null) {
+            String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
             s = "#!"+defaultShell+" -xe\n" + s;
         }
         shf.write(s, "UTF-8");
