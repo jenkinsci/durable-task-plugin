@@ -52,7 +52,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         }
         BatchController c = new BatchController(ws);
 
-        c.getBatchFile1(ws).write(String.format("call \"%s\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+        c.getBatchFile1(ws).write(String.format("call \"%s\" > \"%s\" 2>&1%necho %%ERRORLEVEL%% > \"%s\"%n",
                 c.getBatchFile2(ws),
                 c.getLogFile(ws),
                 c.getResultFile(ws)
