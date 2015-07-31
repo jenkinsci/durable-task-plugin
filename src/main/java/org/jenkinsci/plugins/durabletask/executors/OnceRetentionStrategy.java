@@ -27,6 +27,7 @@ package org.jenkinsci.plugins.durabletask.executors;
 import hudson.model.Computer;
 import hudson.model.Executor;
 import hudson.model.ExecutorListener;
+import hudson.model.OneOffExecutor;
 import hudson.model.Queue;
 import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
@@ -96,6 +97,10 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
     private void done(Executor executor) {
         final AbstractCloudComputer<?> c = (AbstractCloudComputer) executor.getOwner();
         Queue.Executable exec = executor.getCurrentExecutable();
+        if (executor instanceof OneOffExecutor) {
+            LOGGER.log(Level.FINE, "not terminating {0} because {1} was a flyweight task", new Object[] {c.getName(), exec});
+            return;
+        }
         if (exec instanceof ContinuableExecutable && ((ContinuableExecutable) exec).willContinue()) {
             LOGGER.log(Level.FINE, "not terminating {0} because {1} says it will be continued", new Object[] {c.getName(), exec});
             return;
