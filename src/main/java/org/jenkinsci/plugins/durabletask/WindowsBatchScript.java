@@ -24,6 +24,7 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
@@ -46,13 +47,14 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         return script;
     }
 
+    @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         if (launcher.isUnix()) {
             throw new IOException("Batch scripts can only be run on Windows nodes");
         }
         BatchController c = new BatchController(ws);
 
-        c.getBatchFile1(ws).write(String.format("call \"%s\" > \"%s\" 2>&1%necho %%ERRORLEVEL%% > \"%s\"%n",
+        c.getBatchFile1(ws).write(String.format("call \"%s\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
                 c.getBatchFile2(ws),
                 c.getLogFile(ws),
                 c.getResultFile(ws)
