@@ -31,7 +31,6 @@ import hudson.Launcher;
 import hudson.Platform;
 import hudson.Util;
 import hudson.model.TaskListener;
-import hudson.remoting.Callable;
 import hudson.tasks.Shell;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -39,6 +38,7 @@ import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
+import jenkins.security.MasterToSlaveCallable;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
@@ -90,15 +90,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             args.add("nohup");
         }
         args.addAll(Arrays.asList("sh", "-c", cmd));
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws);
-        try {
-            Launcher.ProcStarter.class.getMethod("quiet", boolean.class).invoke(ps, true); // TODO 1.576+ remove reflection
-            listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
-        } catch (NoSuchMethodException x) {
-            // older Jenkins, OK
-        } catch (Exception x) { // ?
-            x.printStackTrace(listener.getLogger());
-        }
+        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws).quiet(true);
+        listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
         /* Uncomment for diagnosis (and comment following line) in case wrapper script fails. Otherwise skip since it consumes a thread:
         ps.stdout(listener);
         */
@@ -166,7 +159,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     }
 
-    private static final class DarwinCheck implements Callable<Boolean,RuntimeException> {
+    private static final class DarwinCheck extends MasterToSlaveCallable<Boolean,RuntimeException> {
         @Override public Boolean call() throws RuntimeException {
             return Platform.isDarwin();
         }

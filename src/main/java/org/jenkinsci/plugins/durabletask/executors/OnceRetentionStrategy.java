@@ -34,11 +34,10 @@ import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.EphemeralNode;
 import hudson.util.TimeUnit2;
-import jenkins.model.Jenkins;
-
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.security.NotReallyRoleSensitiveCallable;
 
 /**
  * Retention strategy that allows a cloud slave to run only a single build before disconnecting.
@@ -120,27 +119,27 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         Computer.threadPoolForRemoting.submit(new Runnable() {
             @Override
             public void run() {
-                final Jenkins jenkins = Jenkins.getInstance();
-                // TODO once the baseline is 1.592+ switch to Queue.withLock
-                Object queue = jenkins == null ? OnceRetentionStrategy.this : jenkins.getQueue();
-                synchronized (queue) {
-                    try {
-                        AbstractCloudSlave node = c.getNode();
-                        if (node != null) {
-                            node.terminate();
+                Queue.withLock(new NotReallyRoleSensitiveCallable<Void,RuntimeException>() {
+                    @Override public Void call() {
+                        try {
+                            AbstractCloudSlave node = c.getNode();
+                            if (node != null) {
+                                node.terminate();
+                            }
+                        } catch (InterruptedException e) {
+                            LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
+                            synchronized (OnceRetentionStrategy.this) {
+                                terminating = false;
+                            }
+                        } catch (IOException e) {
+                            LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
+                            synchronized (OnceRetentionStrategy.this) {
+                                terminating = false;
+                            }
                         }
-                    } catch (InterruptedException e) {
-                        LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
-                        synchronized (OnceRetentionStrategy.this) {
-                            terminating = false;
-                        }
-                    } catch (IOException e) {
-                        LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
-                        synchronized (OnceRetentionStrategy.this) {
-                            terminating = false;
-                        }
+                        return null;
                     }
-                }
+                });
             }
         });
     }
