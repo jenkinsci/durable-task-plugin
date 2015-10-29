@@ -39,6 +39,7 @@ import java.util.Collections;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.MasterToSlaveFileCallable;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -102,7 +103,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                 return false;
             }
         }
-        private static class WriteLog implements FilePath.FileCallable<Long> {
+        private static class WriteLog extends MasterToSlaveFileCallable<Long> {
             private final long lastLocation;
             private final OutputStream sink;
             WriteLog(long lastLocation, OutputStream sink) {

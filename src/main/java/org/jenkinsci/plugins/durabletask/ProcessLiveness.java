@@ -25,12 +25,10 @@
 package org.jenkinsci.plugins.durabletask;
 
 import hudson.Launcher;
-import hudson.remoting.Callable;
 import hudson.remoting.VirtualChannel;
 import java.io.File;
 import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import jenkins.security.MasterToSlaveCallable;
 
 /**
  * Utility class to track whether a given process is still alive.
@@ -50,19 +48,11 @@ final class ProcessLiveness {
         } else {
             // Using a special launcher; let it decide how to do this.
             // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher:
-            Launcher.ProcStarter ps = launcher.launch().cmds("ps", "-o", "pid=", Integer.toString(pid));
-            try {
-                Launcher.ProcStarter.class.getMethod("quiet", boolean.class).invoke(ps, true); // TODO 1.576+ remove reflection
-            } catch (NoSuchMethodException x) {
-                // older Jenkins, OK
-            } catch (Exception x) { // ?
-                Logger.getLogger(ProcessLiveness.class.getName()).log(Level.WARNING, null, x);
-            }
-            return ps.join() == 0;
+            return launcher.launch().cmds("ps", "-o", "pid=", Integer.toString(pid)).quiet(true).join() == 0;
         }
     }
 
-    private static final class Liveness implements Callable<Boolean,RuntimeException> {
+    private static final class Liveness extends MasterToSlaveCallable<Boolean,RuntimeException> {
         private final int pid;
         Liveness(int pid) {
             this.pid = pid;
