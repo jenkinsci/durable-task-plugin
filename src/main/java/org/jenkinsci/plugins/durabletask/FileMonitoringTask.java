@@ -160,7 +160,7 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Directory in which this controller can place files.
          */
         public FilePath controlDir(FilePath ws) {
-            return ws.child("."+id);
+            return ws.child(".jenkins-" + id);
         }
 
         /**
