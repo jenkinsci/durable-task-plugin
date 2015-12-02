@@ -30,19 +30,25 @@ import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import org.apache.commons.io.output.TeeOutputStream;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Assume;
+import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 
 public class WindowsBatchScriptTest {
 
     @Rule public JenkinsRule j = new JenkinsRule();
 
-    //@Issue("JENKINS-25678")
+    @BeforeClass public static void windows() {
+        Assume.assumeTrue("These tests are only for Windows", File.pathSeparatorChar == ';');
+    }
+
+    @Issue("JENKINS-25678")
     @Test public void spaceInPath() throws Exception {
-        Assume.assumeTrue("This test is only for Windows", File.pathSeparatorChar == ';');
         StreamTaskListener listener = StreamTaskListener.fromStdout();
         FilePath ws = j.jenkins.getRootPath().child("space in path");
         Launcher launcher = j.jenkins.createLauncher(listener);
@@ -53,6 +59,26 @@ public class WindowsBatchScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
+        String log = baos.toString();
+        System.err.print(log);
+        assertTrue(log, log.contains("hello world"));
+        c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-27419")
+    @Test public void exitCommand() throws Exception {
+        StreamTaskListener listener = StreamTaskListener.fromStdout();
+        FilePath ws = j.jenkins.getRootPath().child("ws");
+        Launcher launcher = j.jenkins.createLauncher(listener);
+        Controller c = new WindowsBatchScript("echo hello world\r\nexit 1").launch(new EnvVars(), ws, launcher, listener);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
+        while (c.exitStatus(ws, launcher) == null) {
+            c.writeLog(ws, tos);
+            Thread.sleep(100);
+        }
+        c.writeLog(ws, tos);
+        assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher));
         String log = baos.toString();
         assertTrue(log, log.contains("hello world"));
         c.cleanup(ws);
