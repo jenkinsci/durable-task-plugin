@@ -139,6 +139,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid, launcher)) {
                 // it looks like the process has disappeared. one last check to make sure it's not a result of a race condition,
                 // then if we still don't have the exit code, use fake exit code to distinguish from 0 (success) and 1+ (observed failure)
+                // TODO would be better to have exitStatus accept a TaskListener so we could print an informative message
                 status = super.exitStatus(workspace, launcher);
                 if (status == null) {
                     status = -1;
