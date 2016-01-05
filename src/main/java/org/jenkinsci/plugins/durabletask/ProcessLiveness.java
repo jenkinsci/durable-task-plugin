@@ -25,15 +25,26 @@
 package org.jenkinsci.plugins.durabletask;
 
 import hudson.Launcher;
+import hudson.os.PosixAPI;
+import hudson.os.PosixException;
 import hudson.remoting.VirtualChannel;
-import java.io.File;
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import jenkins.security.MasterToSlaveCallable;
+import jnr.posix.POSIX;
 
 /**
  * Utility class to track whether a given process is still alive.
  */
 final class ProcessLiveness {
+
+    private static final Logger LOGGER = Logger.getLogger(ProcessLiveness.class.getName());
+
+    private static final Map<Launcher,Boolean> workingLaunchers = Collections.synchronizedMap(new WeakHashMap<Launcher,Boolean>());
 
     /**
      * Determines whether a process is believed to still be alive.
@@ -43,6 +54,23 @@ final class ProcessLiveness {
      * @return true if it is apparently still alive (or we cannot tell); false if it is believed to not be running
      */
     public static boolean isAlive(VirtualChannel channel, int pid, Launcher launcher) throws IOException, InterruptedException {
+        Boolean working = workingLaunchers.get(launcher);
+        if (working == null) {
+            // Check to see if our logic correctly reports that an unlikely PID is not running.
+            working = !_isAlive(channel, 9999, launcher);
+            workingLaunchers.put(launcher, working);
+            if (!working) {
+                LOGGER.log(Level.WARNING, "{0} on {1} does not seem able to determine whether processes are alive or not", new Object[] {launcher, channel});
+                // TODO Channel.toString should report slave name, but would be nice to also report OS
+            }
+        }
+        if (!working) {
+            return true;
+        }
+        return _isAlive(channel, pid, launcher);
+    }
+
+    private static boolean _isAlive(VirtualChannel channel, int pid, Launcher launcher) throws IOException, InterruptedException {
         if (launcher instanceof Launcher.LocalLauncher || launcher instanceof Launcher.RemoteLauncher) {
             return channel.call(new Liveness(pid));
         } else {
@@ -58,12 +86,18 @@ final class ProcessLiveness {
             this.pid = pid;
         }
         @Override public Boolean call() throws RuntimeException {
-            File proc = new File("/proc");
-            if (!proc.isDirectory()) {
-                // procfs not in use here? Give up.
+            POSIX jnr = PosixAPI.jnr();
+            try {
+                // jnr.getpgid() (on Linux at least) always returns -1. JNR bug? libc would not support overloads.
+                if (jnr.getpgid(0) == -1) {
+                    LOGGER.log(Level.WARNING, "getpgid does not seem to work on this platform, using {0}", jnr);
+                    return true;
+                }
+                return jnr.getpgid(pid) != -1;
+            } catch (PosixException x) {
+                LOGGER.log(Level.WARNING, "failed to determine liveness of " + pid + " using " + jnr, x);
                 return true;
             }
-            return new File(proc, Integer.toString(pid)).isDirectory();
         }
     }
 
