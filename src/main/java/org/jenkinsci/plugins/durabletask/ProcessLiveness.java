@@ -25,8 +25,8 @@
 package org.jenkinsci.plugins.durabletask;
 
 import hudson.Launcher;
+import hudson.os.PosixAPI;
 import hudson.remoting.VirtualChannel;
-import java.io.File;
 import java.io.IOException;
 import jenkins.security.MasterToSlaveCallable;
 
@@ -58,12 +58,7 @@ final class ProcessLiveness {
             this.pid = pid;
         }
         @Override public Boolean call() throws RuntimeException {
-            File proc = new File("/proc");
-            if (!proc.isDirectory()) {
-                // procfs not in use here? Give up.
-                return true;
-            }
-            return new File(proc, Integer.toString(pid)).isDirectory();
+            return PosixAPI.jnr().getpgid(pid) != -1;
         }
     }
 
