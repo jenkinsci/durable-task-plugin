@@ -29,6 +29,7 @@ import hudson.os.PosixAPI;
 import hudson.os.PosixException;
 import hudson.remoting.VirtualChannel;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -36,6 +37,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.security.MasterToSlaveCallable;
 import jnr.posix.POSIX;
+import jnr.posix.POSIXFactory;
+import jnr.posix.POSIXHandler;
+import jnr.posix.util.DefaultPOSIXHandler;
 
 /**
  * Utility class to track whether a given process is still alive.
@@ -72,7 +76,14 @@ final class ProcessLiveness {
 
     private static boolean _isAlive(VirtualChannel channel, int pid, Launcher launcher) throws IOException, InterruptedException {
         if (launcher instanceof Launcher.LocalLauncher || launcher instanceof Launcher.RemoteLauncher) {
-            return channel.call(new Liveness(pid));
+            try {
+                return channel.call(new Liveness(pid));
+            } catch (IllegalStateException x) {
+                LOGGER.log(Level.WARNING, "cannot determine liveness of " + pid, x);
+            } catch (PosixException x) {
+                LOGGER.log(Level.WARNING, "cannot determine liveness of " + pid, x);
+            }
+            return true;
         } else {
             // Using a special launcher; let it decide how to do this.
             // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher:
@@ -81,23 +92,26 @@ final class ProcessLiveness {
     }
 
     private static final class Liveness extends MasterToSlaveCallable<Boolean,RuntimeException> {
+        private static final POSIX jnr = PosixAPI.jnr();
         private final int pid;
         Liveness(int pid) {
             this.pid = pid;
         }
         @Override public Boolean call() throws RuntimeException {
-            POSIX jnr = PosixAPI.jnr();
-            try {
-                // jnr.getpgid() (on Linux at least) always returns -1. JNR bug? libc would not support overloads.
-                if (jnr.getpgid(0) == -1) {
-                    LOGGER.log(Level.WARNING, "getpgid does not seem to work on this platform, using {0}", jnr);
-                    return true;
-                }
-                return jnr.getpgid(pid) != -1;
-            } catch (PosixException x) {
-                LOGGER.log(Level.WARNING, "failed to determine liveness of " + pid + " using " + jnr, x);
-                return true;
+            try { // loadPOSIX sends problems to stderr, useless if we are on a slave
+                Method loadNativePOSIX = POSIXFactory.class.getDeclaredMethod("loadNativePOSIX", POSIXHandler.class);
+                loadNativePOSIX.setAccessible(true);
+                loadNativePOSIX.invoke(null, new DefaultPOSIXHandler());
+            } catch (NoSuchMethodException x) {
+                LOGGER.log(Level.WARNING, "loadNativePOSIX no longer exists?", x);
+            } catch (Exception x) {
+                throw new IllegalStateException(x);
             }
+            // jnr.getpgid() (on Linux at least) always returns -1. JNR bug? libc would not support overloads.
+            if (jnr.getpgid(0) == -1) {
+                throw new IllegalStateException("getpgid does not seem to work on this platform");
+            }
+            return jnr.getpgid(pid) != -1;
         }
     }
 
