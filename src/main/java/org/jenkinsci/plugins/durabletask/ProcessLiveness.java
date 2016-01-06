@@ -75,7 +75,7 @@ final class ProcessLiveness {
         if (launcher instanceof Launcher.LocalLauncher || launcher instanceof Launcher.RemoteLauncher) {
             try {
                 boolean alive = channel.call(new Liveness(pid));
-                LOGGER.log(Level.FINE, "{0} is alive? {1}", new Object[] {pid, alive});
+                LOGGER.log(Level.FINER, "{0} is alive? {1}", new Object[] {pid, alive});
                 return alive;
             } catch (RuntimeException x) {
                 LOGGER.log(Level.WARNING, "cannot determine liveness of " + pid, x);
