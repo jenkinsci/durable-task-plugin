@@ -25,6 +25,7 @@
 package org.jenkinsci.plugins.durabletask.executors;
 
 import hudson.Extension;
+import hudson.init.InitMilestone;
 import hudson.model.Label;
 import hudson.model.Node;
 import hudson.model.Queue;
@@ -32,6 +33,7 @@ import hudson.model.queue.CauseOfBlockage;
 import hudson.model.queue.QueueTaskDispatcher;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.model.Jenkins;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.DoNotUse;
 
@@ -45,7 +47,21 @@ import org.kohsuke.accmod.restrictions.DoNotUse;
 public interface ContinuedTask extends Queue.Task {
 
     /**
-     * True if the task should actually be consider continued now.
+     * Is this task a continuation of an earlier task or a new task.
+     * <p>
+     * <strong>Implementations must not change the value after it has been initially accessed.</strong>
+     * <p>
+     * This method is used to identify those tasks that are a continuation of a task execution either currently running
+     * or in a previous Jenkins session. When a job starts a fresh task this method should return {@code false}.
+     * After a restart of Jenkins when the plugin implementing ContinuedTask identifies that there are some tasks that
+     * may already be in progress it will need to resubmit those tasks to the Queue (before
+     * {@link InitMilestone#COMPLETED}). Any resubmitted tasks should return {@code true}.
+     * <p>
+     * The {@link Scheduler} will block any non-continued tasks from executing as long as there are continued tasks
+     * queued to execute. In this way the continuations will be able to resume with priority.
+     *
+     * @return {@code true} if and only if this {@link ContinuedTask} is a continuation of either a currently running
+     * {@link ContinuedTask} or a {@link ContinuedTask} from a previous Jenkins session.
      */
     boolean isContinued();
 
@@ -59,6 +75,10 @@ public interface ContinuedTask extends Queue.Task {
         @Override public CauseOfBlockage canTake(Node node, Queue.BuildableItem item) {
             if (isContinued(item.task)) {
                 return null;
+            }
+            Jenkins jenkins = Jenkins.getInstance();
+            if (jenkins == null || jenkins.getInitLevel().compareTo(InitMilestone.COMPLETED) < 0) {
+                return new PleaseWait();
             }
             for (Queue.BuildableItem other : Queue.getInstance().getBuildableItems()) {
                 if (isContinued(other.task)) {
@@ -82,6 +102,17 @@ public interface ContinuedTask extends Queue.Task {
 
             @Override public String getShortDescription() {
                 return Messages.ContinuedTask__should_be_allowed_to_run_first(task.getFullDisplayName());
+            }
+
+        }
+
+        private static final class PleaseWait extends CauseOfBlockage {
+
+            PleaseWait() {
+            }
+
+            @Override public String getShortDescription() {
+                return Messages.ContinuedTask__should_be_allowed_to_restore_first();
             }
 
         }
