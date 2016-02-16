@@ -52,7 +52,33 @@ public interface ContinuedTask extends Queue.Task {
      * <strong>Implementations must not change the value after it has been initially accessed.</strong>
      * <p>
      * This method is used to identify those tasks that are a continuation of a task execution either currently running
-     * or in a previous Jenkins session. When a job starts a fresh task this method should return {@code false}.
+     * or in a previous Jenkins session.
+     * <p>
+     * There are two ways to start a chain of {@link ContinuableExecutable}s:
+     * <ul>
+     *     <li>
+     *         A regular {@link Queue.Task} that does not implement this interface return a
+     *         {@link ContinuableExecutable} from {@link Queue.Task#createExecutable()} (because if a {@link Queue.Task}
+     *         does not implement {@link ContinuedTask} then that is equivalent to {@link #isContinued()} ==
+     *         {@code false}).
+     *     </li>
+     *     <li>
+     *         A {@link ContinuedTask} with {@link #isContinued()} == {@code false} returns a
+     *         {@link ContinuableExecutable} from {@link #createExecutable()}.
+     *     </li>
+     * </ul>
+     * The chain of {@link ContinuableExecutable}s will continue for as long as either:
+     * <ul>
+     *     <li>
+     *         {@link ContinuableExecutable#run()} completes normally and
+     *         Each {@link ContinuableExecutable#willContinue()} is {@code true} on/after completion.
+     *     </li>
+     *     <li>
+     *         {@link ContinuableExecutable#run()} did not complete normally (i.e. JVM shutdown) and there is a
+     *         {@link ContinuedTask} instance in the {@link Queue} where {@link #isContinued()} ==
+     *         {@code true} that will continue the chain.
+     *     </li>
+     * </ul>
      * After a restart of Jenkins when the plugin implementing ContinuedTask identifies that there are some tasks that
      * may already be in progress it will need to resubmit those tasks to the Queue (before
      * {@link InitMilestone#COMPLETED}). Any resubmitted tasks should return {@code true}.
