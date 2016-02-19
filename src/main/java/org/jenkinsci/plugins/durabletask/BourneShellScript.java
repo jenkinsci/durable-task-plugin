@@ -28,6 +28,7 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.LauncherDecorator;
 import hudson.Platform;
 import hudson.Util;
 import hudson.model.TaskListener;
@@ -35,7 +36,10 @@ import hudson.tasks.Shell;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
@@ -55,6 +59,17 @@ public final class BourneShellScript extends FileMonitoringTask {
     public String getScript() {
         return script;
     }
+
+    /**
+     * Set of workspaces which we have already run a process in.
+     * Copying output from the controller process consumes a Java thread, so we want to avoid it generally.
+     * But we do it the first time we run a process in a new workspace, to assist in diagnosis.
+     * (For example, if we are unable to write to it due to permissions, we want to see that error message.)
+     * Ideally we would display output the first time a given {@link Launcher} was used in that workspace,
+     * but this seems impractical since {@link LauncherDecorator#decorate} may be called anew for each process,
+     * and forcing the resulting {@link Launcher}s to implement {@link Launcher#equals} seems onerous.
+     */
+    private static final Map<FilePath,Boolean> encounteredPaths = Collections.synchronizedMap(new WeakHashMap<FilePath,Boolean>());
 
     @Override protected FileMonitoringController launchWithCookie(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         if (script.isEmpty()) {
@@ -92,10 +107,13 @@ public final class BourneShellScript extends FileMonitoringTask {
         args.addAll(Arrays.asList("sh", "-c", cmd));
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
-        /* Uncomment for diagnosis (and comment following line) in case wrapper script fails. Otherwise skip since it consumes a thread:
-        ps.stdout(listener);
-        */
-        ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
+        if (encounteredPaths.put(ws, true) == null) {
+            // First time in this combination. Display any output from the wrapper script for diagnosis.
+            ps.stdout(listener);
+        } else {
+            // Second or subsequent time. Suppress output to save a thread.
+            ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
+        }
         ps.start();
         return c;
     }
