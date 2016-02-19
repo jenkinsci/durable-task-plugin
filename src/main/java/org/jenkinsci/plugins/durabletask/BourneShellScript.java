@@ -103,6 +103,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     /*package*/ static final class ShellController extends FileMonitoringController {
 
         private int pid;
+        private final long startTime = System.currentTimeMillis();
 
         private ShellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
@@ -145,6 +146,8 @@ public final class BourneShellScript extends FileMonitoringTask {
                     status = -1;
                 }
                 return status;
+            } else if (_pid == 0 && /* compatibility */ startTime > 0 && System.currentTimeMillis() - startTime > /* 15s */15000) {
+                return -2; // apparently never started
             }
             return null;
         }
