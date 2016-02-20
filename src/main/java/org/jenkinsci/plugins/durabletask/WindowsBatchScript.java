@@ -54,14 +54,14 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         }
         BatchController c = new BatchController(ws);
 
-        c.getBatchFile1(ws).write(String.format("cmd /c \"%s\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+        c.getBatchFile1(ws).write(String.format("cmd /c \"\"%s\"\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
                 c.getBatchFile2(ws),
                 c.getLogFile(ws),
                 c.getResultFile(ws)
         ), "UTF-8");
         c.getBatchFile2(ws).write(script, "UTF-8");
 
-        Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", c.getBatchFile1(ws).getRemote()).envs(envVars).pwd(ws).quiet(true);
+        Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(envVars).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running batch script"); // details printed by cmd
         /* Too noisy, and consumes a thread:
         ps.stdout(listener);
