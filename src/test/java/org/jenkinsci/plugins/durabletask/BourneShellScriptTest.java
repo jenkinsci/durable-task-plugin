@@ -37,7 +37,9 @@ import org.jvnet.hudson.test.JenkinsRule;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.Collections;
+import static org.hamcrest.Matchers.containsString;
 import org.junit.Before;
+import org.jvnet.hudson.test.Issue;
 
 public class BourneShellScriptTest extends Assert {
 
@@ -53,7 +55,7 @@ public class BourneShellScriptTest extends Assert {
 
     @Before public void vars() {
         listener = StreamTaskListener.fromStdout();
-        ws = j.jenkins.getRootPath();
+        ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
     }
 
@@ -104,6 +106,19 @@ public class BourneShellScriptTest extends Assert {
         System.out.println(log);
         assertEquals(-1, c.exitStatus(ws, launcher).intValue());
         assertTrue(log.contains("sleep 999"));
+        c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-27152")
+    @Test public void cleanWorkspace() throws Exception {
+        Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertThat(baos.toString(), containsString("---. .. stuff---"));
         c.cleanup(ws);
     }
 

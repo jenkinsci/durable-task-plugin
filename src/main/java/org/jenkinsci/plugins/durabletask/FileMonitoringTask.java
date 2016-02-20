@@ -31,6 +31,7 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
+import hudson.slaves.WorkspaceList;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -89,6 +90,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
+            ws.mkdirs();
             controlDir(ws).mkdirs();
         }
 
@@ -160,7 +162,12 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Directory in which this controller can place files.
          */
         public FilePath controlDir(FilePath ws) {
-            return ws.child(".jenkins-" + id);
+            return tempDir(ws).child("durable-" + id);
+        }
+
+        // TODO move to WorkspaceList
+        private static FilePath tempDir(FilePath ws) {
+            return ws.sibling(ws.getName() + System.getProperty(WorkspaceList.class.getName(), "@") + "tmp");
         }
 
         /**
