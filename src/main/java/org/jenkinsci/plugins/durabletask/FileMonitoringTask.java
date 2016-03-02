@@ -161,8 +161,20 @@ public abstract class FileMonitoringTask extends DurableTask {
         /**
          * Directory in which this controller can place files.
          */
-        public FilePath controlDir(FilePath ws) {
-            return tempDir(ws).child("durable-" + id);
+        public FilePath controlDir(FilePath ws) throws IOException, InterruptedException {
+            FilePath cd = tempDir(ws).child("durable-" + id);
+            if (cd.isDirectory()) { // normal case 1.8+ after creation
+                return cd;
+            }
+            FilePath oldCD = ws.child("." + id);
+            if (oldCD.isDirectory()) { // compatibility with 1.6
+                return oldCD;
+            }
+            oldCD = ws.child(".jenkins-" + id);
+            if (oldCD.isDirectory()) { // compatibility with 1.7
+                return oldCD;
+            }
+            return cd;
         }
 
         // TODO https://github.com/jenkinsci/jenkins/pull/2066
@@ -173,14 +185,14 @@ public abstract class FileMonitoringTask extends DurableTask {
         /**
          * File in which the exit code of the process should be reported.
          */
-        public FilePath getResultFile(FilePath workspace) {
+        public FilePath getResultFile(FilePath workspace) throws IOException, InterruptedException {
             return controlDir(workspace).child("jenkins-result.txt");
         }
 
         /**
          * File in which the stdout/stderr
          */
-        public FilePath getLogFile(FilePath workspace) {
+        public FilePath getLogFile(FilePath workspace) throws IOException, InterruptedException {
             return controlDir(workspace).child("jenkins-log.txt");
         }
 
