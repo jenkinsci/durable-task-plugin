@@ -78,10 +78,14 @@ public abstract class FileMonitoringTask extends DurableTask {
     }
 
     protected static class FileMonitoringController extends Controller {
+
+        /** Absolute path of {@link #controlDir()}. */
+        private String controlDir;
+
         /**
-         * Unique ID among all the {@link Controller}s that share the same workspace.
+         * @deprecated used only in pre-1.8
          */
-        private final String id = Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8);
+        private String id;
 
         /**
          * Byte offset in the file that has been reported thus far.
@@ -91,7 +95,9 @@ public abstract class FileMonitoringTask extends DurableTask {
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
-            controlDir(ws).mkdirs();
+            FilePath cd = tempDir(ws).child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
+            cd.mkdirs();
+            controlDir = cd.getRemote();
         }
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
@@ -160,20 +166,20 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         /**
          * Directory in which this controller can place files.
+         * Unique among all the controllers sharing the same workspace.
          */
         public FilePath controlDir(FilePath ws) throws IOException, InterruptedException {
-            FilePath cd = tempDir(ws).child("durable-" + id);
-            if (cd.isDirectory()) { // normal case 1.8+ after creation
-                return cd;
+            if (controlDir != null) { // normal case
+                return ws.child(controlDir); // despite the name, this is an absolute path
             }
-            FilePath oldCD = ws.child("." + id);
-            if (oldCD.isDirectory()) { // compatibility with 1.6
-                return oldCD;
+            assert id != null;
+            FilePath cd = ws.child("." + id); // compatibility with 1.6
+            if (!cd.isDirectory()) {
+                cd = ws.child(".jenkins-" + id); // compatibility with 1.7
             }
-            oldCD = ws.child(".jenkins-" + id);
-            if (oldCD.isDirectory()) { // compatibility with 1.7
-                return oldCD;
-            }
+            controlDir = cd.getRemote();
+            id = null;
+            LOGGER.info("using migrated control directory " + controlDir + " for remainder of this task");
             return cd;
         }
 
