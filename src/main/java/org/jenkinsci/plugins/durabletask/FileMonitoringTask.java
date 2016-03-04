@@ -79,7 +79,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     protected static class FileMonitoringController extends Controller {
 
-        /** Absolute path of {@link #controlDir()}. */
+        /** Absolute path of {@link #controlDir(FilePath)}. */
         private String controlDir;
 
         /**
