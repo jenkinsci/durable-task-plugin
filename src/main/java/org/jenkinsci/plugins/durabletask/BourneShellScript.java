@@ -140,11 +140,11 @@ public final class BourneShellScript extends FileMonitoringTask {
             super(ws);
         }
 
-        public FilePath getScriptFile(FilePath ws) {
+        public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("script.sh");
         }
 
-        FilePath pidFile(FilePath ws) {
+        FilePath pidFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("pid");
         }
 

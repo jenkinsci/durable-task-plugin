@@ -31,6 +31,7 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
+import hudson.slaves.WorkspaceList;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -77,10 +78,14 @@ public abstract class FileMonitoringTask extends DurableTask {
     }
 
     protected static class FileMonitoringController extends Controller {
+
+        /** Absolute path of {@link #controlDir()}. */
+        private String controlDir;
+
         /**
-         * Unique ID among all the {@link Controller}s that share the same workspace.
+         * @deprecated used only in pre-1.8
          */
-        private final String id = Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8);
+        private String id;
 
         /**
          * Byte offset in the file that has been reported thus far.
@@ -89,7 +94,10 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
-            controlDir(ws).mkdirs();
+            ws.mkdirs();
+            FilePath cd = tempDir(ws).child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
+            cd.mkdirs();
+            controlDir = cd.getRemote();
         }
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
@@ -158,22 +166,39 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         /**
          * Directory in which this controller can place files.
+         * Unique among all the controllers sharing the same workspace.
          */
-        public FilePath controlDir(FilePath ws) {
-            return ws.child(".jenkins-" + id);
+        public FilePath controlDir(FilePath ws) throws IOException, InterruptedException {
+            if (controlDir != null) { // normal case
+                return ws.child(controlDir); // despite the name, this is an absolute path
+            }
+            assert id != null;
+            FilePath cd = ws.child("." + id); // compatibility with 1.6
+            if (!cd.isDirectory()) {
+                cd = ws.child(".jenkins-" + id); // compatibility with 1.7
+            }
+            controlDir = cd.getRemote();
+            id = null;
+            LOGGER.info("using migrated control directory " + controlDir + " for remainder of this task");
+            return cd;
+        }
+
+        // TODO 1.652 use WorkspaceList.tempDir
+        private static FilePath tempDir(FilePath ws) {
+            return ws.sibling(ws.getName() + System.getProperty(WorkspaceList.class.getName(), "@") + "tmp");
         }
 
         /**
          * File in which the exit code of the process should be reported.
          */
-        public FilePath getResultFile(FilePath workspace) {
+        public FilePath getResultFile(FilePath workspace) throws IOException, InterruptedException {
             return controlDir(workspace).child("jenkins-result.txt");
         }
 
         /**
          * File in which the stdout/stderr
          */
-        public FilePath getLogFile(FilePath workspace) {
+        public FilePath getLogFile(FilePath workspace) throws IOException, InterruptedException {
             return controlDir(workspace).child("jenkins-log.txt");
         }
 

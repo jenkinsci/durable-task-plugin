@@ -76,11 +76,11 @@ public final class WindowsBatchScript extends FileMonitoringTask {
             super(ws);
         }
 
-        public FilePath getBatchFile1(FilePath ws) {
+        public FilePath getBatchFile1(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("jenkins-wrap.bat");
         }
 
-        public FilePath getBatchFile2(FilePath ws) {
+        public FilePath getBatchFile2(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("jenkins-main.bat");
         }
 
