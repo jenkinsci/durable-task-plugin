@@ -57,8 +57,9 @@ public class WindowsBatchScriptTest {
         testWithPath("space in path@2");
     }
 
-    @Test public void percentInPath2() throws Exception {
-        testWithPath("percent%in%path@2");
+    @Issue("JENKINS-32701")
+    @Test public void percentInPath() throws Exception {
+        testWithPath("percent%in%path");
     }
 
     private void testWithPath(String path) throws Exception {
