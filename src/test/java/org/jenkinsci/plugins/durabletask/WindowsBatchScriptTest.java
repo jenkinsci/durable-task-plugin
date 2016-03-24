@@ -49,17 +49,22 @@ public class WindowsBatchScriptTest {
 
     @Issue("JENKINS-25678")
     @Test public void spaceInPath() throws Exception {
-        doSpaceInPath("space in path");
+        testWithPath("space in path");
     }
 
     @Issue("JENKINS-25678")
     @Test public void spaceInPath2() throws Exception {
-        doSpaceInPath("space in path@2");
+        testWithPath("space in path@2");
     }
 
-    private void doSpaceInPath(String name) throws Exception {
+    @Issue("JENKINS-32701")
+    @Test public void percentInPath() throws Exception {
+        testWithPath("percent%in%path");
+    }
+
+    private void testWithPath(String path) throws Exception {
         StreamTaskListener listener = StreamTaskListener.fromStdout();
-        FilePath ws = j.jenkins.getRootPath().child(name);
+        FilePath ws = j.jenkins.getRootPath().child(path);
         Launcher launcher = j.jenkins.createLauncher(listener);
         Controller c = new WindowsBatchScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher) == null) {
