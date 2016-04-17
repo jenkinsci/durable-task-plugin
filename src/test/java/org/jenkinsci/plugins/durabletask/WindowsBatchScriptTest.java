@@ -30,6 +30,7 @@ import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+
 import org.apache.commons.io.output.TeeOutputStream;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -98,4 +99,18 @@ public class WindowsBatchScriptTest {
         c.cleanup(ws);
     }
 
+    @Issue("JENKINS-34150")
+    @Test(timeout = 5000) public void batchScriptHanging() throws Exception {
+        StreamTaskListener listener = StreamTaskListener.fromStdout();
+        FilePath ws = j.jenkins.getRootPath().child("ws");
+        Launcher launcher = j.jenkins.createLauncher(listener);
+        WindowsBatchScript script = new WindowsBatchScript("ping 127.0.0.1 -n 2");
+        Controller c = script.launch(new EnvVars(), ws, launcher, listener);
+
+        while (c.exitStatus(ws, launcher) == null) {
+            /* Just wait. */
+        }
+
+        c.cleanup(ws);
+    }
 }
