@@ -29,6 +29,7 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Proc;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -67,13 +68,19 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         ps.stdout(listener);
         */
         ps.readStdout().readStderr(); // TODO see BourneShellScript
-        ps.start();
+        c.setRunningProcess(ps.start());
         return c;
     }
 
     private static final class BatchController extends FileMonitoringController {
+        private Proc runningProcess;
+
         private BatchController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
+        }
+
+        void setRunningProcess(Proc process) {
+            runningProcess = process;
         }
 
         public FilePath getBatchFile1(FilePath ws) throws IOException, InterruptedException {
@@ -82,6 +89,20 @@ public final class WindowsBatchScript extends FileMonitoringTask {
 
         public FilePath getBatchFile2(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("jenkins-main.bat");
+        }
+
+        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            Proc proc = runningProcess;
+            if ((proc != null) && proc.isAlive()) {
+                /* Don't check the file in case the process is still running. */
+                return null;
+            }
+            Integer status = super.exitStatus(workspace, launcher);
+            if (status == null) {
+                /* The process is dead, but there is no status. That is a error. */
+                return -1;
+            }
+            return status;
         }
 
         private static final long serialVersionUID = 1L;

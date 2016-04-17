@@ -30,7 +30,6 @@ import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-
 import org.apache.commons.io.output.TeeOutputStream;
 import org.junit.Test;
 import static org.junit.Assert.*;
