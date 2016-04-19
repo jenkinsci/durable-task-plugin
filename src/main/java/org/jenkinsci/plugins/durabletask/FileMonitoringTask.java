@@ -33,6 +33,7 @@ import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
@@ -148,6 +149,9 @@ public abstract class FileMonitoringTask extends DurableTask {
             if (status.exists()) {
                 try {
                     return Integer.parseInt(status.readToString().trim());
+                } catch (FileNotFoundException ignored) {
+                    /* File is locked. Ignore and just try again later. */
+                    return null;
                 } catch (NumberFormatException x) {
                     throw new IOException("corrupted content in " + status + ": " + x, x);
                 }

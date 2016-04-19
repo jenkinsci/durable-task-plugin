@@ -30,6 +30,9 @@ import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.util.Arrays;
+import java.util.List;
+
 import org.apache.commons.io.output.TeeOutputStream;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -100,16 +103,33 @@ public class WindowsBatchScriptTest {
 
     @Issue("JENKINS-34150")
     @Test(timeout = 5000) public void batchScriptHanging() throws Exception {
+        final int concurrency = 4;
+
         StreamTaskListener listener = StreamTaskListener.fromStdout();
         FilePath ws = j.jenkins.getRootPath().child("ws");
         Launcher launcher = j.jenkins.createLauncher(listener);
         WindowsBatchScript script = new WindowsBatchScript("ping 127.0.0.1 -n 2");
-        Controller c = script.launch(new EnvVars(), ws, launcher, listener);
 
-        while (c.exitStatus(ws, launcher) == null) {
-            /* Just wait. */
+        List<Controller> controllers = Arrays.asList(new Controller[concurrency]);
+        EnvVars envVars = new EnvVars();
+        for (int i = 0; i < concurrency; i++) {
+            Controller controller = script.launch(envVars, ws, launcher, listener);
+            controller.writeLog(ws, System.out);
+            controllers.set(i, controller);
         }
 
-        c.cleanup(ws);
+        boolean stillRunning = true;
+        while (stillRunning) {
+            stillRunning = false;
+            for (int i = 0; i < concurrency; i++) {
+                Controller controller = controllers.get(i);
+                boolean running = (controller.exitStatus(ws, launcher) == null);
+                stillRunning |= running;
+            }
+        }
+
+        for (int i = 0; i < concurrency; i++) {
+            controllers.get(i).cleanup(ws);
+        }
     }
 }

@@ -55,32 +55,46 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         }
         BatchController c = new BatchController(ws);
 
-        c.getBatchFile1(ws).write(String.format("cmd /c \"\"%s\"\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
-                c.getBatchFile2(ws).getRemote().replace("%", "%%"),
-                c.getLogFile(ws).getRemote().replace("%", "%%"),
-                c.getResultFile(ws).getRemote().replace("%", "%%")
-        ), "UTF-8");
+        /*
+          This wrapper script basically only calls the actual script that is supposed to be executed. It redirects all
+          the output of the target script to the log file and stores the exit code in a result file.
+          The script uses a additional temporary to store the exit code that is moved after writing to is is done.
+          Writing the output file directly may cause problems because the check for the exit code may locate the result
+          file after it was created but before the code was written in and issue a error because of this.
+         */
+        final String nl = "\r\n";
+        c.getBatchFile1(ws).write(
+                "CHCP 65001 > NUL" + nl +
+                "SETLOCAL" + nl +
+                "SET theRealScript=" + c.getBatchFile2(ws).getRemote().replace("%", "%%") + nl +
+                "SET resultFile=" + c.getResultFile(ws).getRemote().replace("%", "%%") + nl +
+                "SET logFile=" + c.getLogFile(ws).getRemote().replace("%", "%%") + nl +
+                "SET tempResultFile=" + c.getTemporaryResultFile(ws).getRemote().replace("%", "%%") + nl +
+                "TYPE NUL > \"%tempResultFile%\"" + nl +
+                "CMD /C \"%theRealScript%\" > \"%logFile%\" 2>&1" + nl +
+                "ECHO %ERRORLEVEL% > \"%tempResultFile%\"" + nl +
+                "MOVE \"%tempResultFile%\" \"%resultFile%\" > NUL" + nl +
+                "ENDLOCAL" + nl +
+                "EXIT 0", "UTF-8");
         c.getBatchFile2(ws).write(script, "UTF-8");
 
-        Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(envVars).pwd(ws).quiet(true);
+        Launcher.ProcStarter ps = launcher.launch()
+                                          .cmds("cmd", "/C", "START \"\" /MIN /WAIT \"" + c.getBatchFile1(ws).getRemote() + '"')
+                                          .envs(envVars)
+                                          .pwd(ws)
+                                          .quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running batch script"); // details printed by cmd
         /* Too noisy, and consumes a thread:
         ps.stdout(listener);
         */
-        ps.readStdout().readStderr(); // TODO see BourneShellScript
-        c.setRunningProcess(ps.start());
+        ps.writeStdin().readStdout().readStderr(); // TODO see BourneShellScript
+        Proc process = ps.start();
         return c;
     }
 
     private static final class BatchController extends FileMonitoringController {
-        private Proc runningProcess;
-
         private BatchController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
-        }
-
-        void setRunningProcess(Proc process) {
-            runningProcess = process;
         }
 
         public FilePath getBatchFile1(FilePath ws) throws IOException, InterruptedException {
@@ -91,18 +105,8 @@ public final class WindowsBatchScript extends FileMonitoringTask {
             return controlDir(ws).child("jenkins-main.bat");
         }
 
-        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            Proc proc = runningProcess;
-            if ((proc != null) && proc.isAlive()) {
-                /* Don't check the file in case the process is still running. */
-                return null;
-            }
-            Integer status = super.exitStatus(workspace, launcher);
-            if (status == null) {
-                /* The process is dead, but there is no status. That is a error. */
-                return -1;
-            }
-            return status;
+        public FilePath getTemporaryResultFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).createTempFile("jenkins-result", null);
         }
 
         private static final long serialVersionUID = 1L;
