@@ -29,7 +29,6 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.Proc;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -63,23 +62,23 @@ public final class WindowsBatchScript extends FileMonitoringTask {
           file after it was created but before the code was written in and issue a error because of this.
          */
         final String nl = "\r\n";
-        c.getBatchFile1(ws).write(
+        c.getWrapperBatchFile(ws).write(
                 "CHCP 65001 > NUL" + nl +
                 "SETLOCAL" + nl +
-                "SET theRealScript=" + c.getBatchFile2(ws).getRemote().replace("%", "%%") + nl +
-                "SET resultFile=" + c.getResultFile(ws).getRemote().replace("%", "%%") + nl +
-                "SET logFile=" + c.getLogFile(ws).getRemote().replace("%", "%%") + nl +
-                "SET tempResultFile=" + c.getTemporaryResultFile(ws).getRemote().replace("%", "%%") + nl +
+                "SET theRealScript=" + escapeForBatch(c.getMainBatchFile(ws)) + nl +
+                "SET resultFile=" + escapeForBatch(c.getResultFile(ws)) + nl +
+                "SET logFile=" + escapeForBatch(c.getLogFile(ws)) + nl +
+                "SET tempResultFile=" + escapeForBatch(c.getTemporaryResultFile(ws)) + nl +
                 "TYPE NUL > \"%tempResultFile%\"" + nl +
                 "CMD /C \"%theRealScript%\" > \"%logFile%\" 2>&1" + nl +
                 "ECHO %ERRORLEVEL% > \"%tempResultFile%\"" + nl +
                 "MOVE \"%tempResultFile%\" \"%resultFile%\" > NUL" + nl +
                 "ENDLOCAL" + nl +
                 "EXIT 0", "UTF-8");
-        c.getBatchFile2(ws).write(script, "UTF-8");
+        c.getMainBatchFile(ws).write(script, "UTF-8");
 
         Launcher.ProcStarter ps = launcher.launch()
-                                          .cmds("cmd", "/C", "START \"\" /MIN /WAIT \"" + c.getBatchFile1(ws).getRemote() + '"')
+                                          .cmds("cmd", "/C", "START \"\" /MIN /WAIT \"" + escapeForBatch(c.getWrapperBatchFile(ws)) + '"')
                                           .envs(envVars)
                                           .pwd(ws)
                                           .quiet(true);
@@ -88,8 +87,18 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         ps.stdout(listener);
         */
         ps.writeStdin().readStdout().readStderr(); // TODO see BourneShellScript
-        Proc process = ps.start();
+        ps.start();
         return c;
+    }
+
+    /**
+     * Escape the file path for the usage in a batch script.
+     *
+     * @param file the file path
+     * @return the remote address of the file path escaped for the usage in a batch
+     */
+    private static String escapeForBatch(FilePath file) {
+        return file.getRemote().replace("%", "%%");
     }
 
     private static final class BatchController extends FileMonitoringController {
@@ -97,15 +106,15 @@ public final class WindowsBatchScript extends FileMonitoringTask {
             super(ws);
         }
 
-        public FilePath getBatchFile1(FilePath ws) throws IOException, InterruptedException {
+        FilePath getWrapperBatchFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("jenkins-wrap.bat");
         }
 
-        public FilePath getBatchFile2(FilePath ws) throws IOException, InterruptedException {
+        FilePath getMainBatchFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("jenkins-main.bat");
         }
 
-        public FilePath getTemporaryResultFile(FilePath ws) throws IOException, InterruptedException {
+        FilePath getTemporaryResultFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).createTempFile("jenkins-result", null);
         }
 
