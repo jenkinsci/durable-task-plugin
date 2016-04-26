@@ -31,12 +31,19 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.TaskListener;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.util.UUID;
+
+import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
  * Runs a Windows batch script.
  */
 public final class WindowsBatchScript extends FileMonitoringTask {
+
+    /** Number of seconds we will wait for a controller script to be launched before assuming the launch failed. */
+    private static /* not final */ int LAUNCH_FAILURE_TIMEOUT = Integer.getInteger(WindowsBatchScript.class.getName() + ".LAUNCH_FAILURE_TIMEOUT", 15);
     private final String script;
 
     @DataBoundConstructor public WindowsBatchScript(String script) {
@@ -62,6 +69,8 @@ public final class WindowsBatchScript extends FileMonitoringTask {
           file after it was created but before the code was written in and issue a error because of this.
          */
         final String nl = "\r\n";
+        final String identifier = c.getIdentifier();
+
         c.getWrapperBatchFile(ws).write(
                 "CHCP 65001 > NUL" + nl +
                 "SETLOCAL" + nl +
@@ -69,16 +78,22 @@ public final class WindowsBatchScript extends FileMonitoringTask {
                 "SET resultFile=" + escapeForBatch(c.getResultFile(ws)) + nl +
                 "SET logFile=" + escapeForBatch(c.getLogFile(ws)) + nl +
                 "SET tempResultFile=" + escapeForBatch(c.getTemporaryResultFile(ws)) + nl +
+                "SET pidFile=" + escapeForBatch(c.getPidFile(ws)) + nl +
+                "TITLE=" + identifier + nl + /* This works regardless if the command windows is actually visible. */
+                "FOR /F \"tokens=2,9 delims=,\" %%1 IN ('tasklist /NH /FI \"IMAGENAME eq cmd.exe\" /V /FO CSV') DO (" + nl +
+                "  ECHO %%~2 | FINDSTR /C:" + identifier + " >NUL 2>&1 && ECHO %%~1 > %pidFile%" + nl +
+                ")" + nl +
                 "TYPE NUL > \"%tempResultFile%\"" + nl +
                 "CMD /C \"%theRealScript%\" > \"%logFile%\" 2>&1" + nl +
                 "ECHO %ERRORLEVEL% > \"%tempResultFile%\"" + nl +
                 "MOVE \"%tempResultFile%\" \"%resultFile%\" > NUL" + nl +
+                "DEL %pidFile% > NUL" + nl +
                 "ENDLOCAL" + nl +
                 "EXIT 0", "UTF-8");
         c.getMainBatchFile(ws).write(script, "UTF-8");
 
         Launcher.ProcStarter ps = launcher.launch()
-                                          .cmds("cmd", "/C", "START \"\" /MIN /WAIT \"" + escapeForBatch(c.getWrapperBatchFile(ws)) + '"')
+                                          .cmds("cmd", "/C", "START \"\" /MIN \"" + escapeForBatch(c.getWrapperBatchFile(ws)) + '"')
                                           .envs(envVars)
                                           .pwd(ws)
                                           .quiet(true);
@@ -88,6 +103,8 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         */
         ps.writeStdin().readStdout().readStderr(); // TODO see BourneShellScript
         ps.start();
+        c.markStart();
+
         return c;
     }
 
@@ -102,8 +119,15 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     }
 
     private static final class BatchController extends FileMonitoringController {
+
+        private final String identifier;
+        private long startTime;
+        private int pid;
+
         private BatchController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
+
+            identifier = UUID.randomUUID().toString();
         }
 
         FilePath getWrapperBatchFile(FilePath ws) throws IOException, InterruptedException {
@@ -115,7 +139,87 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         }
 
         FilePath getTemporaryResultFile(FilePath ws) throws IOException, InterruptedException {
-            return controlDir(ws).createTempFile("jenkins-result", null);
+            return controlDir(ws).child("jenkins-result.tmp");
+        }
+
+        FilePath getPidFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("jenkins-wrap.pid");
+        }
+
+        String getIdentifier() {
+            return identifier;
+        }
+
+        void markStart() {
+            startTime = System.currentTimeMillis();
+        }
+
+        private synchronized int getPid(FilePath ws) throws IOException, InterruptedException {
+            if (pid == 0) {
+                FilePath pidFile = getPidFile(ws);
+                if (pidFile.exists()) {
+                    try {
+                        pid = Integer.parseInt(pidFile.readToString().trim());
+                    } catch (NumberFormatException x) {
+                        throw new IOException("corrupted content in " + pidFile + ": " + x, x);
+                    }
+                }
+            }
+            return pid;
+        }
+
+        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            if (startTime == 0) {
+                return null;
+            }
+
+            Integer status = super.exitStatus(workspace, launcher);
+            if (status != null) {
+                return status;
+            }
+            int pid = getPid(workspace);
+
+            if (pid == 0) {
+                if (System.currentTimeMillis() - startTime > 1000 * LAUNCH_FAILURE_TIMEOUT) {
+                    /* No PID and the launch time was exceeded. Something went wrong. */
+                    return -2;
+                }
+
+                /* PID is not known yet. The batch may not have created the file yet. Just wait for it. */
+                return null;
+            }
+
+            /* Check if the process is still alive. */
+            Launcher.ProcStarter ps = launcher.launch()
+                                              .cmds("TASKLIST","/NH", "/FI", String.format("PID eq %1$d", pid), "/V", "/FO", "CSV")
+                                              .quiet(true);
+            ps.writeStdin();
+            OutputStream stream = null;
+            String resultString = null;
+            try {
+                stream = new ByteArrayOutputStream();
+                ps.stdout(stream);
+                ps.join();
+                resultString = stream.toString();
+            } finally {
+                try {
+                    if (stream != null) {
+                        stream.close();
+                    }
+                } catch (IOException ignored) {}
+            }
+
+            if (resultString.contains(getIdentifier())) {
+                /* Found the process. Still running. All good. */
+                return null;
+            }
+
+            status = super.exitStatus(workspace, launcher);
+            if (status == null) {
+                /* The process is dead, but there is no result. */
+                return -1;
+            }
+            return status;
         }
 
         private static final long serialVersionUID = 1L;
