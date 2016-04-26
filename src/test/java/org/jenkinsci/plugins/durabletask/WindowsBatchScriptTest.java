@@ -34,11 +34,11 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.apache.commons.io.output.TeeOutputStream;
-import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 
@@ -131,5 +131,39 @@ public class WindowsBatchScriptTest {
         for (int i = 0; i < concurrency; i++) {
             controllers.get(i).cleanup(ws);
         }
+    }
+
+    /**
+     * This issue came up while trying to fix JENKINS-34150. The problem was that the termination of the batch file
+     * did not work properly anymore. This is the reason why it is referencing to the same issue.
+     *
+     * @throws Exception
+     */
+    @Issue("JENKINS-34150")
+    @Test(timeout=500000) public void batchScriptForcedTerminate() throws Exception {
+        StreamTaskListener listener = StreamTaskListener.fromStdout();
+        FilePath ws = j.jenkins.getRootPath().child("ws");
+        Launcher launcher = j.jenkins.createLauncher(listener);
+        WindowsBatchScript script = new WindowsBatchScript("TIMEOUT /T 10000");
+
+        EnvVars envVars = new EnvVars();
+        Controller controller = script.launch(envVars, ws, launcher, listener);
+        controller.writeLog(ws, System.out);
+
+        Thread.sleep(1000);
+
+        Integer exitStatus;
+        if ((exitStatus = controller.exitStatus(ws, launcher)) != null) {
+            fail("Process already finished. Something went badly wrong. Got exit code: " + exitStatus.toString());
+        }
+
+        controller.stop(ws, launcher);
+
+        /* Now we check the remaining time for the exit status */
+        while ((exitStatus = controller.exitStatus(ws, launcher)) == null) {
+            Thread.sleep(1);
+        }
+
+        assertEquals(exitStatus.intValue(), -1);
     }
 }
