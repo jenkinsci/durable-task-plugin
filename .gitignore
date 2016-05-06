@@ -4,3 +4,6 @@ work
 *.iws
 *.iml
 *.ipr
+.settings
+.project
+.classpath
