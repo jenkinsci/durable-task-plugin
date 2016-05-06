@@ -80,14 +80,18 @@ public final class WindowsBatchScript extends FileMonitoringTask {
                 "SET tempResultFile=" + escapeForBatch(c.getTemporaryResultFile(ws)) + nl +
                 "SET pidFile=" + escapeForBatch(c.getPidFile(ws)) + nl +
                 "TITLE=" + identifier + nl + /* This works regardless if the command windows is actually visible. */
-                "FOR /F \"tokens=2,9 delims=,\" %%1 IN ('tasklist /NH /FI \"IMAGENAME eq cmd.exe\" /V /FO CSV') DO (" + nl +
-                "  ECHO %%~2 | FINDSTR /C:" + identifier + " >NUL 2>&1 && ECHO %%~1 > %pidFile%" + nl +
+                "FOR /F \"tokens=*\" %%1 IN ('tasklist /NH /FI \"IMAGENAME eq cmd.exe\" /V /FO CSV') DO (" + nl +
+                "  ECHO %%1 | FINDSTR /C:" + identifier + " >NUL 2>&1 && (" + nl +
+                "    FOR /F \"tokens=2 delims=,\" %%P IN (\"%%1\") DO ( " + nl +
+                "      ECHO %%~P > \"%pidFile%\"" + nl +
+                "    )" + nl +
+                "  )" + nl +
                 ")" + nl +
                 "TYPE NUL > \"%tempResultFile%\"" + nl +
                 "CMD /C \"%theRealScript%\" > \"%logFile%\" 2>&1" + nl +
                 "ECHO %ERRORLEVEL% > \"%tempResultFile%\"" + nl +
                 "MOVE \"%tempResultFile%\" \"%resultFile%\" > NUL" + nl +
-                "DEL %pidFile% > NUL" + nl +
+                "DEL /Q %pidFile% > NUL 2>&1" + nl +
                 "ENDLOCAL" + nl +
                 "EXIT 0", "UTF-8");
         c.getMainBatchFile(ws).write(script, "UTF-8");

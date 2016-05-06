@@ -140,11 +140,11 @@ public class WindowsBatchScriptTest {
      * @throws Exception
      */
     @Issue("JENKINS-34150")
-    @Test(timeout=500000) public void batchScriptForcedTerminate() throws Exception {
+    @Test(timeout=5000) public void batchScriptForcedTerminate() throws Exception {
         StreamTaskListener listener = StreamTaskListener.fromStdout();
         FilePath ws = j.jenkins.getRootPath().child("ws");
         Launcher launcher = j.jenkins.createLauncher(listener);
-        WindowsBatchScript script = new WindowsBatchScript("TIMEOUT /T 10000");
+        WindowsBatchScript script = new WindowsBatchScript("TIMEOUT /T 10");
 
         EnvVars envVars = new EnvVars();
         Controller controller = script.launch(envVars, ws, launcher, listener);
