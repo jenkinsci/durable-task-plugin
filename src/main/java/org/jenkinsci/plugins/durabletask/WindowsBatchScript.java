@@ -91,13 +91,21 @@ public final class WindowsBatchScript extends FileMonitoringTask {
                 "CMD /C \"%theRealScript%\" > \"%logFile%\" 2>&1" + nl +
                 "ECHO %ERRORLEVEL% > \"%tempResultFile%\"" + nl +
                 "MOVE \"%tempResultFile%\" \"%resultFile%\" > NUL" + nl +
-                "DEL /Q %pidFile% > NUL 2>&1" + nl +
+                "DEL /Q \"%pidFile%\" > NUL 2>&1" + nl +
                 "ENDLOCAL" + nl +
                 "EXIT 0", "UTF-8");
         c.getMainBatchFile(ws).write(script, "UTF-8");
 
+        /*
+         The execution of the wrapper script is done by the START command. This is done so the process runs in a
+         additional process that won't be terminated in case the Jenkins master shuts down and the script is executed
+         by the master. The command line executed by START is:
+            CALL "<wrapper script>"
+         The additional CALL is used to avoid the problem of the START command that causes it to fail in case the path
+         to the wrapper script contains a space.
+         */
         Launcher.ProcStarter ps = launcher.launch()
-                                          .cmds("cmd", "/C", "START \"\" /MIN \"" + escapeForBatch(c.getWrapperBatchFile(ws)) + '"')
+                                          .cmds("cmd", "/C", "START \"\" /MIN CALL \"" + escapeForBatch(c.getWrapperBatchFile(ws)) + "\"")
                                           .envs(envVars)
                                           .pwd(ws)
                                           .quiet(true);
