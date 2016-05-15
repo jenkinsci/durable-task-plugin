@@ -88,7 +88,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
                 "  )" + nl +
                 ")" + nl +
                 "TYPE NUL > \"%tempResultFile%\"" + nl +
-                "CMD /C \"%theRealScript%\" > \"%logFile%\" 2>&1" + nl +
+                "CMD /C \"\"%theRealScript%\"\" > \"%logFile%\" 2>&1" + nl +
                 "ECHO %ERRORLEVEL% > \"%tempResultFile%\"" + nl +
                 "MOVE \"%tempResultFile%\" \"%resultFile%\" > NUL" + nl +
                 "DEL /Q \"%pidFile%\" > NUL 2>&1" + nl +
@@ -105,7 +105,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
          to the wrapper script contains a space.
          */
         Launcher.ProcStarter ps = launcher.launch()
-                                          .cmds("cmd", "/C", "START \"\" /MIN CALL \"" + escapeForBatch(c.getWrapperBatchFile(ws)) + "\"")
+                                          .cmds("cmd", "/C", "START \"\" /MIN CALL \"" + c.getWrapperBatchFile(ws) + "\"")
                                           .envs(envVars)
                                           .pwd(ws)
                                           .quiet(true);
