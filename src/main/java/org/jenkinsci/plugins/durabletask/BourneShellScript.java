@@ -183,6 +183,10 @@ public final class BourneShellScript extends FileMonitoringTask {
             return null;
         }
 
+        @Override public String getDiagnostics(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            return super.getDiagnostics(workspace, launcher) + " (pid: " + pid + ")";
+        }
+
         private static final long serialVersionUID = 1L;
     }
 

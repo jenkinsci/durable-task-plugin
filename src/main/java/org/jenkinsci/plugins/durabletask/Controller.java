@@ -98,5 +98,13 @@ public abstract class Controller implements Serializable {
      */
     public abstract void cleanup(FilePath workspace) throws IOException, InterruptedException;
 
+    /**
+     * Should be overridden to provide specific information about the status of an external process, for diagnostic purposes.
+     * @return {@link #toString} by default
+     */
+    public String getDiagnostics(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+        return toString();
+    }
+
     private static final long serialVersionUID = 1L;
 }
