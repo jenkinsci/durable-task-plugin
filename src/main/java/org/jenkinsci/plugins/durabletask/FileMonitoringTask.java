@@ -29,6 +29,7 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
 import hudson.model.TaskListener;
+import hudson.remoting.Channel;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
@@ -200,6 +201,19 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         public FilePath getLogFile(FilePath workspace) throws IOException, InterruptedException {
             return controlDir(workspace).child("jenkins-log.txt");
+        }
+
+        @Override public String getDiagnostics(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            FilePath cd = controlDir(workspace);
+            VirtualChannel channel = cd.getChannel();
+            String node = (channel instanceof Channel) ? ((Channel) channel).getName() : null;
+            String location = node != null ? cd.getRemote() + " on " + node : cd.getRemote();
+            Integer code = exitStatus(workspace, launcher);
+            if (code != null) {
+                return "completed process (code " + code + ") in " + location;
+            } else {
+                return "awaiting process completion in " + location;
+            }
         }
 
         private static final long serialVersionUID = 1L;
