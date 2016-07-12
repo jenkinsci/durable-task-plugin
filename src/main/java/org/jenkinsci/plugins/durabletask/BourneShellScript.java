@@ -55,6 +55,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static /* not final */ int LAUNCH_FAILURE_TIMEOUT = Integer.getInteger(BourneShellScript.class.getName() + ".LAUNCH_FAILURE_TIMEOUT", 15);
 
     private final @Nonnull String script;
+    private boolean capturingOutput;
 
     @DataBoundConstructor public BourneShellScript(String script) {
         this.script = Util.fixNull(script);
@@ -62,6 +63,10 @@ public final class BourneShellScript extends FileMonitoringTask {
     
     public String getScript() {
         return script;
+    }
+
+    @Override public void captureOutput() {
+        capturingOutput = true;
     }
 
     /**
@@ -95,14 +100,26 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         envVars.put(cookieVariable, "please-do-not-kill-me");
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
-        String cmd = String.format("echo $$ > '%s'; jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s'",
+        String cmd;
+        if (capturingOutput) {
+            cmd = String.format("echo $$ > '%s'; jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s'",
+                c.pidFile(ws),
+                cookieValue,
+                cookieVariable,
+                shf,
+                c.getOutputFile(ws),
+                c.getLogFile(ws),
+                c.getResultFile(ws));
+        } else {
+            cmd = String.format("echo $$ > '%s'; jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s'",
                 c.pidFile(ws),
                 cookieValue,
                 cookieVariable,
                 shf,
                 c.getLogFile(ws),
-                c.getResultFile(ws)
-                )./* escape against EnvVars jobEnv in LocalLauncher.launch */replace("$", "$$");
+                c.getResultFile(ws));
+        }
+        cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
         List<String> args = new ArrayList<String>();
         if (!ws.act(new DarwinCheck())) { // JENKINS-25848

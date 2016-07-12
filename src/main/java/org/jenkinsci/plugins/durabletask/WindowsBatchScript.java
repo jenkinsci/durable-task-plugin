@@ -38,6 +38,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
  */
 public final class WindowsBatchScript extends FileMonitoringTask {
     private final String script;
+    private boolean capturingOutput;
 
     @DataBoundConstructor public WindowsBatchScript(String script) {
         this.script = script;
@@ -47,6 +48,10 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         return script;
     }
 
+    @Override public void captureOutput() {
+        capturingOutput = true;
+    }
+
     @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         if (launcher.isUnix()) {
@@ -54,11 +59,20 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         }
         BatchController c = new BatchController(ws);
 
-        c.getBatchFile1(ws).write(String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
-                c.getBatchFile2(ws).getRemote().replace("%", "%%"),
-                c.getLogFile(ws).getRemote().replace("%", "%%"),
-                c.getResultFile(ws).getRemote().replace("%", "%%")
-        ), "UTF-8");
+        String cmd;
+        if (capturingOutput) {
+            cmd = String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2> \"%s\"\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+                quote(c.getBatchFile2(ws)),
+                quote(c.getOutputFile(ws)),
+                quote(c.getLogFile(ws)),
+                quote(c.getResultFile(ws)));
+        } else {
+            cmd = String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+                quote(c.getBatchFile2(ws)),
+                quote(c.getLogFile(ws)),
+                quote(c.getResultFile(ws)));
+        }
+        c.getBatchFile1(ws).write(cmd, "UTF-8");
         c.getBatchFile2(ws).write(script, "UTF-8");
 
         Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(envVars).pwd(ws).quiet(true);
@@ -69,6 +83,10 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         ps.readStdout().readStderr(); // TODO see BourneShellScript
         ps.start();
         return c;
+    }
+
+    private static String quote(FilePath f) {
+        return f.getRemote().replace("%", "%%");
     }
 
     private static final class BatchController extends FileMonitoringController {

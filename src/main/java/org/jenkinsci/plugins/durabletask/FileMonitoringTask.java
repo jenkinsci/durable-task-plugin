@@ -42,6 +42,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.MasterToSlaveFileCallable;
+import org.apache.commons.io.IOUtils;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -157,6 +158,11 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
+        @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            // TODO could perhaps be more efficient for large files to send a MasterToSlaveFileCallable<byte[]>
+            return IOUtils.toByteArray(getOutputFile(workspace).read());
+        }
+
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
         }
@@ -197,10 +203,17 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         /**
-         * File in which the stdout/stderr
+         * File in which the stdout/stderr (or, if {@link #captureOutput} is called, just stderr) is written.
          */
         public FilePath getLogFile(FilePath workspace) throws IOException, InterruptedException {
             return controlDir(workspace).child("jenkins-log.txt");
+        }
+
+        /**
+         * File in which the stdout is written, if {@link #captureOutput} is called.
+         */
+        public FilePath getOutputFile(FilePath workspace) throws IOException, InterruptedException {
+            return controlDir(workspace).child("output.txt");
         }
 
         @Override public String getDiagnostics(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
