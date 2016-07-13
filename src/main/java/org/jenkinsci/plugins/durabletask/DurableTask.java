@@ -52,4 +52,15 @@ public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> i
      */
     public abstract Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException;
 
+    /**
+     * Requests that standard output of the task be captured rather than streamed to {@link Controller#writeLog}.
+     * If so, you may call {@link Controller#getOutput}.
+     * Standard error should still be streamed to the log.
+     * Should be called prior to {@link #launch} to take effect.
+     * @throws UnsupportedOperationException if this implementation does not support that mode
+     */
+    public void captureOutput() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException("Capturing of output is not implemented in " + getClass().getName());
+    }
+
 }

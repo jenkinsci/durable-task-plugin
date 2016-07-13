@@ -34,6 +34,7 @@ import java.io.Serializable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
 
 /**
  * Defines how to control the execution of a task after it has started.
@@ -67,6 +68,18 @@ public abstract class Controller implements Serializable {
     /** @deprecated use {@link #exitStatus(FilePath, Launcher)} instead */
     public @CheckForNull Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
         return exitStatus(workspace, createLauncher(workspace));
+    }
+
+    /**
+     * Obtain the process output.
+     * Intended for use after {@link #exitStatus(FilePath, Launcher)} has returned a non-null status.
+     * The result is undefined if {@link DurableTask#captureOutput} was not called before launch; generally an {@link IOException} will result.
+     * @param workspace the workspace in use
+     * @param launcher a way to start processes
+     * @return the output of the process as raw bytes (may be empty but not null)
+     */
+    public @Nonnull byte[] getOutput(@Nonnull FilePath workspace, @Nonnull Launcher launcher) throws IOException, InterruptedException {
+        throw new IOException("Did not implement getOutput in " + getClass().getName());
     }
 
     /**

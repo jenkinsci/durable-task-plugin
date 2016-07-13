@@ -34,6 +34,7 @@ import org.apache.commons.io.output.TeeOutputStream;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Assume;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.jvnet.hudson.test.Issue;
@@ -45,6 +46,16 @@ public class WindowsBatchScriptTest {
 
     @BeforeClass public static void windows() {
         Assume.assumeTrue("These tests are only for Windows", File.pathSeparatorChar == ';');
+    }
+
+    private StreamTaskListener listener;
+    private FilePath ws;
+    private Launcher launcher;
+
+    @Before public void vars() {
+        listener = StreamTaskListener.fromStdout();
+        ws = j.jenkins.getRootPath().child("ws");
+        launcher = j.jenkins.createLauncher(listener);
     }
 
     @Issue("JENKINS-25678")
@@ -63,9 +74,6 @@ public class WindowsBatchScriptTest {
     }
 
     private void testWithPath(String path) throws Exception {
-        StreamTaskListener listener = StreamTaskListener.fromStdout();
-        FilePath ws = j.jenkins.getRootPath().child(path);
-        Launcher launcher = j.jenkins.createLauncher(listener);
         Controller c = new WindowsBatchScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher) == null) {
             Thread.sleep(100);
@@ -81,9 +89,6 @@ public class WindowsBatchScriptTest {
 
     @Issue("JENKINS-27419")
     @Test public void exitCommand() throws Exception {
-        StreamTaskListener listener = StreamTaskListener.fromStdout();
-        FilePath ws = j.jenkins.getRootPath().child("ws");
-        Launcher launcher = j.jenkins.createLauncher(listener);
         Controller c = new WindowsBatchScript("echo hello world\r\nexit 1").launch(new EnvVars(), ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream tos = new TeeOutputStream(baos, System.err);
@@ -95,6 +100,21 @@ public class WindowsBatchScriptTest {
         assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher));
         String log = baos.toString();
         assertTrue(log, log.contains("hello world"));
+        c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-26133")
+    @Test public void output() throws Exception {
+        DurableTask task = new WindowsBatchScript("@echo 42"); // http://stackoverflow.com/a/8486061/12916
+        task.captureOutput();
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals("42\r\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
     }
 

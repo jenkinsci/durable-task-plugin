@@ -122,4 +122,20 @@ public class BourneShellScriptTest extends Assert {
         c.cleanup(ws);
     }
 
+    @Issue("JENKINS-26133")
+    @Test public void output() throws Exception {
+        DurableTask task = new BourneShellScript("echo 42");
+        task.captureOutput();
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertThat(baos.toString(), containsString("+ echo 42"));
+        assertEquals("42\n", new String(c.getOutput(ws, launcher)));
+        c.cleanup(ws);
+    }
+
 }
