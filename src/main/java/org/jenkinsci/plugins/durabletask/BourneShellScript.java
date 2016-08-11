@@ -81,6 +81,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final Map<FilePath,Integer> encounteredPaths = new WeakHashMap<FilePath,Integer>();
 
     @Override protected FileMonitoringController launchWithCookie(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
+		String defaultShell = "sh";
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
@@ -92,7 +93,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         String s = script;
         final Jenkins jenkins = Jenkins.getInstance();
         if (!s.startsWith("#!") && jenkins != null) {
-            String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
+            defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
             s = "#!"+defaultShell+" -xe\n" + s;
         }
         shf.write(s, "UTF-8");
@@ -125,7 +126,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (!ws.act(new DarwinCheck())) { // JENKINS-25848
             args.add("nohup");
         }
-        args.addAll(Arrays.asList("sh", "-c", cmd));
+        args.addAll(Arrays.asList(defaultShell, "-c", cmd));
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
         boolean novel;
