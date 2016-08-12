@@ -43,6 +43,7 @@ import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.apache.commons.io.IOUtils;
 
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
@@ -85,7 +86,9 @@ public final class BourneShellScript extends FileMonitoringTask {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
 
-        ShellController c = new ShellController(ws);
+        String encoding = ws.act(new ZosCheck()) ? "IBM1047" : null;
+
+        ShellController c = new ShellController(ws, encoding);
 
         FilePath shf = c.getScriptFile(ws);
 
@@ -95,7 +98,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
             s = "#!"+defaultShell+" -xe\n" + s;
         }
-        shf.write(s, "UTF-8");
+        shf.write(s, encoding==null ? "UTF-8" : encoding);
         shf.chmod(0755);
 
         envVars.put(cookieVariable, "please-do-not-kill-me");
@@ -153,8 +156,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         private int pid;
         private final long startTime = System.currentTimeMillis();
 
-        private ShellController(FilePath ws) throws IOException, InterruptedException {
-            super(ws);
+        private ShellController(FilePath ws, String encoding) throws IOException, InterruptedException {
+            super(ws, encoding);
         }
 
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
@@ -170,7 +173,10 @@ public final class BourneShellScript extends FileMonitoringTask {
                 FilePath pidFile = pidFile(ws);
                 if (pidFile.exists()) {
                     try {
-                        pid = Integer.parseInt(pidFile.readToString().trim());
+                        final String pidStr = this.getEncoding() == null ? 
+                                pidFile.readToString().trim() : // original behavior
+                                IOUtils.toString(pidFile.read(),this.getEncoding());
+                        pid = Integer.parseInt(pidStr.trim());
                     } catch (NumberFormatException x) {
                         throw new IOException("corrupted content in " + pidFile + ": " + x, x);
                     }
@@ -218,6 +224,12 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final class DarwinCheck extends MasterToSlaveCallable<Boolean,RuntimeException> {
         @Override public Boolean call() throws RuntimeException {
             return Platform.isDarwin();
+        }
+    }
+
+    private static final class ZosCheck extends MasterToSlaveCallable<Boolean,RuntimeException> {
+        @Override public Boolean call() throws RuntimeException {
+            return Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS");
         }
     }
 

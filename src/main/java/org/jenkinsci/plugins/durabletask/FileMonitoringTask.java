@@ -35,7 +35,9 @@ import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.RandomAccessFile;
 import java.util.Collections;
 import java.util.UUID;
@@ -43,6 +45,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.output.WriterOutputStream;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -94,18 +97,41 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         private long lastLocation;
 
+        /**
+         * Encoding of input/output of the sh.
+         * If null no character conversion to be done.
+         */
+        private String encoding;
+
+        /**
+         * @return Encoding of the files to be monitored.
+         * If null handled without conversion just as byte stream.
+         */
+        public String getEncoding() {
+            return encoding;
+        }
+
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
+            this(ws,null);
+        }
+
+        protected FileMonitoringController(FilePath ws, String encoding) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
             FilePath cd = tempDir(ws).child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
             cd.mkdirs();
             controlDir = cd.getRemote();
+            this.encoding = encoding;
         }
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
             FilePath log = getLogFile(workspace);
+            if (this.getEncoding() != null)	{
+                sink = new WriterOutputStream(new OutputStreamWriter(sink, "UTF-8"), this.getEncoding());
+            }
             Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink)));
             if (newLocation != null) {
+                if (this.getEncoding() != null) sink.flush();
                 LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, log});
                 lastLocation = newLocation;
                 return true;
@@ -149,7 +175,10 @@ public abstract class FileMonitoringTask extends DurableTask {
             FilePath status = getResultFile(workspace);
             if (status.exists()) {
                 try {
-                    return Integer.parseInt(status.readToString().trim());
+                    final String statusStr = this.getEncoding() == null ? 
+                            status.readToString().trim() : // original behavior
+                            IOUtils.toString(status.read(),this.getEncoding());
+                    return Integer.parseInt(statusStr.trim());
                 } catch (NumberFormatException x) {
                     throw new IOException("corrupted content in " + status + ": " + x, x);
                 }
@@ -160,7 +189,9 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             // TODO could perhaps be more efficient for large files to send a MasterToSlaveFileCallable<byte[]>
-            return IOUtils.toByteArray(getOutputFile(workspace).read());
+            return this.getEncoding() == null ?
+                        IOUtils.toByteArray(getOutputFile(workspace).read()) :
+                        IOUtils.toByteArray(new InputStreamReader(getOutputFile(workspace).read(),this.getEncoding()), "UTF-8");
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
