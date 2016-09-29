@@ -179,25 +179,17 @@ public final class BourneShellScript extends FileMonitoringTask {
             return pid;
         }
 
-        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            Integer status = super.exitStatus(workspace, launcher);
-            if (status != null) {
-                return status;
-            }
+        @Override protected Integer specialExitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             int _pid = pid(workspace);
             if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid, launcher)) {
-                // it looks like the process has disappeared. one last check to make sure it's not a result of a race condition,
-                // then if we still don't have the exit code, use fake exit code to distinguish from 0 (success) and 1+ (observed failure)
+                // it looks like the process has disappeared; use fake exit code to distinguish from 0 (success) and 1+ (observed failure)
                 // TODO would be better to have exitStatus accept a TaskListener so we could print an informative message
-                status = super.exitStatus(workspace, launcher);
-                if (status == null) {
-                    status = -1;
-                }
-                return status;
+                return -1;
             } else if (_pid == 0 && /* compatibility */ startTime > 0 && System.currentTimeMillis() - startTime > 1000 * LAUNCH_FAILURE_TIMEOUT) {
                 return -2; // apparently never started
+            } else {
+                return null;
             }
-            return null;
         }
 
         @Override public String getDiagnostics(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {

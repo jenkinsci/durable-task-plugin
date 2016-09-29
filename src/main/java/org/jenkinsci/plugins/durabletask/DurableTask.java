@@ -53,8 +53,9 @@ public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> i
     public abstract Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException;
 
     /**
-     * Requests that standard output of the task be captured rather than streamed to {@link Controller#writeLog}.
-     * If so, you may call {@link Controller#getOutput}.
+     * Requests that standard output of the task be captured rather than streamed.
+     * If you use {@link Controller#watch}, standard output will not be sent to {@link Handler#output}; it will be included in {@link Handler#exited} instead.
+     * Otherwise (using polling mode), standard output will not be sent to {@link Controller#writeLog}; call {@link Controller#getOutput} to collect.
      * Standard error should still be streamed to the log.
      * Should be called prior to {@link #launch} to take effect.
      * @throws UnsupportedOperationException if this implementation does not support that mode

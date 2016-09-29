@@ -27,25 +27,31 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.model.Slave;
+import hudson.remoting.VirtualChannel;
 import hudson.util.StreamTaskListener;
-import org.junit.Assert;
-import org.junit.Assume;
-import org.junit.Rule;
-import org.junit.Test;
-import org.jvnet.hudson.test.JenkinsRule;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.util.Collections;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import org.apache.commons.io.IOUtils;
 import static org.hamcrest.Matchers.containsString;
+import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
+import org.jvnet.hudson.test.JenkinsRule;
 
 public class BourneShellScriptTest extends Assert {
 
     @Rule public JenkinsRule j = new JenkinsRule();
 
-    @Before public void unix() {
+    @BeforeClass public static void unix() {
         Assume.assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
     }
 
@@ -136,6 +142,51 @@ public class BourneShellScriptTest extends Assert {
         assertThat(baos.toString(), containsString("+ echo 42"));
         assertEquals("42\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-3838")
+    @Test public void watch() throws Exception {
+        Slave s = j.createOnlineSlave();
+        ws = s.getWorkspaceRoot();
+        launcher = s.createLauncher(listener);
+        DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        BlockingQueue<Integer> status = new LinkedBlockingQueue<>();
+        BlockingQueue<String> output = new LinkedBlockingQueue<>();
+        BlockingQueue<String> lines = new LinkedBlockingQueue<>();
+        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines));
+        assertEquals("+ set +x", lines.take());
+        assertEquals(0, status.take().intValue());
+        assertEquals("<no output>", output.take());
+        assertEquals("[1, 2, 3, 4, 5]", lines.toString());
+        task = new BourneShellScript("echo result");
+        task.captureOutput();
+        c = task.launch(new EnvVars(), ws, launcher, listener);
+        status = new LinkedBlockingQueue<>();
+        output = new LinkedBlockingQueue<>();
+        lines = new LinkedBlockingQueue<>();
+        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines));
+        assertEquals(0, status.take().intValue());
+        assertEquals("result\n", output.take());
+        assertEquals("[+ echo result]", lines.toString());
+    }
+    private static class MockHandler extends Handler {
+        private final BlockingQueue<Integer> status;
+        private final BlockingQueue<String> output;
+        private final BlockingQueue<String> lines;
+        @SuppressWarnings("unchecked")
+        MockHandler(VirtualChannel channel, BlockingQueue<Integer> status, BlockingQueue<String> output, BlockingQueue<String> lines) {
+            this.status = channel.export(BlockingQueue.class, status);
+            this.output = channel.export(BlockingQueue.class, output);
+            this.lines = channel.export(BlockingQueue.class, lines);
+        }
+        @Override public void output(InputStream stream) throws Exception {
+            lines.addAll(IOUtils.readLines(stream));
+        }
+        @Override public void exited(int code, byte[] data) throws Exception {
+            status.add(code);
+            output.add(data != null ? new String(data) : "<no output>");
+        }
     }
 
 }

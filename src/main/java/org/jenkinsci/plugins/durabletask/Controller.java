@@ -43,6 +43,19 @@ import javax.annotation.Nonnull;
 public abstract class Controller implements Serializable {
 
     /**
+     * Begins watching the process asynchronously, so that the master may receive notification when output is available or the process has exited.
+     * This should be called as soon as the process is launched, and thereafter whenever reconnecting to the agent.
+     * You should not call {@link #writeLog} in this case; you do not need to call {@link #exitStatus(FilePath, Launcher)} frequently,
+     * though it is advisable to still call it occasionally to verify that the process is still running.
+     * @param workspace the workspace in use
+     * @param handler a remotable callback
+     * @throws UnsupportedOperationException when this mode is not available, so you must fall back to polling {@link #writeLog} and {@link #exitStatus(FilePath, Launcher)}
+     */
+    public void watch(@Nonnull FilePath workspace, @Nonnull Handler handler) throws IOException, InterruptedException, UnsupportedOperationException {
+        throw new UnsupportedOperationException("Asynchronous mode is not implemented in " + getClass().getName());
+    }
+
+    /**
      * Obtains any new task log output.
      * Could use a serializable field to keep track of how much output has been previously written.
      * @param workspace the workspace in use
