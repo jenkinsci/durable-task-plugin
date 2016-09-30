@@ -35,7 +35,6 @@ import hudson.remoting.NamingThreadFactory;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
-import hudson.util.LogTaskListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -179,6 +178,16 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
+        /** Like {@link #exitStatus} but when we cannot rely on a {@link Launcher}. */
+        Integer _exitStatus(FilePath workspace) throws IOException, InterruptedException {
+            FilePath status = getResultFile(workspace);
+            if (status.exists()) {
+                return readStatus(status);
+            } else {
+                return null;
+            }
+        }
+
         private int readStatus(FilePath status) throws IOException, InterruptedException {
             try {
                 return Integer.parseInt(status.readToString().trim());
@@ -196,6 +205,11 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            return _getOutput(workspace);
+        }
+
+        /** Like {@link #getOutput} but when we cannot rely on a {@link Launcher}. */
+        byte[] _getOutput(FilePath workspace) throws IOException, InterruptedException {
             return IOUtils.toByteArray(getOutputFile(workspace).read());
         }
 
@@ -308,9 +322,6 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static class Watcher implements Runnable {
 
-        // note that LOGGER here is going to the agent log, not master log
-        private static final Launcher localLauncher = new Launcher.LocalLauncher(new LogTaskListener(LOGGER, Level.INFO));
-
         private final FileMonitoringController controller;
         private final FilePath workspace;
         private final Handler handler;
@@ -323,7 +334,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public void run() {
             try {
-                Integer exitStatus = controller.exitStatus(workspace, localLauncher); // check before collecting output, in case the process is just now finishing
+                Integer exitStatus = controller._exitStatus(workspace); // check before collecting output, in case the process is just now finishing
                 long lastLocation = 0;
                 FilePath lastLocationFile = controller.getLastLocationFile(workspace);
                 if (lastLocationFile.exists()) {
@@ -342,7 +353,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                 if (exitStatus != null) {
                     byte[] output;
                     if (controller.getOutputFile(workspace).exists()) {
-                        output = controller.getOutput(workspace, localLauncher);
+                        output = controller._getOutput(workspace);
                     } else {
                         output = null;
                     }
@@ -351,6 +362,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     watchService().schedule(this, 100, TimeUnit.MILLISECONDS); // TODO consider an adaptive timeout as in DurableTaskStep.Execution in polling mode
                 }
             } catch (Exception x) {
+                // note that LOGGER here is going to the agent log, not master log
                 LOGGER.log(Level.WARNING, "giving up on watching " + controller.controlDir, x);
             }
         }
