@@ -358,6 +358,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                         output = null;
                     }
                     handler.exited(exitStatus, output);
+                    controller.cleanup(workspace);
                 } else {
                     watchService().schedule(this, 100, TimeUnit.MILLISECONDS); // TODO consider an adaptive timeout as in DurableTaskStep.Execution in polling mode
                 }
