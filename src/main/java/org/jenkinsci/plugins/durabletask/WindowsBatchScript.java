@@ -101,6 +101,39 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         public FilePath getBatchFile2(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("jenkins-main.bat");
         }
+        
+        @Override
+        public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+        	Integer exitStatus = super.exitStatus(workspace, launcher);
+        	if (exitStatus != null) {
+        		return exitStatus;
+        	}
+        	
+        	// Log file is locked during batch execution
+        	FilePath logFile = getLogFile(workspace);
+        	try{
+    			if(logFile.exists()){
+    				// try to write to log file
+        			// if we can, batch is ended, otherwhise an exception is thrown
+    				logFile.write("","UTF-8");
+        			
+    				// Make sure that an exitStatus is not there
+    	        	Thread.sleep(1000);
+    	        	
+    				exitStatus = super.exitStatus(workspace, launcher);
+    	        	if (exitStatus != null) {
+    	        		return exitStatus;
+    	        	}
+
+    	        	// No exit status and no more lock on log file, batch killed?
+    	        	return -1;
+    			}
+    		}catch(Exception e){
+    			// batch is running, nothing to do
+    		}
+        	
+        	return null;
+        }
 
         private static final long serialVersionUID = 1L;
     }
