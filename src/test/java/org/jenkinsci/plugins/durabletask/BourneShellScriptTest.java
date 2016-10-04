@@ -144,7 +144,7 @@ public class BourneShellScriptTest extends Assert {
         c.cleanup(ws);
     }
 
-    @Issue("JENKINS-3838")
+    @Issue("JENKINS-38381")
     @Test public void watch() throws Exception {
         Slave s = j.createOnlineSlave();
         ws = s.getWorkspaceRoot();
