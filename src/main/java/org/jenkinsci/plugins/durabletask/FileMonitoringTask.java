@@ -24,7 +24,6 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import com.google.common.base.Charsets;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
@@ -45,6 +44,7 @@ import java.io.RandomAccessFile;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
@@ -354,10 +354,10 @@ public abstract class FileMonitoringTask extends DurableTask {
                         InputStream locallyEncodedStream = Channels.newInputStream(ch.position(lastLocation));
                         InputStream utf8EncodedStream;
                         Charset nativeEncoding = Charset.defaultCharset();
-                        if (nativeEncoding.equals(Charsets.UTF_8)) {
+                        if (nativeEncoding.equals(StandardCharsets.UTF_8)) {
                             utf8EncodedStream = locallyEncodedStream;
                         } else {
-                            utf8EncodedStream = new ReaderInputStream(new InputStreamReader(locallyEncodedStream, nativeEncoding), Charsets.UTF_8);
+                            utf8EncodedStream = new ReaderInputStream(new InputStreamReader(locallyEncodedStream, nativeEncoding), StandardCharsets.UTF_8);
                         }
                         CountingInputStream cis = new CountingInputStream(utf8EncodedStream);
                         handler.output(cis);
