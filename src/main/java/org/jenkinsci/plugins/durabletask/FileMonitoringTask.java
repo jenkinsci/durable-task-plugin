@@ -24,6 +24,7 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import com.google.common.base.Charsets;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
@@ -37,10 +38,13 @@ import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.charset.Charset;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
@@ -54,6 +58,7 @@ import javax.annotation.CheckForNull;
 import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.input.CountingInputStream;
+import org.apache.commons.io.input.ReaderInputStream;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -346,7 +351,15 @@ public abstract class FileMonitoringTask extends DurableTask {
                 if (len > lastLocation) {
                     assert !logFile.isRemote();
                     try (FileChannel ch = FileChannel.open(Paths.get(logFile.getRemote()), StandardOpenOption.READ)) {
-                        CountingInputStream cis = new CountingInputStream(Channels.newInputStream(ch.position(lastLocation)));
+                        InputStream locallyEncodedStream = Channels.newInputStream(ch.position(lastLocation));
+                        InputStream utf8EncodedStream;
+                        Charset nativeEncoding = Charset.defaultCharset();
+                        if (nativeEncoding.equals(Charsets.UTF_8)) {
+                            utf8EncodedStream = locallyEncodedStream;
+                        } else {
+                            utf8EncodedStream = new ReaderInputStream(new InputStreamReader(locallyEncodedStream, nativeEncoding), Charsets.UTF_8);
+                        }
+                        CountingInputStream cis = new CountingInputStream(utf8EncodedStream);
                         handler.output(cis);
                         lastLocationFile.write(Long.toString(lastLocation + cis.getByteCount()), null);
                     }
