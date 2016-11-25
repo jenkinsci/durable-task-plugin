@@ -125,7 +125,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (!ws.act(new DarwinCheck())) { // JENKINS-25848
             args.add("nohup");
         }
-        args.addAll(Arrays.asList("sh", "-c", cmd));
+        args.addAll(Arrays.asList("sh", "-xc", cmd));
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
         boolean novel;
