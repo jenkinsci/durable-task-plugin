@@ -89,7 +89,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         FilePath shf = c.getScriptFile(ws);
 
-        String s = script;
+        String s = script, scriptPath;
         final Jenkins jenkins = Jenkins.getInstance();
         if (!s.startsWith("#!") && jenkins != null) {
             String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
@@ -97,6 +97,11 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         shf.write(s, "UTF-8");
         shf.chmod(0755);
+
+        scriptPath = shf.getRemote();
+        if (ws.act(new WindowsCheck())) { // JENKINS-40255
+             scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
+        }
 
         envVars.put(cookieVariable, "please-do-not-kill-me");
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
@@ -106,7 +111,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 c.pidFile(ws),
                 cookieValue,
                 cookieVariable,
-                shf,
+                scriptPath,
                 c.getOutputFile(ws),
                 c.getLogFile(ws),
                 c.getResultFile(ws));
@@ -115,7 +120,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 c.pidFile(ws),
                 cookieValue,
                 cookieVariable,
-                shf,
+                scriptPath,
                 c.getLogFile(ws),
                 c.getResultFile(ws));
         }
@@ -218,6 +223,11 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final class DarwinCheck extends MasterToSlaveCallable<Boolean,RuntimeException> {
         @Override public Boolean call() throws RuntimeException {
             return Platform.isDarwin();
+        }
+    }
+    private static final class WindowsCheck extends MasterToSlaveCallable<Boolean,RuntimeException> {
+        @Override public Boolean call() throws RuntimeException {
+            return Platform.current() == Platform.WINDOWS ;
         }
     }
 
