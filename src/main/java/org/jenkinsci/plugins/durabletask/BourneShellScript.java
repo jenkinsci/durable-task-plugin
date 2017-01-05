@@ -99,6 +99,11 @@ public final class BourneShellScript extends FileMonitoringTask {
         shf.chmod(0755);
 
         scriptPath = shf.getRemote();
+        List<String> args = new ArrayList<String>();
+
+        if (!ws.act(new DarwinCheck())) { // JENKINS-25848
+            args.add("nohup");
+        }
         if (ws.act(new WindowsCheck())) { // JENKINS-40255
              scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
         }
@@ -126,10 +131,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
-        List<String> args = new ArrayList<String>();
-        if (!ws.act(new DarwinCheck())) { // JENKINS-25848
-            args.add("nohup");
-        }
         args.addAll(Arrays.asList("sh", "-c", cmd));
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
