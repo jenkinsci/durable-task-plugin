@@ -138,4 +138,17 @@ public class BourneShellScriptTest extends Assert {
         c.cleanup(ws);
     }
 
+    @Issue("JENKINS-40734")
+    @Test public void envWithShellChar() throws Exception {
+        Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws,baos);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertThat(baos.toString(), containsString("value=foo$$bar"));
+        c.cleanup(ws);
+    }
+
 }
