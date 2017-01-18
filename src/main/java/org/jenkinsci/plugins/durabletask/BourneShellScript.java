@@ -49,6 +49,8 @@ import org.kohsuke.stapler.DataBoundConstructor;
  */
 public final class BourneShellScript extends FileMonitoringTask {
 
+    private static enum OsType {DARWIN, UNIX, WINDOWS}
+
     /** Number of times we will show launch diagnostics in a newly encountered workspace before going mute to save resources. */
     private static /* not final */ int NOVEL_WORKSPACE_DIAGNOSTICS_COUNT = Integer.getInteger(BourneShellScript.class.getName() + ".NOVEL_WORKSPACE_DIAGNOSTICS_COUNT", 10);
     /** Number of seconds we will wait for a controller script to be launched before assuming the launch failed. */
@@ -89,7 +91,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         FilePath shf = c.getScriptFile(ws);
 
-        String s = script;
+        String s = script, scriptPath;
         final Jenkins jenkins = Jenkins.getInstance();
         if (!s.startsWith("#!") && jenkins != null) {
             String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
@@ -97,6 +99,18 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         shf.write(s, "UTF-8");
         shf.chmod(0755);
+
+        scriptPath = shf.getRemote();
+        List<String> args = new ArrayList<String>();
+
+        OsType os = ws.act(new getOsType());
+
+        if (os != OsType.DARWIN) { // JENKINS-25848
+            args.add("nohup");
+        }
+        if (os == OsType.WINDOWS) { // JENKINS-40255
+            scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
+        }
 
         envVars.put(cookieVariable, "please-do-not-kill-me");
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
@@ -106,7 +120,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 c.pidFile(ws),
                 cookieValue,
                 cookieVariable,
-                shf,
+                scriptPath,
                 c.getOutputFile(ws),
                 c.getLogFile(ws),
                 c.getResultFile(ws));
@@ -115,16 +129,12 @@ public final class BourneShellScript extends FileMonitoringTask {
                 c.pidFile(ws),
                 cookieValue,
                 cookieVariable,
-                shf,
+                scriptPath,
                 c.getLogFile(ws),
                 c.getResultFile(ws));
         }
         cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
-        List<String> args = new ArrayList<String>();
-        if (!ws.act(new DarwinCheck())) { // JENKINS-25848
-            args.add("nohup");
-        }
         args.addAll(Arrays.asList("sh", "-c", cmd));
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
@@ -215,10 +225,15 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     }
 
-    private static final class DarwinCheck extends MasterToSlaveCallable<Boolean,RuntimeException> {
-        @Override public Boolean call() throws RuntimeException {
-            return Platform.isDarwin();
+    private static final class getOsType extends MasterToSlaveCallable<OsType,RuntimeException> {
+        @Override public OsType call() throws RuntimeException {
+            if (Platform.isDarwin()) {
+              return OsType.DARWIN;
+            } else if (Platform.current() == Platform.WINDOWS) {
+              return OsType.WINDOWS;
+            } else {
+              return OsType.UNIX; // Default Value
+            }
         }
     }
-
 }
