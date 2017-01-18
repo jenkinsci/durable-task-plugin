@@ -38,6 +38,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.util.Collections;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -77,6 +79,17 @@ public abstract class FileMonitoringTask extends DurableTask {
      */
     protected FileMonitoringController doLaunch(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         throw new AbstractMethodError("override either doLaunch or launchWithCookie");
+    }
+
+    /**
+     * JENKINS-40734: blocks the substitutions of {@link EnvVars#overrideExpandingAll} done by {@link Launcher}.
+     */
+    protected static Map<String, String> escape(EnvVars envVars) {
+        Map<String, String> m = new TreeMap<String, String>();
+        for (Map.Entry<String, String> entry : envVars.entrySet()) {
+            m.put(entry.getKey(), entry.getValue().replace("$", "$$"));
+        }
+        return m;
     }
 
     protected static class FileMonitoringController extends Controller {

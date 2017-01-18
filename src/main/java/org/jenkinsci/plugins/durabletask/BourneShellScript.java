@@ -126,7 +126,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             args.add("nohup");
         }
         args.addAll(Arrays.asList("sh", "-c", cmd));
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws).quiet(true);
+        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
         boolean novel;
         synchronized (encounteredPaths) {
