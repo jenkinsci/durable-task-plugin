@@ -179,10 +179,20 @@ public final class BourneShellScript extends FileMonitoringTask {
             if (pid == 0) {
                 FilePath pidFile = pidFile(ws);
                 if (pidFile.exists()) {
-                    try {
-                        pid = Integer.parseInt(pidFile.readToString().trim());
-                    } catch (NumberFormatException x) {
-                        throw new IOException("corrupted content in " + pidFile + ": " + x, x);
+                    for ( int tries = 30; tries > 0; tries-- ) {
+                        String _pid = "";
+                        try {
+                            _pid = pidFile.readToString().trim();
+                            pid = Integer.parseInt(_pid);
+                        } catch (NumberFormatException x) {
+                            if ( tries == 1 ) {
+                                throw new IOException("corrupted content in " + pidFile + ": " + x, x);
+                            }
+                            if ( tries != 1 && _pid.length() == 0) {
+                                // potential timing issue where pid file created but not yet populated
+                                Thread.sleep(100);
+                            }
+                        }
                     }
                 }
             }
