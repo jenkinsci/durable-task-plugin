@@ -60,33 +60,33 @@ public final class PowershellScript extends FileMonitoringTask {
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         List<String> args = new ArrayList<String>();
         PowershellController c = new PowershellController(ws);
-        c.getPowershellFile(ws).write(script, "UTF-8");
         
         String cmd;
         if (capturingOutput) {
-            cmd = String.format("\"& \'%s\'\" | Out-String > \"%s\" 2> \"%s\"; echo $LastExitCode > \"%s\";", 
-                quote(c.getPowershellFile(ws)),
-                quote(c.getOutputFile(ws)),
+            cmd = String.format("$res = (& \"%s\" | Out-String) 2> \"%s\"; [io.file]::WriteAllText(\"%s\",$(if($LastExitCode -eq $null -or $LastExitCode -eq 0) {0} else {$LastExitCode})); [io.file]::WriteAllText(\"%s\",$res);", 
+                quote(c.getPowershellMainFile(ws)),
                 quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)));
-        } else {
-            cmd = String.format("\"& '%s'\" | Out-String > \"%s\" 2>&1; echo $LastExitCode > \"%s\";",
-                quote(c.getPowershellFile(ws)),
-                quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)));
-        }
-        
-        //FilePath cmdOutPath = new FilePath(new File("C:\\users\\gabloe\\desktop\\cmdtest\\cmd.txt"));
-        
-        if (launcher.isUnix()) {
-            args.addAll(Arrays.asList("powershell", "-NonInteractive", cmd));
-        } else {
-            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", cmd));    
-        }
+                quote(c.getResultFile(ws)),
+                quote(c.getOutputFile(ws)));
 
-        //cmdOutPath.write(quote(c.getPowershellFile(ws)), "UTF-8");
+        } else {
+            cmd = String.format("$res = (& \"%s\" 2>&1 | Out-String); [io.file]::WriteAllText(\"%s\",$(if($LastExitCode -eq $null -or $LastExitCode -eq 0) {0} else {$LastExitCode})); [io.file]::WriteAllText(\"%s\",$res);",
+                quote(c.getPowershellMainFile(ws)),
+                quote(c.getResultFile(ws)),
+                quote(c.getLogFile(ws)));
+        }
+       
+        c.getPowershellMainFile(ws).write(script, "UTF-8");
+        c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
+
+        if (launcher.isUnix()) {
+            args.addAll(Arrays.asList("powershell", "-NonInteractive", "-File", c.getPowershellWrapperFile(ws).getRemote()));
+        } else {
+            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", c.getPowershellWrapperFile(ws).getRemote()));    
+        }
+        
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
-        listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running PowerShell script"); // details printed by cmd
+        listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running PowerShell script");
         ps.readStdout().readStderr();
         ps.start();
         return c;
@@ -101,7 +101,11 @@ public final class PowershellScript extends FileMonitoringTask {
             super(ws);
         }
 
-        public FilePath getPowershellFile(FilePath ws) throws IOException, InterruptedException {
+        public FilePath getPowershellMainFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("powershellMain.ps1");
+        }
+        
+        public FilePath getPowershellWrapperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellWrapper.ps1");
         }
 

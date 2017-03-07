@@ -45,10 +45,6 @@ public class PowershellScriptTest {
 
     @Rule public JenkinsRule j = new JenkinsRule();
 
-    //@BeforeClass public static void windows() {
-    //    Assume.assumeTrue("These tests are only for Windows", File.pathSeparatorChar == ';');
-    //}
-
     private StreamTaskListener listener;
     private FilePath ws;
     private Launcher launcher;
@@ -75,7 +71,7 @@ public class PowershellScriptTest {
     }
 
     private void testWithPath(String path) throws Exception {
-        Controller c = new PowershellScript("echo \"hello world\"").launch(new EnvVars(), ws, launcher, listener);
+        Controller c = new PowershellScript("Write-Output \"hello world\"").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher) == null) {
             Thread.sleep(100);
         }
@@ -85,12 +81,12 @@ public class PowershellScriptTest {
         String log = baos.toString();
         System.err.print(log);
         assertTrue(log, log.contains("hello world"));
-        //c.cleanup(ws);
+        c.cleanup(ws);
     }
 
     @Issue("JENKINS-27419")
     @Test public void exitCommand() throws Exception {
-        Controller c = new PowershellScript("Write-Host \"hello world\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
+        Controller c = new PowershellScript("Write-Output \"hello world\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream tos = new TeeOutputStream(baos, System.err);
         while (c.exitStatus(ws, launcher) == null) {
@@ -101,12 +97,12 @@ public class PowershellScriptTest {
         assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher));
         String log = baos.toString();
         assertTrue(log, log.contains("hello world"));
-        //c.cleanup(ws);
+        c.cleanup(ws);
     }
 
     @Issue("JENKINS-26133")
     @Test public void output() throws Exception {
-        DurableTask task = new PowershellScript("echo 42"); // http://stackoverflow.com/a/8486061/12916
+        DurableTask task = new PowershellScript("Write-Output \"42\""); // http://stackoverflow.com/a/8486061/12916
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher) == null) {
@@ -116,7 +112,7 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
         assertEquals("42\r\n", new String(c.getOutput(ws, launcher)));
-        //c.cleanup(ws);
+        c.cleanup(ws);
     }
 
     @Issue("JENKINS-40734")
@@ -129,7 +125,7 @@ public class PowershellScriptTest {
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
-        //c.cleanup(ws);
+        c.cleanup(ws);
     }
 
 }
