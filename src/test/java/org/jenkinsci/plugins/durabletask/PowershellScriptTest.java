@@ -41,6 +41,7 @@ import org.junit.Rule;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 
+@Issue("JENKINS-34581")
 public class PowershellScriptTest {
 
     @Rule public JenkinsRule j = new JenkinsRule();
@@ -55,17 +56,14 @@ public class PowershellScriptTest {
         launcher = j.jenkins.createLauncher(listener);
     }
 
-    @Issue("JENKINS-25678")
     @Test public void spaceInPath() throws Exception {
         testWithPath("space in path");
     }
 
-    @Issue("JENKINS-25678")
     @Test public void spaceInPath2() throws Exception {
         testWithPath("space in path@2");
     }
 
-    @Issue("JENKINS-32701")
     @Test public void percentInPath() throws Exception {
         testWithPath("percent%in%path");
     }
@@ -84,7 +82,6 @@ public class PowershellScriptTest {
         c.cleanup(ws);
     }
 
-    @Issue("JENKINS-27419")
     @Test public void exitCommand() throws Exception {
         Controller c = new PowershellScript("Write-Output \"hello world\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -100,9 +97,8 @@ public class PowershellScriptTest {
         c.cleanup(ws);
     }
 
-    @Issue("JENKINS-26133")
     @Test public void output() throws Exception {
-        DurableTask task = new PowershellScript("Write-Output \"42\""); // http://stackoverflow.com/a/8486061/12916
+        DurableTask task = new PowershellScript("Write-Output \"42\"");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher) == null) {
@@ -115,7 +111,6 @@ public class PowershellScriptTest {
         c.cleanup(ws);
     }
 
-    @Issue("JENKINS-40734")
     @Test public void envWithShellChar() throws Exception {
         Controller c = new PowershellScript("echo value=$env:MYNEWVAR").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
         while (c.exitStatus(ws, launcher) == null) {

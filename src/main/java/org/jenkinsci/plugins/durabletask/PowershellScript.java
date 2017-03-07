@@ -40,6 +40,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 /**
  * Runs a Powershell script
  */
+ @Issue("JENKINS-34581")
 public final class PowershellScript extends FileMonitoringTask {
     private final String script;
     private boolean capturingOutput;
@@ -61,6 +62,7 @@ public final class PowershellScript extends FileMonitoringTask {
         List<String> args = new ArrayList<String>();
         PowershellController c = new PowershellController(ws);
         
+        // Using redirection in powershell produces extra newlines in output... replacing with [io.file]::WriteAllText to prevent corrupted output of exit code\result
         String cmd;
         if (capturingOutput) {
             cmd = String.format("$res = (& \"%s\" | Out-String) 2> \"%s\"; [io.file]::WriteAllText(\"%s\",$(if($LastExitCode -eq $null -or $LastExitCode -eq 0) {0} else {$LastExitCode})); [io.file]::WriteAllText(\"%s\",$res);", 
@@ -75,11 +77,13 @@ public final class PowershellScript extends FileMonitoringTask {
                 quote(c.getResultFile(ws)),
                 quote(c.getLogFile(ws)));
         }
-       
+        
+        // Write the script and execution wrapper to powershell files in the workspace
         c.getPowershellMainFile(ws).write(script, "UTF-8");
         c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
 
         if (launcher.isUnix()) {
+            // Open Powershell does not support ExecutionPolicy
             args.addAll(Arrays.asList("powershell", "-NonInteractive", "-File", c.getPowershellWrapperFile(ws).getRemote()));
         } else {
             args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", c.getPowershellWrapperFile(ws).getRemote()));    
