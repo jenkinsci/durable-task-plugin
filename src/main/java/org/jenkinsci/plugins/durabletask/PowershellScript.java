@@ -28,11 +28,20 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
+import hudson.Plugin;
 import hudson.Launcher;
+import jenkins.model.Jenkins;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.io.File;
+import java.lang.reflect.Method;
+import java.lang.Exception;
+import java.lang.ClassNotFoundException;
+import java.lang.InstantiationException;
+import java.lang.NoSuchMethodException;
+import java.lang.IllegalAccessException;
+import java.lang.reflect.InvocationTargetException;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -61,9 +70,9 @@ public final class PowershellScript extends FileMonitoringTask {
         List<String> args = new ArrayList<String>();
         PowershellController c = new PowershellController(ws);
         
-        // Using redirection in powershell produces extra newlines in output... replacing with [io.file]::WriteAllText to prevent corrupted output of exit code\result
         String cmd;
         if (capturingOutput) {
+            // Using redirection in PowerShell produces extra newlines in output, so I am using [io.file]::WriteAllText to prevent corrupted output of exit code
             cmd = String.format("$res = (& \"%s\" | Out-String) 2> \"%s\"; [io.file]::WriteAllText(\"%s\",$(if($LastExitCode -eq $null -or $LastExitCode -eq 0) {0} else {$LastExitCode})); [io.file]::WriteAllText(\"%s\",$res);", 
                 quote(c.getPowershellMainFile(ws)),
                 quote(c.getLogFile(ws)),
@@ -78,16 +87,54 @@ public final class PowershellScript extends FileMonitoringTask {
         }
         
         // Write the script and execution wrapper to powershell files in the workspace
-        c.getPowershellMainFile(ws).write(script, "UTF-8");
+        c.getPowershellMainFile(ws).write(script + "\r\nexit $LastExitCode;", "UTF-8");
         c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
-
-        if (launcher.isUnix()) {
-            // Open Powershell does not support ExecutionPolicy
-            args.addAll(Arrays.asList("powershell", "-NonInteractive", "-File", c.getPowershellWrapperFile(ws).getRemote()));
-        } else {
-            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", c.getPowershellWrapperFile(ws).getRemote()));    
+        
+        // Try to load the PowerShell plugin to produce the command line arguments for running the script
+        Plugin powershellPlugin = Jenkins.getInstance().getPlugin("powershell");
+        boolean loadError = false;
+        if (powershellPlugin != null && powershellPlugin.getWrapper().isEnabled()) {
+            try {
+                ClassLoader cl = powershellPlugin.getWrapper().classLoader;
+                Class<?> powershellClass = cl.loadClass("hudson.plugins.powershell.PowerShell");
+                Object powershellInst = powershellClass.getConstructor(String.class).newInstance("script");
+                Method m = powershellClass.getMethod("buildCommandLine",FilePath.class);
+                String[] cmdLine = (String[])m.invoke(powershellInst,c.getPowershellWrapperFile(ws));
+                
+                // Get the command line for running the script from the PowerShell plugin
+                args.addAll(Arrays.asList(cmdLine));
+            } catch (ClassNotFoundException e) {
+                loadError = true;
+                listener.getLogger().println("Caught ClassNotFoundException: " + e.getMessage());
+            } catch (InstantiationException e) {
+                loadError = true;
+                listener.getLogger().println("Caught InstantiationException: " + e.getMessage());
+            } catch (NoSuchMethodException e) {
+                loadError = true;
+                listener.getLogger().println("Caught NoSuchMethodException: " + e.getMessage());
+            } catch (IllegalAccessException e) {
+                loadError = true;
+                listener.getLogger().println("Caught IllegalAccessException: " + e.getMessage());
+            } catch (InvocationTargetException e) {
+                loadError = true;
+                listener.getLogger().println("Caught InvocationTargetException: " + e.getMessage());
+            } catch (Exception e) {
+                loadError = true;
+                listener.getLogger().println("Caught Exception: " + e.getMessage());
+            }
         }
         
+        // PowerShell plugin is not installed, not enabled, or cannot be loaded for some reason. Fall back using standard command line arguments
+        if (powershellPlugin == null || loadError == true) {
+            listener.getLogger().println("Warning: PowerShell plugin is not installed, not enabled, or cannot be loaded.  Executing script using the built in fallback.");
+            if (launcher.isUnix()) {
+                // Open Powershell does not support ExecutionPolicy
+                args.addAll(Arrays.asList("powershell", "-NonInteractive", "-File", c.getPowershellWrapperFile(ws).getRemote()));
+            } else {
+                args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", c.getPowershellWrapperFile(ws).getRemote()));    
+            }
+        }
+
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running PowerShell script");
         ps.readStdout().readStderr();
