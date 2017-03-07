@@ -41,9 +41,7 @@ import org.junit.Rule;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 
-@Issue("JENKINS-34581")
-public class PowershellScriptTest {
-
+public class PowershellScriptTest {	
     @Rule public JenkinsRule j = new JenkinsRule();
 
     private StreamTaskListener listener;

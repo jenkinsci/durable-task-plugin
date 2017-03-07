@@ -40,7 +40,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 /**
  * Runs a Powershell script
  */
- @Issue("JENKINS-34581")
 public final class PowershellScript extends FileMonitoringTask {
     private final String script;
     private boolean capturingOutput;
