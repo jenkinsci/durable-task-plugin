@@ -86,8 +86,11 @@ public final class PowershellScript extends FileMonitoringTask {
                 quote(c.getLogFile(ws)));
         }
         
+        // Force the resulting script to exit with an exit code
+        String scriptWithExit = script + "\r\nexit $LastExitCode;";
+        
         // Write the script and execution wrapper to powershell files in the workspace
-        c.getPowershellMainFile(ws).write(script + "\r\nexit $LastExitCode;", "UTF-8");
+        c.getPowershellMainFile(ws).write(scriptWithExit, "UTF-8");
         c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
         
         // Try to load the PowerShell plugin to produce the command line arguments for running the script
@@ -97,7 +100,7 @@ public final class PowershellScript extends FileMonitoringTask {
             try {
                 ClassLoader cl = powershellPlugin.getWrapper().classLoader;
                 Class<?> powershellClass = cl.loadClass("hudson.plugins.powershell.PowerShell");
-                Object powershellInst = powershellClass.getConstructor(String.class).newInstance("script");
+                Object powershellInst = powershellClass.getConstructor(String.class).newInstance(script);
                 Method m = powershellClass.getMethod("buildCommandLine",FilePath.class);
                 String[] cmdLine = (String[])m.invoke(powershellInst,c.getPowershellWrapperFile(ws));
                 
