@@ -106,7 +106,6 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
-        assertEquals("Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
         assertThat(baos.toString(), containsString("explicit error"));
         c.cleanup(ws);
     }
