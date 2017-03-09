@@ -54,34 +54,8 @@ public class PowershellScriptTest {
         launcher = j.jenkins.createLauncher(listener);
     }
 
-    @Test public void spaceInPath() throws Exception {
-        testWithPath("space in path");
-    }
-
-    @Test public void spaceInPath2() throws Exception {
-        testWithPath("space in path@2");
-    }
-
-    @Test public void percentInPath() throws Exception {
-        testWithPath("percent%in%path");
-    }
-
-    private void testWithPath(String path) throws Exception {
-        Controller c = new PowershellScript("Write-Output \"hello world\"").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
-            Thread.sleep(100);
-        }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
-        String log = baos.toString();
-        System.err.print(log);
-        assertTrue(log, log.contains("hello world"));
-        c.cleanup(ws);
-    }
-
-    @Test public void exitCommand() throws Exception {
-        Controller c = new PowershellScript("Write-Output \"hello world\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
+    @Test public void explicitExit() throws Exception {
+        Controller c = new PowershellScript("Write-Output \"Hello, World!\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream tos = new TeeOutputStream(baos, System.err);
         while (c.exitStatus(ws, launcher) == null) {
@@ -91,10 +65,52 @@ public class PowershellScriptTest {
         c.writeLog(ws, tos);
         assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher));
         String log = baos.toString();
-        assertTrue(log, log.contains("hello world"));
+        assertTrue(log, log.contains("Hello, World!"));
         c.cleanup(ws);
     }
-
+    
+    @Test public void implicitExit() throws Exception {
+        Controller c = new PowershellScript("Write-Output \"Success!\";").launch(new EnvVars(), ws, launcher, listener);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
+        while (c.exitStatus(ws, launcher) == null) {
+            c.writeLog(ws, tos);
+            Thread.sleep(100);
+        }
+        c.writeLog(ws, tos);
+        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
+        String log = baos.toString();
+        assertTrue(log, log.contains("Success!"));
+        c.cleanup(ws);
+    }
+    
+    @Test public void implicitError() throws Exception {
+        Controller c = new PowershellScript("MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
+        while (c.exitStatus(ws, launcher) == null) {
+            c.writeLog(ws, tos);
+            Thread.sleep(100);
+        }
+        c.writeLog(ws, tos);
+        assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
+        c.cleanup(ws);
+    }
+    @Test public void explicitError() throws Exception {
+        DurableTask task = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");
+        task.captureOutput();
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
+        assertEquals("Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        assertThat(baos.toString(), containsString("explicit error"));
+        c.cleanup(ws);
+    }
+        
     @Test public void output() throws Exception {
         DurableTask task = new PowershellScript("Write-Output \"42\"");
         task.captureOutput();
@@ -109,15 +125,15 @@ public class PowershellScriptTest {
         c.cleanup(ws);
     }
 
-    @Test public void envWithShellChar() throws Exception {
-        Controller c = new PowershellScript("echo value=$env:MYNEWVAR").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
+    @Test public void echoEnvVar() throws Exception {
+        Controller c = new PowershellScript("echo envvar=$env:MYVAR").launch(new EnvVars("MYVAR", "power$hell"), ws, launcher, listener);
         while (c.exitStatus(ws, launcher) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertThat(baos.toString(), containsString("value=foo$$bar"));
+        assertThat(baos.toString(), containsString("envvar=power$hell"));
         c.cleanup(ws);
     }
 
