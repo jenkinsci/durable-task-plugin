@@ -54,6 +54,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 public final class PowershellScript extends FileMonitoringTask {
     private final String script;
     private boolean capturingOutput;
+    private boolean addVerboseOutput;
 
     @DataBoundConstructor public PowershellScript(String script) {
         this.script = script;
@@ -89,7 +90,7 @@ public final class PowershellScript extends FileMonitoringTask {
         }
         
         // Force the resulting script to exit with an exit code.  This ensures that the result file will always have a non-null value
-        String scriptWithExit = "try {\r\n" + script + "\r\n} catch {\r\nexit 1;\r\n}\r\nif ($LastExitCode -ne $null -and $LastExitCode -ne 0) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}";
+        String scriptWithExit = "try {\r\n" + script + "\r\n} catch {\r\nWrite-Output $_; exit 1;\r\n}\r\nif ($LastExitCode -ne $null -and $LastExitCode -ne 0) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}";
         
         // Write the script and execution wrapper to powershell files in the workspace
         c.getPowershellMainFile(ws).write(scriptWithExit, "UTF-8");
