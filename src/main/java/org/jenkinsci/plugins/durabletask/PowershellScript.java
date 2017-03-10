@@ -76,8 +76,9 @@ public final class PowershellScript extends FileMonitoringTask {
         String cmd;
         if (capturingOutput) {
             // Using redirection in PowerShell produces extra newlines in output, so I am using [io.file]::WriteAllText to prevent corrupted output of exit code
-            cmd = String.format("$res = (& \"%s\" | Out-String); 2> $null; [io.file]::WriteAllText(\"%s\",$LastExitCode); [io.file]::WriteAllText(\"%s\",$error); [io.file]::WriteAllText(\"%s\",$res);", 
+            cmd = String.format("$res = (& \"%s\" 2> \"%s\" | Out-String); [io.file]::WriteAllText(\"%s\",$LastExitCode); [io.file]::AppendAllText(\"%s\",$error); [io.file]::WriteAllText(\"%s\",$res);", 
                 quote(c.getPowershellMainFile(ws)),
+                quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getOutputFile(ws)));
