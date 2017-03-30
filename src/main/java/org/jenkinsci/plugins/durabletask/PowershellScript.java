@@ -76,7 +76,7 @@ public final class PowershellScript extends FileMonitoringTask {
         String cmd;
         if (capturingOutput) {
             // Using redirection in PowerShell produces extra newlines in output, so I am using [io.file]::WriteAllText to prevent corrupted output of exit code
-            cmd = String.format("$res = (& \"%s\" 2> \"%s\" | Out-String); [io.file]::WriteAllText(\"%s\",$LastExitCode); [io.file]::AppendAllText(\"%s\",$error); [io.file]::WriteAllText(\"%s\",$res);", 
+            cmd = String.format("& \"%s\" | Out-String > \"%s\" 2> \"%s\"; [io.file]::WriteAllText(\"%s\",$LastExitCode);", 
                 quote(c.getPowershellMainFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)),
@@ -84,17 +84,14 @@ public final class PowershellScript extends FileMonitoringTask {
                 quote(c.getOutputFile(ws)));
 
         } else {
-            cmd = String.format("$res = (& \"%s\" 2>&1 | Out-String); [io.file]::WriteAllText(\"%s\",$LastExitCode); [io.file]::WriteAllText(\"%s\",$res);",
+            cmd = String.format("& \"%s\" | Out-String > \"%s\" 2>&1; [io.file]::WriteAllText(\"%s\",$LastExitCode);",
                 quote(c.getPowershellMainFile(ws)),
                 quote(c.getResultFile(ws)),
                 quote(c.getLogFile(ws)));
         }
         
-        // Force the resulting script to exit with an exit code.  This ensures that the result file will always have a non-null value
-        String scriptWithExit = "try {\r\n" + script + "\r\n} catch {\r\nWrite-Output $_; exit 1;\r\n}\r\nif ($LastExitCode -ne $null -and $LastExitCode -ne 0) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}";
-        
         // Write the script and execution wrapper to powershell files in the workspace
-        c.getPowershellMainFile(ws).write(scriptWithExit, "UTF-8");
+        c.getPowershellMainFile(ws).write(script + "\r\nexit 0", "UTF-8");
         c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
         
         // Try to load the PowerShell plugin to produce the command line arguments for running the script
