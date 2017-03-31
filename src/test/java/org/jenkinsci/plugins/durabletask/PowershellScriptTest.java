@@ -120,7 +120,7 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertEquals("42\r\n", new String(c.getOutput(ws, launcher)));
+        assertThat(new String(c.getOutput(ws, launcher)), containsString("42"));
         c.cleanup(ws);
     }
 
