@@ -96,6 +96,7 @@ public class PowershellScriptTest {
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
         c.cleanup(ws);
     }
+    
     @Test public void explicitError() throws Exception {
         DurableTask task = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");
         task.captureOutput();
@@ -107,6 +108,20 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
         assertThat(baos.toString(), containsString("explicit error"));
+        c.cleanup(ws);
+    }
+    
+    @Test public void verbose() throws Exception {
+        DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; Write-Verbose \"Hello, World!\"");
+        task.captureOutput();
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertThat(new String(c.getOutput(ws, launcher)), containsString("Hello, World!"));
         c.cleanup(ws);
     }
         
