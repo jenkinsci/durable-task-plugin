@@ -35,15 +35,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.io.File;
-import java.lang.Class;
-import java.lang.ClassLoader;
-import java.lang.reflect.Method;
-import java.lang.Exception;
-import java.lang.ClassNotFoundException;
-import java.lang.InstantiationException;
-import java.lang.NoSuchMethodException;
-import java.lang.IllegalAccessException;
-import java.lang.reflect.InvocationTargetException;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -76,69 +67,29 @@ public final class PowershellScript extends FileMonitoringTask {
         String cmd;
         if (capturingOutput) {
             // Using redirection in PowerShell produces extra newlines in output, so I am using [io.file]::WriteAllText to prevent corrupted output of exit code
-            cmd = String.format("& \"%s\" | Out-String > \"%s\" 2> \"%s\"; [io.file]::WriteAllText(\"%s\",$LastExitCode);", 
+            cmd = String.format("$PSDefaultParameterValues = @{\"Out-File:Encoding\"=\"ASCII\"}; & \"%s\" > \"%s\" 2> \"%s\"; [io.file]::WriteAllText(\"%s\",$LastExitCode); [io.file]::AppendAllText(\"%s\",$error);", 
                 quote(c.getPowershellMainFile(ws)),
+                quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)),
-                quote(c.getLogFile(ws)),
-                quote(c.getOutputFile(ws)));
-
-        } else {
-            cmd = String.format("& \"%s\" | Out-String > \"%s\" 2>&1; [io.file]::WriteAllText(\"%s\",$LastExitCode);",
-                quote(c.getPowershellMainFile(ws)),
                 quote(c.getResultFile(ws)),
                 quote(c.getLogFile(ws)));
-        }
-        
-        // Write the script and execution wrapper to powershell files in the workspace
-        c.getPowershellMainFile(ws).write(script + "\r\nexit 0", "UTF-8");
-        c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
-        
-        // Try to load the PowerShell plugin to produce the command line arguments for running the script
-        Plugin powershellPlugin = Jenkins.getInstance().getPlugin("powershell");
-        boolean notLoadedOrError = false;
-        if (powershellPlugin != null && powershellPlugin.getWrapper().isEnabled()) {
-            try {
-                ClassLoader cl = powershellPlugin.getWrapper().classLoader;
-                Class<?> powershellClass = cl.loadClass("hudson.plugins.powershell.PowerShell");
-                Object powershellInst = powershellClass.getConstructor(String.class).newInstance(script);
-                Method m = powershellClass.getMethod("buildCommandLine",FilePath.class);
-                String[] cmdLine = (String[])m.invoke(powershellInst,c.getPowershellWrapperFile(ws));
-                
-                // Get the command line for running the script from the PowerShell plugin
-                args.addAll(Arrays.asList(cmdLine));
-            } catch (ClassNotFoundException e) {
-                notLoadedOrError = true;
-                listener.getLogger().println("Caught ClassNotFoundException: " + e.getMessage());
-            } catch (InstantiationException e) {
-                notLoadedOrError = true;
-                listener.getLogger().println("Caught InstantiationException: " + e.getMessage());
-            } catch (NoSuchMethodException e) {
-                notLoadedOrError = true;
-                listener.getLogger().println("Caught NoSuchMethodException: " + e.getMessage());
-            } catch (IllegalAccessException e) {
-                notLoadedOrError = true;
-                listener.getLogger().println("Caught IllegalAccessException: " + e.getMessage());
-            } catch (InvocationTargetException e) {
-                notLoadedOrError = true;
-                listener.getLogger().println("Caught InvocationTargetException: " + e.getMessage());
-            } catch (Exception e) {
-                notLoadedOrError = true;
-                listener.getLogger().println("Caught Exception: " + e.getMessage());
-            }
+
         } else {
-            notLoadedOrError = true;
+            cmd = String.format("$PSDefaultParameterValues = @{\"Out-File:Encoding\"=\"ASCII\"}; & \"%s\" > \"%s\"; [io.file]::WriteAllText(\"%s\",$LastExitCode);",
+                quote(c.getPowershellMainFile(ws)),
+                quote(c.getLogFile(ws)),
+                quote(c.getResultFile(ws)));
         }
-        
-        // PowerShell plugin is not installed, not enabled, or cannot be loaded for some reason. Fall back using standard command line arguments
-        if (notLoadedOrError) {
-            listener.getLogger().println("Warning: PowerShell plugin is not installed, not enabled, or cannot be loaded.  Executing script using the built in fallback.");
-            if (launcher.isUnix()) {
-                // Open Powershell does not support ExecutionPolicy
-                args.addAll(Arrays.asList("powershell", "-NonInteractive", "-File", c.getPowershellWrapperFile(ws).getRemote()));
-            } else {
-                args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", c.getPowershellWrapperFile(ws).getRemote()));    
-            }
+
+        // Write the script and execution wrapper to powershell files in the workspace
+        c.getPowershellMainFile(ws).write("try {\r\n" + script + "\r\n} catch {\r\nWrite-Output $_; exit 1;\r\n}\r\nif ($LastExitCode -ne $null -and $LastExitCode -ne 0) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}", "UTF-8");
+        c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
+
+        if (launcher.isUnix()) {
+            // Open-Powershell does not support ExecutionPolicy
+            args.addAll(Arrays.asList("powershell", "-NonInteractive", "-File", c.getPowershellWrapperFile(ws).getRemote()));
+        } else {
+            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", c.getPowershellWrapperFile(ws).getRemote()));    
         }
 
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
