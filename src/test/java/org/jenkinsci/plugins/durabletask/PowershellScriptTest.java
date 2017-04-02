@@ -40,6 +40,7 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
+import java.util.Properties;
 
 public class PowershellScriptTest {	
     @Rule public JenkinsRule j = new JenkinsRule();
@@ -52,6 +53,19 @@ public class PowershellScriptTest {
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
+        Properties properties = System.getProperties();
+        String pathSeparator = properties.getProperty("path.separator");
+        String[] paths = System.getenv("PATH").split(pathSeparator);
+        boolean powershellExists = false;
+        String cmd = launcher.isUnix()?"powershell":"powershell.exe";
+        for (String p : paths) {
+            File f = new File(p, cmd);
+            powershellExists = f.exists();
+            if (powershellExists) {
+                break;
+            }
+        }
+        Assume.assumeTrue("This test should only run if powershell is available", powershellExists==true);
     }
 
     @Test public void explicitExit() throws Exception {
