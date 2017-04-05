@@ -26,6 +26,7 @@ package org.jenkinsci.plugins.durabletask;
 
 import com.sun.jna.Library;
 import com.sun.jna.Native;
+import hudson.EnvVars;
 import hudson.Launcher;
 import hudson.remoting.VirtualChannel;
 import java.io.IOException;
@@ -52,11 +53,11 @@ final class ProcessLiveness {
      * @param launcher a way to start processes
      * @return true if it is apparently still alive (or we cannot tell); false if it is believed to not be running
      */
-    public static boolean isAlive(VirtualChannel channel, int pid, Launcher launcher) throws IOException, InterruptedException {
+    public static boolean isAlive(VirtualChannel channel, int pid, Launcher launcher, EnvVars envVars) throws IOException, InterruptedException {
         Boolean working = workingLaunchers.get(launcher);
         if (working == null) {
             // Check to see if our logic correctly reports that an unlikely PID is not running.
-            working = !_isAlive(channel, 9999, launcher);
+            working = !_isAlive(channel, 9999, launcher, envVars);
             workingLaunchers.put(launcher, working);
             if (working) {
                 LOGGER.log(Level.FINE, "{0} on {1} appears to be working", new Object[] {launcher, channel});
@@ -68,10 +69,10 @@ final class ProcessLiveness {
         if (!working) {
             return true;
         }
-        return _isAlive(channel, pid, launcher);
+        return _isAlive(channel, pid, launcher, envVars);
     }
 
-    private static boolean _isAlive(VirtualChannel channel, int pid, Launcher launcher) throws IOException, InterruptedException {
+    private static boolean _isAlive(VirtualChannel channel, int pid, Launcher launcher, EnvVars envVars) throws IOException, InterruptedException {
         if (launcher instanceof Launcher.LocalLauncher || launcher instanceof Launcher.RemoteLauncher) {
             try {
                 boolean alive = channel.call(new Liveness(pid));
@@ -83,8 +84,8 @@ final class ProcessLiveness {
             }
         } else {
             // Using a special launcher; let it decide how to do this.
-            // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher:
-            return launcher.launch().cmds("ps", "-o", "pid=", Integer.toString(pid)).quiet(true).join() == 0;
+            // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher
+            return launcher.launch().cmds("ps", "-o", "pid=", Integer.toString(pid)).envs(FileMonitoringTask.escape(envVars)).quiet(true).join() == 0;
         }
     }
 
