@@ -60,12 +60,12 @@ public class PowershellScriptTest {
         String cmd = launcher.isUnix()?"powershell":"powershell.exe";
         for (String p : paths) {
             File f = new File(p, cmd);
-            powershellExists = f.exists();
-            if (powershellExists) {
+            if (f.exists()) {
+                powershellExists = true;
                 break;
             }
         }
-        Assume.assumeTrue("This test should only run if powershell is available", powershellExists==true);
+        Assume.assumeTrue("This test should only run if powershell is available", powershellExists == true);
     }
 
     @Test public void explicitExit() throws Exception {
@@ -136,20 +136,6 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
         assertThat(new String(c.getOutput(ws, launcher)), containsString("Hello, World!"));
-        c.cleanup(ws);
-    }
-        
-    @Test public void output() throws Exception {
-        DurableTask task = new PowershellScript("Write-Output \"42\"");
-        task.captureOutput();
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
-            Thread.sleep(100);
-        }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertThat(new String(c.getOutput(ws, launcher)), containsString("42"));
         c.cleanup(ws);
     }
 
