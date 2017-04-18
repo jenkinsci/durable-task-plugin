@@ -45,7 +45,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 public final class PowershellScript extends FileMonitoringTask {
     private final String script;
     private boolean capturingOutput;
-    private boolean addVerboseOutput;
 
     @DataBoundConstructor public PowershellScript(String script) {
         this.script = script;
