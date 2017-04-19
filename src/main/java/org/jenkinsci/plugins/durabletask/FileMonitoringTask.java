@@ -84,7 +84,7 @@ public abstract class FileMonitoringTask extends DurableTask {
     /**
      * JENKINS-40734: blocks the substitutions of {@link EnvVars#overrideExpandingAll} done by {@link Launcher}.
      */
-    static Map<String, String> escape(EnvVars envVars) {
+    protected static Map<String, String> escape(EnvVars envVars) {
         Map<String, String> m = new TreeMap<String, String>();
         for (Map.Entry<String, String> entry : envVars.entrySet()) {
             m.put(entry.getKey(), entry.getValue().replace("$", "$$"));
