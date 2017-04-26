@@ -66,15 +66,14 @@ public final class PowershellScript extends FileMonitoringTask {
         String cmd;
         if (capturingOutput) {
             // Using redirection in PowerShell produces extra newlines in output, so I am using [io.file]::WriteAllText to prevent corrupted output of exit code
-            cmd = String.format("$PSDefaultParameterValues = @{\"Out-File:Encoding\"=\"ASCII\"}; & \"%s\" *> \"%s\" 2> \"%s\"; [io.file]::WriteAllText(\"%s\",$LastExitCode); [io.file]::AppendAllText(\"%s\",$error);", 
+            cmd = String.format("$PSDefaultParameterValues[\"*:Encoding\"] = \"ASCII\"; & \"%s\" *> \"%s\" 2> \"%s\"; $LastExitCode > \"%s\"; $error > \"%s\";", 
                 quote(c.getPowershellMainFile(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)),
                 quote(c.getLogFile(ws)));
-
         } else {
-            cmd = String.format("$PSDefaultParameterValues = @{\"Out-File:Encoding\"=\"ASCII\"}; & \"%s\" *> \"%s\"; [io.file]::WriteAllText(\"%s\",$LastExitCode);",
+            cmd = String.format("$PSDefaultParameterValues[\"*:Encoding\"] = \"ASCII\"; & \"%s\" *> \"%s\"; $LastExitCode > \"%s\";",
                 quote(c.getPowershellMainFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
