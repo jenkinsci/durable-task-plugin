@@ -35,6 +35,7 @@ import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.util.Collections;
@@ -173,7 +174,9 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             // TODO could perhaps be more efficient for large files to send a MasterToSlaveFileCallable<byte[]>
-            return IOUtils.toByteArray(getOutputFile(workspace).read());
+            try (InputStream is = getOutputFile(workspace).read()) {
+                return IOUtils.toByteArray(is);
+            }
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
