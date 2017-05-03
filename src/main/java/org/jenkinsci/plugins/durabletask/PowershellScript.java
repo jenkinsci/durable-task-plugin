@@ -38,6 +38,8 @@ import java.io.File;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import org.kohsuke.stapler.DataBoundConstructor;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
 
 /**
  * Runs a Powershell script
@@ -65,22 +67,20 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String cmd;
         if (capturingOutput) {
-            // Using redirection in PowerShell produces extra newlines in output, so I am using [io.file]::WriteAllText to prevent corrupted output of exit code
-            cmd = String.format("$PSDefaultParameterValues[\"*:Encoding\"] = \"UTF8\"; & \"%s\" *> \"%s\" 2> \"%s\"; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII; $error | Out-File -FilePath \"%s\" -Encoding ASCII;", 
+            cmd = String.format("$Error.Clear(); & \"%s\" 3>&1 4>&1 5>&1 6>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $Error | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;", 
                 quote(c.getPowershellMainFile(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)),
-                quote(c.getLogFile(ws)));
+                quote(c.getResultFile(ws)));
         } else {
-            cmd = String.format("$PSDefaultParameterValues[\"*:Encoding\"] = \"UTF8\"; & \"%s\" *> \"%s\"; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;",
+            cmd = String.format("& \"%s\" *>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;",
                 quote(c.getPowershellMainFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         }
 
         // Write the script and execution wrapper to powershell files in the workspace
-        c.getPowershellMainFile(ws).write("try {\r\n" + script + "\r\n} catch {\r\nWrite-Output $_; exit 1;\r\n}\r\nif ($LastExitCode -ne $null -and $LastExitCode -ne 0) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}", "UTF-8");
+        c.getPowershellMainFile(ws).write("try {\r\n" + script + "\r\n} catch {\r\nWrite-Error $_; exit 1;\r\n}\r\nif ($LastExitCode -ne $null -and $LastExitCode -ne 0) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}", "UTF-8");
         c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
 
         if (launcher.isUnix()) {
@@ -94,6 +94,7 @@ public final class PowershellScript extends FileMonitoringTask {
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running PowerShell script");
         ps.readStdout().readStderr();
         ps.start();
+
         return c;
     }
     
