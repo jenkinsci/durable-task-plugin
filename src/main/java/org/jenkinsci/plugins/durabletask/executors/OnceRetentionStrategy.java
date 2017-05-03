@@ -24,6 +24,7 @@
 
 package org.jenkinsci.plugins.durabletask.executors;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.model.Computer;
 import hudson.model.Executor;
 import hudson.model.ExecutorListener;
@@ -108,6 +109,7 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         done(c);
     }
 
+    @SuppressFBWarnings(value="SE_BAD_FIELD", justification="not a real Callable")
     private void done(final AbstractCloudComputer<?> c) {
         c.setAcceptingTasks(false); // just in case
         synchronized (this) {
