@@ -27,6 +27,11 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Proc;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.io.IOException;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -49,7 +54,7 @@ public class PowershellScriptTest {
     private FilePath ws;
     private Launcher launcher;
 
-    @Before public void vars() {
+    @Before public void vars() throws IOException, InterruptedException {
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
@@ -66,6 +71,20 @@ public class PowershellScriptTest {
             }
         }
         Assume.assumeTrue("This test should only run if powershell is available", powershellExists == true);
+        
+        // Assume Powershell major version is at least 3
+        if (powershellExists == true) {
+            List<String> args = new ArrayList<String>();
+            args.addAll(Arrays.asList(cmd,"$PSVersionTable.PSVersion.Major"));
+            Launcher.ProcStarter ps = launcher.launch().cmds(args).quiet(true);
+            ps.readStdout();
+            Proc proc = ps.start();
+            byte[] buffer = new byte[5];
+            while (proc.getStdout().read(buffer) > 0) {}
+            String psVersionStr = new String(buffer);
+            int psVersion = Integer.parseInt(psVersionStr.trim());
+            Assume.assumeTrue("This test should only run if the powershell major version is at least 3", psVersion >= 3);
+        }
     }
 
     @Test public void explicitExit() throws Exception {
