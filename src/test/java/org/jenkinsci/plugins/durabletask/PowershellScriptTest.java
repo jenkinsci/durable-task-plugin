@@ -154,7 +154,7 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertThat(new String(c.getOutput(ws, launcher)), containsString("Hello, World!"));
+        assertThat(baos.toString(), containsString("Hello, World!"));
         c.cleanup(ws);
     }
 

@@ -67,7 +67,7 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String cmd;
         if (capturingOutput) {
-            cmd = String.format("$Error.Clear(); & \"%s\" 3>&1 4>&1 5>&1 6>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $Error | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;", 
+            cmd = String.format("$(& \"%s\" | Out-File -FilePath \"%s\" -Encoding UTF8) 2>&1 3>&1 4>&1 5>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;", 
                 quote(c.getPowershellMainFile(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
