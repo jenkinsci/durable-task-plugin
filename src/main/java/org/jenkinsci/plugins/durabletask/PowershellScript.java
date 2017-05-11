@@ -80,7 +80,8 @@ public final class PowershellScript extends FileMonitoringTask {
         }
 
         // Write the script and execution wrapper to powershell files in the workspace
-        c.getPowershellMainFile(ws).write("try {\r\n" + script + "\r\n} catch {\r\nWrite-Error $_; exit 1;\r\n}\r\nif ($LastExitCode -ne $null -and $LastExitCode -ne 0) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}", "UTF-8");
+        c.getPowershellScriptFile(ws).write(script, "UTF-8");
+        c.getPowershellMainFile(ws).write("$error.Clear();\r\n$LastExitCode = $null;\r\ntry {\r\n& " + quote(c.getPowershellScriptFile(ws)) + "\r\n} catch {\r\nWrite-Error $_; exit 1;\r\n}\r\nfinally {\r\nif ($LastExitCode -ne $null -and $LastExitCode -ne 0) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}\r\n}", "UTF-8");
         c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
 
         if (launcher.isUnix()) {
@@ -109,6 +110,10 @@ public final class PowershellScript extends FileMonitoringTask {
 
         public FilePath getPowershellMainFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellMain.ps1");
+        }
+        
+        public FilePath getPowershellScriptFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("powershellScript.ps1");
         }
         
         public FilePath getPowershellWrapperFile(FilePath ws) throws IOException, InterruptedException {
