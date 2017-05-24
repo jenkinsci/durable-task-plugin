@@ -77,10 +77,11 @@ public final class WindowsBatchScript extends FileMonitoringTask {
 
         Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running batch script"); // details printed by cmd
-        /* Too noisy, and consumes a thread:
+        
         ps.stdout(listener);
-        */
-        ps.readStdout().readStderr(); // TODO see BourneShellScript
+        
+        /*ps.readStdout().readStderr(); // TODO see BourneShellScript */
+        
         ps.start();
         return c;
     }
