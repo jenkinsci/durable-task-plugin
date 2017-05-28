@@ -67,11 +67,13 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String cmd;
         if (capturingOutput) {
-            cmd = String.format("$(& \"%s\" | Out-File -FilePath \"%s\" -Encoding UTF8) 2>&1 3>&1 4>&1 5>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;", 
+            cmd = String.format("$(& \"%s\" | Out-File -FilePath \"%s\" -Encoding UTF8) 2>&1 3>&1 4>&1 5>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII; $outputWithBom = Get-Content \"%s\"; [IO.File]::WriteAllLines(\"%s\", $outputWithBom);", 
                 quote(c.getPowershellMainFile(ws)),
-                quote(c.getOutputFile(ws)),
+                quote(c.getTemporaryOutputFile(ws)),
                 quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)));
+                quote(c.getResultFile(ws)),
+                quote(c.getTemporaryOutputFile(ws)),
+                quote(c.getOutputFile(ws)));
         } else {
             cmd = String.format("& \"%s\" *>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;",
                 quote(c.getPowershellMainFile(ws)),
@@ -100,7 +102,7 @@ public final class PowershellScript extends FileMonitoringTask {
     }
     
     private static String quote(FilePath f) {
-        return f.getRemote().replace("%", "%%");
+        return f.getRemote().replace("$", "`$");
     }
 
     private static final class PowershellController extends FileMonitoringController {
@@ -118,6 +120,10 @@ public final class PowershellScript extends FileMonitoringTask {
         
         public FilePath getPowershellWrapperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellWrapper.ps1");
+        }
+        
+        public FilePath getTemporaryOutputFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("temporaryOutput.txt");
         }
 
         private static final long serialVersionUID = 1L;
