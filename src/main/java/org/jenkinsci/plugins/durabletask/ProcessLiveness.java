@@ -28,8 +28,12 @@ import com.sun.jna.Library;
 import com.sun.jna.Native;
 import hudson.Launcher;
 import hudson.model.TaskListener;
+import hudson.os.PosixAPI;
+import hudson.os.PosixException;
 import hudson.remoting.VirtualChannel;
 import java.io.IOException;
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -37,6 +41,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.security.MasterToSlaveCallable;
+import jnr.constants.platform.WaitFlags;
+import jnr.posix.POSIX;
+import jnr.posix.POSIXFactory;
+import jnr.posix.POSIXHandler;
+import jnr.posix.util.DefaultPOSIXHandler;
 
 /**
  * Utility class to track whether a given process is still alive.
@@ -76,13 +85,13 @@ final class ProcessLiveness {
     private static boolean _isAlive(VirtualChannel channel, int pid, Launcher launcher) throws IOException, InterruptedException {
         if (launcher instanceof Launcher.LocalLauncher || launcher instanceof Launcher.RemoteLauncher) {
             try {
-                boolean alive = channel.call(new Liveness(pid));
-                LOGGER.log(Level.FINER, "{0} is alive? {1}", new Object[] {pid, alive});
-                return alive;
-            } catch (RuntimeException x) {
+                return channel.call(new Liveness(pid));
+            } catch (IllegalStateException x) {
                 LOGGER.log(Level.WARNING, "cannot determine liveness of " + pid, x);
-                return true;
+            } catch (PosixException x) {
+                LOGGER.log(Level.WARNING, "cannot determine liveness of " + pid, x);
             }
+            return true;
         } else {
             // Using a special launcher; let it decide how to do this.
             // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher:
@@ -96,7 +105,41 @@ final class ProcessLiveness {
             this.pid = pid;
         }
         @Override public Boolean call() throws RuntimeException {
-            // JNR-POSIX does not seem to work on FreeBSD at least, so using JNA instead.
+            // Try jnr's waitpid
+            // We need to painstakingly extract the function via reflection to
+            // avoid class-loading errors in the event that the available jnr
+            // library doesn't support waitpid.
+            //
+            // This silliness is equivalent to,
+            //     int[] code = new int[1];
+            //     return jnr.waitpid(pid, code, WaitFlags.WNOHANG.intValue()) != -1;
+            try {
+                ClassLoader loader = getClass().getClassLoader();
+                Object jnr = PosixAPI.jnr();
+
+                // Find waitpid
+                Method waitpidMethod = jnr.getClass().getDeclaredMethod("waitpid", int.class, int[].class, int.class);
+
+                // Find WaitFlags.WNOHANG.intValue()
+                Class WaitFlags = loader.loadClass("jnr.constants.platform.WaitFlags");
+                Method intValue = WaitFlags.getDeclaredMethod("intValue");
+                Integer WNOHANG = (Integer) intValue.invoke(Enum.valueOf(WaitFlags, "WNOHANG"));
+
+                int[] code = new int[1];
+                waitpidMethod.setAccessible(true); // the implementations are package-local
+                Integer ret = (Integer) waitpidMethod.invoke(jnr, pid, code, WNOHANG);
+                return ret != -1;
+            } catch (InvocationTargetException x) {
+                LOGGER.log(Level.FINE, "jnr doesn't have waitpid support", x);
+            } catch (IllegalAccessException x) {
+                LOGGER.log(Level.FINE, "jnr doesn't have waitpid support", x);
+            } catch (ClassNotFoundException x) {
+                LOGGER.log(Level.FINE, "jnr doesn't have waitpid support", x);
+            } catch (NoSuchMethodException x) {
+                LOGGER.log(Level.FINE, "jnr doesn't have waitpid support", x);
+            }
+
+            // JNR-POSIX used to fail on FreeBSD at least, so try JNA as well.
             LibC libc = LibC.INSTANCE;
             if (libc.getpgid(0) == -1) {
                 throw new IllegalStateException("getpgid does not seem to work on this platform");
@@ -104,6 +147,7 @@ final class ProcessLiveness {
             return libc.getpgid(pid) != -1;
         }
     }
+
     private interface LibC extends Library {
         /**
          * Get the process group ID for a process.
