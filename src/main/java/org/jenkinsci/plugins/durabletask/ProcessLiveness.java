@@ -24,17 +24,22 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import com.sun.jna.Library;
-import com.sun.jna.Native;
 import hudson.Launcher;
+import hudson.os.PosixAPI;
+import hudson.os.PosixException;
 import hudson.remoting.VirtualChannel;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.security.MasterToSlaveCallable;
+import jnr.posix.POSIX;
+import jnr.posix.POSIXFactory;
+import jnr.posix.POSIXHandler;
+import jnr.posix.util.DefaultPOSIXHandler;
 
 /**
  * Utility class to track whether a given process is still alive.
@@ -74,13 +79,13 @@ final class ProcessLiveness {
     private static boolean _isAlive(VirtualChannel channel, int pid, Launcher launcher) throws IOException, InterruptedException {
         if (launcher instanceof Launcher.LocalLauncher || launcher instanceof Launcher.RemoteLauncher) {
             try {
-                boolean alive = channel.call(new Liveness(pid));
-                LOGGER.log(Level.FINER, "{0} is alive? {1}", new Object[] {pid, alive});
-                return alive;
-            } catch (RuntimeException x) {
+                return channel.call(new Liveness(pid));
+            } catch (IllegalStateException x) {
                 LOGGER.log(Level.WARNING, "cannot determine liveness of " + pid, x);
-                return true;
+            } catch (PosixException x) {
+                LOGGER.log(Level.WARNING, "cannot determine liveness of " + pid, x);
             }
+            return true;
         } else {
             // Using a special launcher; let it decide how to do this.
             // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher:
@@ -89,32 +94,27 @@ final class ProcessLiveness {
     }
 
     private static final class Liveness extends MasterToSlaveCallable<Boolean,RuntimeException> {
+        private static final POSIX jnr = PosixAPI.jnr();
         private final int pid;
         Liveness(int pid) {
             this.pid = pid;
         }
         @Override public Boolean call() throws RuntimeException {
-            // JNR-POSIX does not seem to work on FreeBSD at least, so using JNA instead.
-            LibC libc = LibC.INSTANCE;
-            if (libc.getpgid(0) == -1) {
+            try { // loadPOSIX sends problems to stderr, useless if we are on a slave
+                Method loadNativePOSIX = POSIXFactory.class.getDeclaredMethod("loadNativePOSIX", POSIXHandler.class);
+                loadNativePOSIX.setAccessible(true);
+                loadNativePOSIX.invoke(null, new DefaultPOSIXHandler());
+            } catch (NoSuchMethodException x) {
+                LOGGER.log(Level.WARNING, "loadNativePOSIX no longer exists?", x);
+            } catch (Exception x) {
+                throw new IllegalStateException(x);
+            }
+            // jnr.getpgid() (on Linux at least) always returns -1. JNR bug? libc would not support overloads.
+            if (jnr.getpgid(0) == -1) {
                 throw new IllegalStateException("getpgid does not seem to work on this platform");
             }
-            return libc.getpgid(pid) != -1;
+            return jnr.getpgid(pid) != -1;
         }
-    }
-    private interface LibC extends Library {
-        /**
-         * Get the process group ID for a process.
-         * From <a href="http://pubs.opengroup.org/onlinepubs/9699919799/functions/getpgid.html">Open Group Base Specifications Issue 7</a>:
-         * <blockquote>
-         * The getpgid() function shall return the process group ID of the process whose process ID is equal to pid.
-         * If pid is equal to 0, getpgid() shall return the process group ID of the calling process.
-         * Upon successful completion, getpgid() shall return a process group ID. Otherwise, it shall return (pid_t)-1 and set errno to indicate the error.
-         * The getpgid() function shall fail if: […] There is no process with a process ID equal to pid. […]
-         * </blockquote>
-         */
-        int getpgid(int pid);
-        LibC INSTANCE = (LibC) Native.loadLibrary("c", LibC.class);
     }
 
     private ProcessLiveness() {}
