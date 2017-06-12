@@ -164,7 +164,6 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
         assertThat(baos.toString(), containsString("Hello, World!"));
-        c.stop(ws,launcher);
         c.cleanup(ws);
     }
 
