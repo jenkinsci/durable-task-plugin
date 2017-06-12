@@ -74,15 +74,21 @@ public class PowershellScriptTest {
         
         // Assume Powershell major version is at least 3
         if (powershellExists == true) {
-            List<String> args = new ArrayList<String>();
-            args.addAll(Arrays.asList(cmd,"$PSVersionTable.PSVersion.Major"));
+            List<String> args = new ArrayList<>(Collections.singleton(cmd));
+            if (!launcher.isUnix()) {
+                args.addAll(Arrays.asList("-ExecutionPolicy", "Bypass"));
+            }
+            args.add("$PSVersionTable.PSVersion.Major");
             Launcher.ProcStarter ps = launcher.launch().cmds(args).quiet(true);
             ps.readStdout();
             Proc proc = ps.start();
-            byte[] buffer = new byte[5];
-            while (proc.getStdout().read(buffer) > 0) {}
-            String psVersionStr = new String(buffer);
-            int psVersion = Integer.parseInt(psVersionStr.trim());
+            String psVersionStr = IOUtils.toString(proc.getStdout());
+            int psVersion;
+            try {
+                psVersion = Integer.parseInt(psVersionStr.trim());
+            } catch (NumberFormatException x) {
+                throw new AssumptionViolatedException(psVersionStr, x);
+            }
             Assume.assumeTrue("This test should only run if the powershell major version is at least 3", psVersion >= 3);
         }
     }
@@ -155,6 +161,7 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
         assertThat(baos.toString(), containsString("Hello, World!"));
+        c.stop(ws,launcher);
         c.cleanup(ws);
     }
 
