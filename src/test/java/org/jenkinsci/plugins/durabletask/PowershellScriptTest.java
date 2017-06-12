@@ -46,6 +46,9 @@ import org.junit.Rule;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import java.util.Properties;
+import java.util.*;
+import org.apache.commons.io.IOUtils;
+import org.junit.AssumptionViolatedException;
 
 public class PowershellScriptTest {	
     @Rule public JenkinsRule j = new JenkinsRule();
