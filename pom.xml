@@ -7,7 +7,7 @@
         <relativePath />
     </parent>
     <artifactId>durable-task</artifactId>
-    <version>1.14-SNAPSHOT</version>
+    <version>1.13.1-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <name>Durable Task Plugin</name>
     <description>Library offering an extension point for processes which can run outside of Jenkins yet be monitored.</description>
@@ -42,5 +42,22 @@
         <developerConnection>scm:git:git@github.com:jenkinsci/${project.artifactId}-plugin.git</developerConnection>
         <url>http://github.com/jenkinsci/${project.artifactId}-plugin</url>
       <tag>HEAD</tag>
-  </scm>
+    </scm>
+  
+    <build>
+      <plugins>
+        <plugin>
+          <groupId>org.jenkins-ci.tools</groupId>
+          <artifactId>maven-hpi-plugin</artifactId>
+          <extensions>true</extensions>
+          <configuration>
+            <!-- 
+                Users setting node (or global) environment variables like PATH=/something:$PATH will see Pipeline sh failures with this update.
+                JENKINS-41339 tracks the issue, but anyway users should rather use the syntax PATH+ANYKEY=/something, as documented in inline help. 
+            -->
+            <compatibleSinceVersion>1.13</compatibleSinceVersion>
+          </configuration>
+        </plugin>
+      </plugins>
+    </build>
 </project>
