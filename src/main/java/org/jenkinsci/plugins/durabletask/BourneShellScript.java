@@ -39,6 +39,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
@@ -162,7 +163,9 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         private int pid;
         private final long startTime = System.currentTimeMillis();
-        private EnvVars envVars = new EnvVars();
+
+        @CheckForNull
+        private EnvVars envVars;
 
         private ShellController(FilePath ws, EnvVars envVars) throws IOException, InterruptedException {
             super(ws);
@@ -197,8 +200,9 @@ public final class BourneShellScript extends FileMonitoringTask {
                 return status;
             }
             int _pid = pid(workspace);
+            EnvVars vars = envVars == null ? new EnvVars() : envVars;
 
-            if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid, launcher, envVars)) {
+            if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid, launcher, vars)) {
                 // it looks like the process has disappeared. one last check to make sure it's not a result of a race condition,
                 // then if we still don't have the exit code, use fake exit code to distinguish from 0 (success) and 1+ (observed failure)
                 // TODO would be better to have exitStatus accept a TaskListener so we could print an informative message
