@@ -49,7 +49,6 @@ import java.util.Properties;
 import java.util.*;
 import org.apache.commons.io.IOUtils;
 import org.junit.AssumptionViolatedException;
-import java.nio.charset.Charset;
 
 public class PowershellScriptTest {	
     @Rule public JenkinsRule j = new JenkinsRule();

@@ -130,10 +130,6 @@ public final class PowershellScript extends FileMonitoringTask {
         public FilePath getPowershellWrapperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellWrapper.ps1");
         }
-        
-        public FilePath getTemporaryOutputFile(FilePath ws) throws IOException, InterruptedException {
-            return controlDir(ws).child("temporaryOutput.txt");
-        }
 
         private static final long serialVersionUID = 1L;
     }
