@@ -40,6 +40,8 @@ import java.io.IOException;
 import org.kohsuke.stapler.DataBoundConstructor;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.Charset;
 
 /**
  * Runs a Powershell script
@@ -47,7 +49,7 @@ import java.io.InputStreamReader;
 public final class PowershellScript extends FileMonitoringTask {
     private final String script;
     private boolean capturingOutput;
-
+    
     @DataBoundConstructor public PowershellScript(String script) {
         this.script = script;
     }
@@ -69,10 +71,10 @@ public final class PowershellScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd = String.format("$(& \"%s\" | Out-File -FilePath \"%s\" -Encoding UTF8) 2>&1 3>&1 4>&1 5>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII; $outputWithBom = Get-Content \"%s\"; [IO.File]::WriteAllLines(\"%s\", $outputWithBom);", 
                 quote(c.getPowershellMainFile(ws)),
-                quote(c.getTemporaryOutputFile(ws)),
+                quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)),
-                quote(c.getTemporaryOutputFile(ws)),
+                quote(c.getOutputFile(ws)),
                 quote(c.getOutputFile(ws)));
         } else {
             cmd = String.format("& \"%s\" *>&1 | Out-File -FilePath \"%s\" -Encoding UTF8; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;",
@@ -80,11 +82,10 @@ public final class PowershellScript extends FileMonitoringTask {
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         }
-
-        // Write the script and execution wrapper to powershell files in the workspace
-        c.getPowershellScriptFile(ws).write(script, "UTF-8");
-        c.getPowershellMainFile(ws).write("try {\r\n& '" + quote(c.getPowershellScriptFile(ws)) + "'\r\n} catch {\r\nWrite-Error $_; exit 1;\r\n}\r\nfinally {\r\nif ($LastExitCode -ne $null) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}\r\n}", "UTF-8");
-        c.getPowershellWrapperFile(ws).write(cmd, "UTF-8");
+       
+        writeWithBom(c.getPowershellScriptFile(ws),script);
+        writeWithBom(c.getPowershellMainFile(ws),"try {\r\n& '" + quote(c.getPowershellScriptFile(ws)) + "'\r\n} catch {\r\nWrite-Error $_; exit 1;\r\n}\r\nfinally {\r\nif ($LastExitCode -ne $null) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}\r\n}");
+        writeWithBom(c.getPowershellWrapperFile(ws),cmd);
 
         if (launcher.isUnix()) {
             // Open-Powershell does not support ExecutionPolicy
@@ -103,6 +104,14 @@ public final class PowershellScript extends FileMonitoringTask {
     
     private static String quote(FilePath f) {
         return f.getRemote().replace("$", "`$");
+    }
+    
+    private static void writeWithBom(FilePath f, String contents) throws IOException, InterruptedException {
+        OutputStream out = f.write();
+        out.write(new byte[] { (byte)0xEF, (byte)0xBB, (byte)0xBF });
+        out.write(contents.getBytes(Charset.forName("UTF-8")));
+        out.flush();
+        out.close();
     }
 
     private static final class PowershellController extends FileMonitoringController {
