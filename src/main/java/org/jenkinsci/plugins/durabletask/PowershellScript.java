@@ -99,7 +99,8 @@ public final class PowershellScript extends FileMonitoringTask {
         "    $out.Dispose()\n" +
         "  }\n" +
         "}";
-                              
+                   
+        // Write the PowerShell scripts out with a UTF8 BOM                   
         writeWithBom(c.getPowershellHelperFile(ws), helperScript);
         writeWithBom(c.getPowershellScriptFile(ws),script);
         writeWithBom(c.getPowershellMainFile(ws),"try {\r\n& '" + quote(c.getPowershellScriptFile(ws)) + "'\r\n} catch {\r\nWrite-Error $_; exit 1;\r\n}\r\nfinally {\r\nif ($LastExitCode -ne $null) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}\r\n}");
@@ -149,10 +150,6 @@ public final class PowershellScript extends FileMonitoringTask {
         
         public FilePath getPowershellWrapperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellWrapper.ps1");
-        }
-        
-        public FilePath getTemporaryOutputFile(FilePath ws) throws IOException, InterruptedException {
-            return controlDir(ws).child("temporaryOutput.txt");
         }
         
         public FilePath getPowershellHelperFile(FilePath ws) throws IOException, InterruptedException {
