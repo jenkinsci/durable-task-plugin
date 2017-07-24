@@ -69,16 +69,16 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String cmd;
         if (capturingOutput) {
-            cmd = String.format(". \"%s\"; $(& \"%s\" | Out-FileNoBom -FilePath \"%s\") 2>&1 3>&1 4>&1 5>&1 | Out-FileNoBom -FilePath \"%s\"; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;", 
-                quote(c.getPowershellHelperFile(ws)),
-                quote(c.getPowershellMainFile(ws)),
+            cmd = String.format(". \"%s\"; Execute-AndWriteOutput -MainScript \"%s\" -OutputFile \"%s\" -LogFile \"%s\" -ResultFile \"%s\" -CaptureOutput;", 
+                quote(c.getPowerShellHelperFile(ws)),
+                quote(c.getPowerShellWrapperFile(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         } else {
-            cmd = String.format(". \"%s\"; & \"%s\" *>&1 | Out-FileNoBom -FilePath \"%s\"; $LastExitCode | Out-File -FilePath \"%s\" -Encoding ASCII;",
-                quote(c.getPowershellHelperFile(ws)),
-                quote(c.getPowershellMainFile(ws)),
+            cmd = String.format(". \"%s\"; Execute-AndWriteOutput -MainScript \"%s\" -LogFile \"%s\" -ResultFile \"%s\";",
+                quote(c.getPowerShellHelperFile(ws)),
+                quote(c.getPowerShellWrapperFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         }
@@ -98,19 +98,54 @@ public final class PowershellScript extends FileMonitoringTask {
         "  } finally {\n" +
         "    $out.Dispose()\n" +
         "  }\n" +
+        "}\n" +
+        "Function Execute-AndWriteOutput {\n" +
+        "[CmdletBinding()]\n" +
+        "param(\n" +
+        "  [Parameter(Mandatory=$true)]  [string]$MainScript,\n" +
+        "  [Parameter(Mandatory=$false)] [string]$OutputFile,\n" +
+        "  [Parameter(Mandatory=$true)]  [string]$LogFile,\n" +
+        "  [Parameter(Mandatory=$true)]  [string]$ResultFile,\n" +
+        "  [Parameter(Mandatory=$false)] [switch]$CaptureOutput\n" +
+        ")\n" +
+        "  if ($CaptureOutput -eq $true) {\n" +
+        "      if ($PSVersionTable.PSVersion.Major -ge 5) {\n" +
+        "          $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
+        "      } else {\n" +
+        "          $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
+        "      }\n" +
+        "  } else {\n" +
+        "      & $MainScript *>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
+        "  }\n" +
+        "}";
+        
+        // Execute the script, and catch any errors in order to properly set the jenkins build status. $LastExitCode cannot be solely responsible for determining build status because
+        // there are several instances in which it is not set, e.g. thrown exceptions, and errors that aren't caused by native executables.
+        String wrapperScriptContent = "try {\r\n" + 
+        "  & '" + quote(c.getPowerShellScriptFile(ws)) + "'\r\n" + 
+        "} catch {\r\n" + 
+        "  Write-Error $_;" + 
+        "  exit 1;\r\n" + 
+        "} finally {\r\n" +
+        "  if ($LastExitCode -ne $null) {\r\n" + 
+        "    exit $LastExitCode;\r\n" +
+        "  } elseif ($error.Count -gt 0 -or !$?) {\r\n" + 
+        "    exit 1;\r\n" +
+        "  } else {\r\n" +
+        "    exit 0;\r\n" +
+        "  }\r\n" +
         "}";
                    
-        // Write the PowerShell scripts out with a UTF8 BOM                   
-        writeWithBom(c.getPowershellHelperFile(ws), helperScript);
-        writeWithBom(c.getPowershellScriptFile(ws),script);
-        writeWithBom(c.getPowershellMainFile(ws),"try {\r\n& '" + quote(c.getPowershellScriptFile(ws)) + "'\r\n} catch {\r\nWrite-Error $_; exit 1;\r\n}\r\nfinally {\r\nif ($LastExitCode -ne $null) {\r\nexit $LastExitCode;\r\n} elseif ($error.Count -gt 0 -or !$?) {\r\nexit 1;\r\n} else {\r\nexit 0;\r\n}\r\n}");
-        writeWithBom(c.getPowershellWrapperFile(ws),cmd);
+        // Write the PowerShell scripts out with a UTF8 BOM
+        writeWithBom(c.getPowerShellHelperFile(ws), helperScript);
+        writeWithBom(c.getPowerShellScriptFile(ws),script);
+        writeWithBom(c.getPowerShellWrapperFile(ws), wrapperScriptContent);
 
         if (launcher.isUnix()) {
             // Open-Powershell does not support ExecutionPolicy
-            args.addAll(Arrays.asList("powershell", "-NonInteractive", "-File", c.getPowershellWrapperFile(ws).getRemote()));
+            args.addAll(Arrays.asList("powershell", "-NonInteractive", "-Command", cmd));
         } else {
-            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", c.getPowershellWrapperFile(ws).getRemote()));    
+            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", cmd));    
         }
 
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
@@ -139,20 +174,16 @@ public final class PowershellScript extends FileMonitoringTask {
         private PowershellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
         }
-
-        public FilePath getPowershellMainFile(FilePath ws) throws IOException, InterruptedException {
-            return controlDir(ws).child("powershellMain.ps1");
-        }
         
-        public FilePath getPowershellScriptFile(FilePath ws) throws IOException, InterruptedException {
+        public FilePath getPowerShellScriptFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellScript.ps1");
         }
         
-        public FilePath getPowershellWrapperFile(FilePath ws) throws IOException, InterruptedException {
+        public FilePath getPowerShellWrapperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellWrapper.ps1");
         }
         
-        public FilePath getPowershellHelperFile(FilePath ws) throws IOException, InterruptedException {
+        public FilePath getPowerShellHelperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellHelper.ps1");
         }
 
