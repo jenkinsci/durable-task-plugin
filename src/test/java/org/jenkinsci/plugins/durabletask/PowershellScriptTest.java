@@ -178,5 +178,19 @@ public class PowershellScriptTest {
         assertThat(baos.toString(), containsString("envvar=power$hell"));
         c.cleanup(ws);
     }
-
+    
+    @Test public void unicodeChars() throws Exception {
+        Controller c = new PowershellScript("Write-Output \"Helló, Wõrld ®\";").launch(new EnvVars(), ws, launcher, listener);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
+        while (c.exitStatus(ws, launcher) == null) {
+            c.writeLog(ws, tos);
+            Thread.sleep(100);
+        }
+        c.writeLog(ws, tos);
+        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
+        String log = baos.toString("UTF-8");
+        assertTrue(log, log.contains("Helló, Wõrld ®"));
+        c.cleanup(ws);
+    }
 }
