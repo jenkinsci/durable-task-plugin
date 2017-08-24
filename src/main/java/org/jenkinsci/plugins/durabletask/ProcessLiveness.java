@@ -27,11 +27,13 @@ package org.jenkinsci.plugins.durabletask;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
 import hudson.Launcher;
+import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.security.MasterToSlaveCallable;
@@ -84,7 +86,7 @@ final class ProcessLiveness {
         } else {
             // Using a special launcher; let it decide how to do this.
             // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher:
-            return launcher.launch().cmds("ps", "-o", "pid=", Integer.toString(pid)).quiet(true).join() == 0;
+            return launcher.launch().cmds("ps", "-o", "pid=", Integer.toString(pid)).quiet(true).start().joinWithTimeout(1, TimeUnit.MINUTES, launcher.getListener())== 0;
         }
     }
 
