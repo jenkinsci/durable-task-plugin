@@ -99,12 +99,21 @@ final class ProcessLiveness {
         }
     }
 
+    /**
+     * Worker-side implementation of process liveness check.
+     *
+     * @throws IllegalStateException when we are unable to find a functional
+     * process-liveness checking mechanism.
+     */
     private static final class Liveness extends MasterToSlaveCallable<Boolean,RuntimeException> {
         private final int pid;
         Liveness(int pid) {
             this.pid = pid;
         }
-        @Override public Boolean call() throws RuntimeException {
+        @Override public Boolean call() throws IllegalStateException {
+            final String fallback_msg = "jnr doesn't have waitpid support; "+
+                "falling back to the JNA LibC implementation";
+
             // Try jnr's waitpid
             // We need to painstakingly extract the function via reflection to
             // avoid class-loading errors in the event that the available jnr
@@ -113,6 +122,10 @@ final class ProcessLiveness {
             // This silliness is equivalent to,
             //     int[] code = new int[1];
             //     return jnr.waitpid(pid, code, WaitFlags.WNOHANG.intValue()) != -1;
+            //
+            // TODO: Replace by the direct call once Jenkins core is updated to 2.64+
+            // which has https://github.com/jenkinsci/jenkins/pull/2904.
+
             try {
                 ClassLoader loader = getClass().getClassLoader();
                 Object jnr = PosixAPI.jnr();
@@ -130,13 +143,13 @@ final class ProcessLiveness {
                 Integer ret = (Integer) waitpidMethod.invoke(jnr, pid, code, WNOHANG);
                 return ret != -1;
             } catch (InvocationTargetException x) {
-                LOGGER.log(Level.FINE, "jnr doesn't have waitpid support", x);
+                LOGGER.log(Level.WARNING, fallback_msg, x);
             } catch (IllegalAccessException x) {
-                LOGGER.log(Level.FINE, "jnr doesn't have waitpid support", x);
+                LOGGER.log(Level.WARNING, fallback_msg, x);
             } catch (ClassNotFoundException x) {
-                LOGGER.log(Level.FINE, "jnr doesn't have waitpid support", x);
+                LOGGER.log(Level.WARNING, fallback_msg, x);
             } catch (NoSuchMethodException x) {
-                LOGGER.log(Level.FINE, "jnr doesn't have waitpid support", x);
+                LOGGER.log(Level.WARNING, fallback_msg, x);
             }
 
             // JNR-POSIX used to fail on FreeBSD at least, so try JNA as well.
