@@ -150,6 +150,8 @@ final class ProcessLiveness {
                 LOGGER.log(Level.WARNING, fallback_msg, x);
             } catch (NoSuchMethodException x) {
                 LOGGER.log(Level.WARNING, fallback_msg, x);
+            } catch (SecurityException x) {
+                LOGGER.log(Level.WARNING, fallback_msg, x);
             }
 
             // JNR-POSIX used to fail on FreeBSD at least, so try JNA as well.
