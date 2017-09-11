@@ -96,12 +96,16 @@ final class ProcessLiveness {
             this.pid = pid;
         }
         @Override public Boolean call() throws RuntimeException {
-            // JNR-POSIX does not seem to work on FreeBSD at least, so using JNA instead.
-            LibC libc = LibC.INSTANCE;
-            if (libc.getpgid(0) == -1) {
-                throw new IllegalStateException("getpgid does not seem to work on this platform");
+            try {
+                // JNR-POSIX does not seem to work on FreeBSD at least, so using JNA instead.
+                LibC libc = LibC.INSTANCE;
+                if (libc.getpgid(0) == -1) {
+                    throw new IllegalStateException("getpgid does not seem to work on this platform");
+                }
+                return libc.getpgid(pid) != -1;
+            } catch (LinkageError x) {
+                throw new RuntimeException(x);
             }
-            return libc.getpgid(pid) != -1;
         }
     }
     private interface LibC extends Library {
