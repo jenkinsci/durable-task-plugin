@@ -86,7 +86,7 @@ final class ProcessLiveness {
         } else {
             // Using a special launcher; let it decide how to do this.
             // TODO perhaps this should be a method in Launcher, with the following fallback in DecoratedLauncher:
-            return launcher.launch().cmds("ps", "-o", "pid=", Integer.toString(pid)).quiet(true).start().joinWithTimeout(1, TimeUnit.MINUTES, launcher.getListener())== 0;
+            return launcher.launch().cmds("ps", "-o", "pid", "-p", Integer.toString(pid)).quiet(true).start().joinWithTimeout(1, TimeUnit.MINUTES, launcher.getListener())== 0;
         }
     }
 
