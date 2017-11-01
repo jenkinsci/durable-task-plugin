@@ -37,9 +37,11 @@ import org.jvnet.hudson.test.JenkinsRule;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.Collections;
+import java.util.logging.Level;
 import static org.hamcrest.Matchers.containsString;
 import org.junit.Before;
 import org.jvnet.hudson.test.Issue;
+import org.jvnet.hudson.test.LoggerRule;
 
 public class BourneShellScriptTest extends Assert {
 
@@ -48,6 +50,8 @@ public class BourneShellScriptTest extends Assert {
     @Before public void unix() {
         Assume.assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
     }
+
+    @Rule public LoggerRule logging = new LoggerRule().record(BourneShellScript.class, Level.FINE);
 
     private StreamTaskListener listener;
     private FilePath ws;
@@ -104,8 +108,18 @@ public class BourneShellScriptTest extends Assert {
         c.writeLog(ws, baos);
         String log = baos.toString();
         System.out.println(log);
-        assertEquals(-1, c.exitStatus(ws, launcher).intValue());
+        assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher));
         assertTrue(log.contains("sleep 999"));
+        c.cleanup(ws);
+    }
+
+    @Test public void justSlow() throws Exception {
+        Controller c = new BourneShellScript("sleep 60").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        c.writeLog(ws, System.out);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
         c.cleanup(ws);
     }
 
