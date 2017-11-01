@@ -239,5 +239,6 @@ public final class BourneShellScript extends FileMonitoringTask {
               return OsType.UNIX; // Default Value
             }
         }
+        private static final long serialVersionUID = 1L;
     }
 }
