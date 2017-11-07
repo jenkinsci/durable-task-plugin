@@ -27,25 +27,31 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.plugins.sshslaves.SSHLauncher;
+import hudson.slaves.DumbSlave;
 import hudson.util.StreamTaskListener;
-import org.junit.Assert;
-import org.junit.Assume;
-import org.junit.Rule;
-import org.junit.Test;
-import org.jvnet.hudson.test.JenkinsRule;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.Collections;
 import java.util.logging.Level;
-import static org.hamcrest.Matchers.containsString;
+import org.apache.commons.io.output.TeeOutputStream;
+import static org.hamcrest.Matchers.*;
+import org.jenkinsci.test.acceptance.docker.DockerRule;
+import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
+import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
+import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.LoggerRule;
 
 public class BourneShellScriptTest extends Assert {
 
     @Rule public JenkinsRule j = new JenkinsRule();
+
+    @Rule public DockerRule<JavaContainer> dockerUbuntu = new DockerRule<>(JavaContainer.class);
 
     @Before public void unix() {
         Assume.assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
@@ -163,6 +169,30 @@ public class BourneShellScriptTest extends Assert {
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
         c.cleanup(ws);
+    }
+
+    @Test public void runOnUbuntuDocker() throws Exception {
+        JavaContainer container = dockerUbuntu.get();
+        DumbSlave s = new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", ""));
+        j.jenkins.addNode(s);
+        j.waitOnline(s);
+        FilePath dockerWS = s.getWorkspaceRoot();
+        Launcher dockerLauncher = s.createLauncher(listener);
+        Controller c = new BourneShellScript("echo hello world; sleep 10").launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(dockerWS, baos);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher).intValue());
+        assertTrue(baos.toString().contains("hello world"));
+        c.cleanup(dockerWS);
+        do {
+            Thread.sleep(1000);
+            baos = new ByteArrayOutputStream();
+            assertEquals(0, dockerLauncher.launch().cmds("ps", "-e", "-o", "pid,stat,command").stdout(new TeeOutputStream(baos, System.out)).join());
+        } while (baos.toString().contains(" sleep "));
+        assertThat("no zombies running", baos.toString(), not(containsString(" Z "))); // TODO fails to reproduce bug fixed by adding wait
     }
 
 }
