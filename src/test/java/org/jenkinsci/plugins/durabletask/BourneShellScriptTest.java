@@ -56,6 +56,8 @@ public class BourneShellScriptTest {
 
     @Rule public DockerRule<JavaContainer> dockerUbuntu = new DockerRule<>(JavaContainer.class);
 
+    @Rule public DockerRule<CentOSFixture> dockerCentOS = new DockerRule<>(CentOSFixture.class);
+
     @Before public void unix() {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
     }
@@ -176,6 +178,11 @@ public class BourneShellScriptTest {
 
     @Test public void runOnUbuntuDocker() throws Exception {
         JavaContainer container = dockerUbuntu.get();
+        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
+    }
+
+    @Test public void runOnCentOSDocker() throws Exception {
+        CentOSFixture container = dockerCentOS.get();
         runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
     }
 
