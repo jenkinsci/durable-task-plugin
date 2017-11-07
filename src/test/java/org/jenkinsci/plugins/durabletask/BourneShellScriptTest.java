@@ -176,6 +176,18 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
+    @Test public void shebang() throws Exception {
+        Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertThat(baos.toString(), containsString("Hello, world!"));
+        c.cleanup(ws);
+    }
+
     @Test public void runOnUbuntuDocker() throws Exception {
         JavaContainer container = dockerUbuntu.get();
         runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
