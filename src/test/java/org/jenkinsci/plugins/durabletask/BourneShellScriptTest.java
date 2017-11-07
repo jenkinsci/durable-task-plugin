@@ -29,6 +29,7 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.DumbSlave;
+import hudson.slaves.OfflineCause;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -36,25 +37,27 @@ import java.util.Collections;
 import java.util.logging.Level;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
+import org.jenkinsci.test.acceptance.docker.Docker;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
-import org.junit.Assert;
-import org.junit.Assume;
+import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.LoggerRule;
+import org.jvnet.hudson.test.SimpleCommandLauncher;
 
-public class BourneShellScriptTest extends Assert {
+public class BourneShellScriptTest {
 
     @Rule public JenkinsRule j = new JenkinsRule();
 
     @Rule public DockerRule<JavaContainer> dockerUbuntu = new DockerRule<>(JavaContainer.class);
 
     @Before public void unix() {
-        Assume.assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
+        assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
     }
 
     @Rule public LoggerRule logging = new LoggerRule().record(BourneShellScript.class, Level.FINE);
@@ -173,7 +176,10 @@ public class BourneShellScriptTest extends Assert {
 
     @Test public void runOnUbuntuDocker() throws Exception {
         JavaContainer container = dockerUbuntu.get();
-        DumbSlave s = new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", ""));
+        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
+    }
+
+    private void runOnDocker(DumbSlave s) throws Exception {
         j.jenkins.addNode(s);
         j.waitOnline(s);
         FilePath dockerWS = s.getWorkspaceRoot();
@@ -192,7 +198,13 @@ public class BourneShellScriptTest extends Assert {
             baos = new ByteArrayOutputStream();
             assertEquals(0, dockerLauncher.launch().cmds("ps", "-e", "-o", "pid,stat,command").stdout(new TeeOutputStream(baos, System.out)).join());
         } while (baos.toString().contains(" sleep "));
-        assertThat("no zombies running", baos.toString(), not(containsString(" Z "))); // TODO fails to reproduce bug fixed by adding wait
+        assertThat("no zombies running", baos.toString(), not(containsString(" Z ")));
+        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+    }
+
+    @Test public void runWithCommandLauncher() throws Exception {
+        assumeTrue("Docker required for this test", new Docker().isAvailable());
+        runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
     }
 
 }
