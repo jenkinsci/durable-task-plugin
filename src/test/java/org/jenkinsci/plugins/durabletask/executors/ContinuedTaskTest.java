@@ -33,15 +33,18 @@ import hudson.model.Label;
 import hudson.model.queue.QueueTaskFuture;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Rule;
 import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.TestBuilder;
 
 public class ContinuedTaskTest {
 
     @Rule public JenkinsRule r = new JenkinsRule();
+    @Rule public LoggerRule logging = new LoggerRule().record(ContinuedTask.class, Level.FINER);
 
     @Test public void basics() throws Exception {
         FreeStyleProject p = r.createFreeStyleProject();
@@ -51,7 +54,6 @@ public class ContinuedTaskTest {
         final AtomicInteger cntB = new AtomicInteger();
         p.getBuildersList().add(new TestBuilder() {
             @Override public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
-                assertEquals(0, cntA.get());
                 assertEquals(1, cntB.get());
                 return true;
             }
@@ -59,7 +61,7 @@ public class ContinuedTaskTest {
         QueueTaskFuture<FreeStyleBuild> b1 = p.scheduleBuild2(0);
         r.jenkins.getQueue().schedule(new TestTask(cntA, false), 0);
         r.jenkins.getQueue().schedule(new TestTask(cntB, true), 1);
-        // cntB task ought to run first, then b1, then the cntA task
+        // cntB task ought to run first, then b1 and the cntA task in either order
         r.createSlave(label);
         r.assertBuildStatusSuccess(b1);
         r.waitUntilNoActivity();
@@ -78,6 +80,9 @@ public class ContinuedTaskTest {
         }
         @Override public Label getAssignedLabel() {
             return Label.get("test");
+        }
+        @Override public String toString() {
+            return "TestTask:" + continued;
         }
     }
 
