@@ -58,7 +58,24 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     /** Number of times we will show launch diagnostics in a newly encountered workspace before going mute to save resources. */
     @SuppressWarnings("FieldMayBeFinal")
+    // TODO use SystemProperties if and when unrestricted
     private static int NOVEL_WORKSPACE_DIAGNOSTICS_COUNT = Integer.getInteger(BourneShellScript.class.getName() + ".NOVEL_WORKSPACE_DIAGNOSTICS_COUNT", 10);
+
+    /**
+     * Seconds between heartbeat checks, where we check to see if
+     * {@code jenkins-log.txt} is still being modified.
+     */
+    @SuppressWarnings("FieldMayBeFinal")
+    private static int HEARTBEAT_CHECK_INTERVAL = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_CHECK_INTERVAL", 15);
+
+    /**
+     * Minimum timestamp difference on {@code jenkins-log.txt} that is
+     * considered an actual modification. Theoretically could be zero (if
+     * {@code <} became {@code <=}, else infinitesimal positive) but on some
+     * platforms file timestamps are not that precise.
+     */
+    @SuppressWarnings("FieldMayBeFinal")
+    private static int HEARTBEAT_MINIMUM_DELTA = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_MINIMUM_DELTA", 2);
 
     private final @Nonnull String script;
     private boolean capturingOutput;
@@ -195,13 +212,13 @@ public final class BourneShellScript extends FileMonitoringTask {
             if (lastCheck == 0) {
                 LOGGER.log(Level.FINE, "starting check in {0}", controlDir);
                 lastCheck = now;
-            } else if (now > lastCheck + TimeUnit.SECONDS.toNanos(15)) { // TODO make controllable via system property
+            } else if (now > lastCheck + TimeUnit.SECONDS.toNanos(HEARTBEAT_CHECK_INTERVAL)) {
                 lastCheck = now;
                 long currentTimestamp = getLogFile(workspace).lastModified();
                 if (currentTimestamp == 0) {
                     LOGGER.log(Level.FINE, "apparently never started in {0}", controlDir);
                     return recordExitStatus(workspace, -2);
-                } else if (checkedTimestamp > 0 && currentTimestamp < checkedTimestamp + TimeUnit.SECONDS.toMillis(2)) { // TODO make controllable via system property
+                } else if (checkedTimestamp > 0 && currentTimestamp < checkedTimestamp + TimeUnit.SECONDS.toMillis(HEARTBEAT_MINIMUM_DELTA)) {
                     LOGGER.log(Level.FINE, "heartbeat touches apparently not running in {0}", controlDir);
                     return recordExitStatus(workspace, -1);
                 } else {
