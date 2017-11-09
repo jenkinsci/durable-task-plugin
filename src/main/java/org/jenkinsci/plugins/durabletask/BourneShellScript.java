@@ -234,10 +234,6 @@ public final class BourneShellScript extends FileMonitoringTask {
             return code;
         }
 
-        @Override public String getDiagnostics(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            return super.getDiagnostics(workspace, launcher); // TODO include time since lastCheck, and checkedTimestamp vs. currentTimestamp
-        }
-
         private static final long serialVersionUID = 1L;
     }
 
