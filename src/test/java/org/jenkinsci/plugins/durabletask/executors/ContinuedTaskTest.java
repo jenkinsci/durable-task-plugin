@@ -60,7 +60,7 @@ public class ContinuedTaskTest {
         });
         QueueTaskFuture<FreeStyleBuild> b1 = p.scheduleBuild2(0);
         r.jenkins.getQueue().schedule(new TestTask(cntA, false), 0);
-        r.jenkins.getQueue().schedule(new TestTask(cntB, true), 1);
+        r.jenkins.getQueue().schedule(new TestTask(cntB, true), 3);
         // cntB task ought to run first, then b1 and the cntA task in either order
         r.createSlave(label);
         r.assertBuildStatusSuccess(b1);
