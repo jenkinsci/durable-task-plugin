@@ -218,13 +218,17 @@ public final class BourneShellScript extends FileMonitoringTask {
                 if (currentTimestamp == 0) {
                     LOGGER.log(Level.FINE, "apparently never started in {0}", controlDir);
                     return recordExitStatus(workspace, -2);
-                } else if (checkedTimestamp > 0 && currentTimestamp < checkedTimestamp + TimeUnit.SECONDS.toMillis(HEARTBEAT_MINIMUM_DELTA)) {
-                    LOGGER.log(Level.FINE, "heartbeat touches apparently not running in {0}", controlDir);
-                    return recordExitStatus(workspace, -1);
+                } else if (checkedTimestamp > 0) {
+                    if (currentTimestamp < checkedTimestamp) {
+                        LOGGER.log(Level.WARNING, "apparent clock skew in {0}", controlDir);
+                    } else if (currentTimestamp < checkedTimestamp + TimeUnit.SECONDS.toMillis(HEARTBEAT_MINIMUM_DELTA)) {
+                        LOGGER.log(Level.FINE, "heartbeat touches apparently not running in {0}", controlDir);
+                        return recordExitStatus(workspace, -1);
+                    }
                 } else {
-                    checkedTimestamp = currentTimestamp;
                     LOGGER.log(Level.FINE, "seeing recent log file modifications in {0}", controlDir);
                 }
+                checkedTimestamp = currentTimestamp;
             }
             return null;
         }
