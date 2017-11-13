@@ -58,7 +58,13 @@ final class ProcessLiveness {
         Boolean working = workingLaunchers.get(launcher);
         if (working == null) {
             // Check to see if our logic correctly reports that an unlikely PID is not running.
-            working = !_isAlive(channel, 9999, launcher);
+            int testPID = 9999;
+            int retries = 100;
+            while (_isAlive(null, testPID, /* bypass Liveness/LibC for this */new Launcher.DecoratedLauncher(launcher)) && retries-- > 0) {
+                LOGGER.fine("ignoring PID " + testPID + " which actually does seem to be alive");
+                testPID++;
+            }
+            working = !_isAlive(channel, testPID, launcher);
             workingLaunchers.put(launcher, working);
             if (working) {
                 LOGGER.log(Level.FINE, "{0} on {1} appears to be working", new Object[] {launcher, channel});
@@ -96,12 +102,16 @@ final class ProcessLiveness {
             this.pid = pid;
         }
         @Override public Boolean call() throws RuntimeException {
-            // JNR-POSIX does not seem to work on FreeBSD at least, so using JNA instead.
-            LibC libc = LibC.INSTANCE;
-            if (libc.getpgid(0) == -1) {
-                throw new IllegalStateException("getpgid does not seem to work on this platform");
+            try {
+                // JNR-POSIX does not seem to work on FreeBSD at least, so using JNA instead.
+                LibC libc = LibC.INSTANCE;
+                if (libc.getpgid(0) == -1) {
+                    throw new IllegalStateException("getpgid does not seem to work on this platform");
+                }
+                return libc.getpgid(pid) != -1;
+            } catch (LinkageError x) {
+                throw new RuntimeException(x);
             }
-            return libc.getpgid(pid) != -1;
         }
     }
     private interface LibC extends Library {

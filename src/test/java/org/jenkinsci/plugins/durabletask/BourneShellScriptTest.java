@@ -37,13 +37,16 @@ import org.jvnet.hudson.test.JenkinsRule;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.Collections;
+import java.util.logging.Level;
 import static org.hamcrest.Matchers.containsString;
 import org.junit.Before;
 import org.jvnet.hudson.test.Issue;
+import org.jvnet.hudson.test.LoggerRule;
 
 public class BourneShellScriptTest extends Assert {
 
     @Rule public JenkinsRule j = new JenkinsRule();
+    @Rule public LoggerRule logging = new LoggerRule();
 
     @Before public void unix() {
         Assume.assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
@@ -93,6 +96,7 @@ public class BourneShellScriptTest extends Assert {
     }
 
     @Test public void reboot() throws Exception {
+        logging.record(ProcessLiveness.class, Level.FINER);
         FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
         Thread.sleep(1000);
         launcher.kill(Collections.singletonMap("killemall", "true"));
