@@ -202,6 +202,11 @@ public final class BourneShellScript extends FileMonitoringTask {
             return controlDir(ws).child("script.sh");
         }
 
+        /** Only here for compatibility. */
+        private FilePath pidFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("pid");
+        }
+
         @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             Integer status = super.exitStatus(workspace, launcher);
             if (status != null) {
@@ -222,8 +227,13 @@ public final class BourneShellScript extends FileMonitoringTask {
                     if (currentTimestamp < checkedTimestamp) {
                         LOGGER.log(Level.WARNING, "apparent clock skew in {0}", controlDir);
                     } else if (currentTimestamp < checkedTimestamp + TimeUnit.SECONDS.toMillis(HEARTBEAT_MINIMUM_DELTA)) {
-                        LOGGER.log(Level.FINE, "heartbeat touches apparently not running in {0}", controlDir);
-                        return recordExitStatus(workspace, -1);
+                        FilePath pidFile = pidFile(workspace);
+                        if (pidFile.exists()) {
+                            LOGGER.log(Level.FINE, "still have {0} so heartbeat checks unreliable; process may or may not be alive", pidFile);
+                        } else {
+                            LOGGER.log(Level.FINE, "heartbeat touches apparently not running in {0}", controlDir);
+                            return recordExitStatus(workspace, -1);
+                        }
                     }
                 } else {
                     LOGGER.log(Level.FINE, "seeing recent log file modifications in {0}", controlDir);
