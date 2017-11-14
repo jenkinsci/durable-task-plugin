@@ -226,4 +226,9 @@ public class BourneShellScriptTest {
         runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
     }
 
+    @Test public void runWithTiniCommandLauncher() throws Exception {
+        assumeTrue("Docker required for this test", new Docker().isAvailable());
+        runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
+    }
+
 }
