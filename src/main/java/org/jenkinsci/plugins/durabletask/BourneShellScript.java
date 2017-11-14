@@ -103,17 +103,24 @@ public final class BourneShellScript extends FileMonitoringTask {
         scriptPath = shf.getRemote();
         List<String> args = new ArrayList<String>();
 
+        envVars.put(cookieVariable, "please-do-not-kill-me");
+        // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
+        Map<String, String> preparedVars = envVars;
+
         OsType os = ws.act(new getOsType());
 
         if (os != OsType.DARWIN) { // JENKINS-25848
             args.add("nohup");
         }
+
         if (os == OsType.WINDOWS) { // JENKINS-40255
             scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
         }
+        else {
+            // Escaping creates issues when the connection is established through Cygwin sshd(see issue: JENKINS-41225)
+            preparedVars = escape(envVars);
+        }
 
-        envVars.put(cookieVariable, "please-do-not-kill-me");
-        // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         String cmd;
         if (capturingOutput) {
             cmd = String.format("echo $$ > '%s'; jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s'",
@@ -136,7 +143,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
         args.addAll(Arrays.asList("sh", "-c", cmd));
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
+        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(preparedVars).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
         boolean novel;
         synchronized (encounteredPaths) {
