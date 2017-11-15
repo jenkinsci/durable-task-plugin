@@ -27,27 +27,42 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.plugins.sshslaves.SSHLauncher;
+import hudson.slaves.DumbSlave;
+import hudson.slaves.OfflineCause;
 import hudson.util.StreamTaskListener;
-import org.junit.Assert;
-import org.junit.Assume;
-import org.junit.Rule;
-import org.junit.Test;
-import org.jvnet.hudson.test.JenkinsRule;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.Collections;
-import static org.hamcrest.Matchers.containsString;
+import java.util.logging.Level;
+import org.apache.commons.io.output.TeeOutputStream;
+import static org.hamcrest.Matchers.*;
+import org.jenkinsci.test.acceptance.docker.Docker;
+import org.jenkinsci.test.acceptance.docker.DockerRule;
+import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
+import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
+import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.LoggerRule;
+import org.jvnet.hudson.test.SimpleCommandLauncher;
 
-public class BourneShellScriptTest extends Assert {
+public class BourneShellScriptTest {
 
     @Rule public JenkinsRule j = new JenkinsRule();
 
+    @Rule public DockerRule<JavaContainer> dockerUbuntu = new DockerRule<>(JavaContainer.class);
+
+    @Rule public DockerRule<CentOSFixture> dockerCentOS = new DockerRule<>(CentOSFixture.class);
+
     @Before public void unix() {
-        Assume.assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
+        assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
     }
+
+    @Rule public LoggerRule logging = new LoggerRule().record(BourneShellScript.class, Level.FINE);
 
     private StreamTaskListener listener;
     private FilePath ws;
@@ -104,8 +119,18 @@ public class BourneShellScriptTest extends Assert {
         c.writeLog(ws, baos);
         String log = baos.toString();
         System.out.println(log);
-        assertEquals(-1, c.exitStatus(ws, launcher).intValue());
+        assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher));
         assertTrue(log.contains("sleep 999"));
+        c.cleanup(ws);
+    }
+
+    @Test public void justSlow() throws Exception {
+        Controller c = new BourneShellScript("sleep 60").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        c.writeLog(ws, System.out);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
         c.cleanup(ws);
     }
 
@@ -149,6 +174,61 @@ public class BourneShellScriptTest extends Assert {
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
         c.cleanup(ws);
+    }
+
+    @Test public void shebang() throws Exception {
+        Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertThat(baos.toString(), containsString("Hello, world!"));
+        c.cleanup(ws);
+    }
+
+    @Test public void runOnUbuntuDocker() throws Exception {
+        JavaContainer container = dockerUbuntu.get();
+        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
+    }
+
+    @Test public void runOnCentOSDocker() throws Exception {
+        CentOSFixture container = dockerCentOS.get();
+        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
+    }
+
+    private void runOnDocker(DumbSlave s) throws Exception {
+        j.jenkins.addNode(s);
+        j.waitOnline(s);
+        FilePath dockerWS = s.getWorkspaceRoot();
+        Launcher dockerLauncher = s.createLauncher(listener);
+        Controller c = new BourneShellScript("echo hello world; sleep 10").launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(dockerWS, baos);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher).intValue());
+        assertTrue(baos.toString().contains("hello world"));
+        c.cleanup(dockerWS);
+        do {
+            Thread.sleep(1000);
+            baos = new ByteArrayOutputStream();
+            assertEquals(0, dockerLauncher.launch().cmds("ps", "-e", "-o", "pid,stat,command").stdout(new TeeOutputStream(baos, System.out)).join());
+        } while (baos.toString().contains(" sleep "));
+        assertThat("no zombies running", baos.toString(), not(containsString(" Z ")));
+        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+    }
+
+    @Test public void runWithCommandLauncher() throws Exception {
+        assumeTrue("Docker required for this test", new Docker().isAvailable());
+        runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
+    }
+
+    @Test public void runWithTiniCommandLauncher() throws Exception {
+        assumeTrue("Docker required for this test", new Docker().isAvailable());
+        runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
     }
 
 }
