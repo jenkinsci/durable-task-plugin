@@ -153,7 +153,7 @@ public final class PowershellScript extends FileMonitoringTask {
             args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", quote(c.getPowerShellMainFile(ws))));    
         }
 
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(false);
+        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+(\\\\|/)", "") + "] Running PowerShell script");
         ps.readStdout().readStderr();
         ps.start();
