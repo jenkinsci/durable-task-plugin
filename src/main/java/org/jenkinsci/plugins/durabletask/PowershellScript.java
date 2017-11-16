@@ -127,8 +127,12 @@ public final class PowershellScript extends FileMonitoringTask {
         "  Write-Error $_;" + 
         "  exit 1;\r\n" + 
         "} finally {\r\n" +
-        "  if ($LastExitCode -ne $null) {\r\n" + 
-        "    exit $LastExitCode;\r\n" +
+        "  if ($LastExitCode -ne $null) {\r\n" +
+        "    if ($LastExitCode -eq 0 -and ($error.Count -gt 0 -or !$?)) {\r\n" +
+        "      exit 1;\r\n" +
+        "    } else {\r\n" +
+        "      exit $LastExitCode;\r\n" +
+        "    }\r\n" +
         "  } elseif ($error.Count -gt 0 -or !$?) {\r\n" + 
         "    exit 1;\r\n" +
         "  } else {\r\n" +
@@ -140,15 +144,16 @@ public final class PowershellScript extends FileMonitoringTask {
         writeWithBom(c.getPowerShellHelperFile(ws), helperScript);
         writeWithBom(c.getPowerShellScriptFile(ws), script);
         writeWithBom(c.getPowerShellWrapperFile(ws), wrapperScriptContent);
-
+        writeWithBom(c.getPowerShellMainFile(ws), cmd);
+        
         if (launcher.isUnix()) {
             // Open-Powershell does not support ExecutionPolicy
-            args.addAll(Arrays.asList("powershell", "-NonInteractive", "-Command", cmd));
+            args.addAll(Arrays.asList("powershell", "-NonInteractive", "-File", quote(c.getPowerShellMainFile(ws))));
         } else {
-            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", cmd));    
+            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", quote(c.getPowerShellMainFile(ws))));    
         }
 
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
+        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(false);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+(\\\\|/)", "") + "] Running PowerShell script");
         ps.readStdout().readStderr();
         ps.start();
@@ -185,6 +190,10 @@ public final class PowershellScript extends FileMonitoringTask {
         
         public FilePath getPowerShellHelperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellHelper.ps1");
+        }
+        
+        public FilePath getPowerShellMainFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("powershellMain.ps1");
         }
 
         private static final long serialVersionUID = 1L;
