@@ -31,6 +31,7 @@ import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.DumbSlave;
 import hudson.slaves.OfflineCause;
 import hudson.util.StreamTaskListener;
+import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.Collections;
@@ -43,6 +44,7 @@ import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
@@ -58,8 +60,11 @@ public class BourneShellScriptTest {
 
     @Rule public DockerRule<CentOSFixture> dockerCentOS = new DockerRule<>(CentOSFixture.class);
 
-    @Before public void unix() {
+    @BeforeClass public static void unixAndDocker() throws Exception {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        assumeThat("`docker version` could be run", new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}").stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join(), is(0));
+        assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
     }
 
     @Rule public LoggerRule logging = new LoggerRule().record(BourneShellScript.class, Level.FINE);
