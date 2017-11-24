@@ -169,14 +169,10 @@ public class PowershellScriptTest {
 
     @Test public void spacesInWorkspace() throws Exception {
         final FilePath newWs = new FilePath(ws, "subdirectory with spaces");
-        DurableTask task = new PowershellScript("Write-Host 'Running in a workspace with spaces in the path'");
-        task.captureOutput();
-        Controller c = task.launch(new EnvVars(), newWs, launcher, listener);
+        Controller c = new PowershellScript("Write-Host 'Running in a workspace with spaces in the path'").launch(new EnvVars(), newWs, launcher, listener);
         while (c.exitStatus(newWs, launcher) == null) {
             Thread.sleep(100);
         }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(newWs, baos);
         assertEquals(0, c.exitStatus(newWs, launcher).intValue());
         c.cleanup(ws);
     }
