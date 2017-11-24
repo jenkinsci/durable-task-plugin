@@ -7,7 +7,7 @@
         <relativePath />
     </parent>
     <artifactId>durable-task</artifactId>
-    <version>1.17-SNAPSHOT</version>
+    <version>1.18-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <name>Durable Task Plugin</name>
     <description>Library offering an extension point for processes which can run outside of Jenkins yet be monitored.</description>
@@ -21,6 +21,7 @@
     
     <properties>
       <jenkins.version>2.7.3</jenkins.version>
+      <java.level>7</java.level>
       <findbugs.failOnError>false</findbugs.failOnError>
     </properties>
     
