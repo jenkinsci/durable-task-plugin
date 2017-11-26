@@ -65,7 +65,7 @@ public class PowershellScriptTest {
         String pathSeparator = properties.getProperty("path.separator");
         String[] paths = System.getenv("PATH").split(pathSeparator);
         boolean powershellExists = false;
-        String cmd = launcher.isUnix()?"powershell":"powershell.exe";
+        String cmd = launcher.isUnix()?"pwsh":"powershell.exe";
         for (String p : paths) {
             File f = new File(p, cmd);
             if (f.exists()) {
@@ -81,7 +81,7 @@ public class PowershellScriptTest {
             if (!launcher.isUnix()) {
                 args.addAll(Arrays.asList("-ExecutionPolicy", "Bypass"));
             }
-            args.add("$PSVersionTable.PSVersion.Major");
+            args.addAll(Arrays.asList("-Command", "& {Write-Output $PSVersionTable.PSVersion.Major}"));
             Launcher.ProcStarter ps = launcher.launch().cmds(args).quiet(true);
             ps.readStdout();
             Proc proc = ps.start();
