@@ -86,37 +86,58 @@ public final class PowershellScript extends FileMonitoringTask {
         // By default PowerShell adds a byte order mark (BOM) to the beginning of a file when using Out-File with a unicode encoding such as UTF8.
         // This causes the Jenkins output to contain bogus characters because Java does not handle the BOM characters by default.
         // This code mimics Out-File, but does not write a BOM.  Hopefully PowerShell will provide a non-BOM option for writing files in future releases.
-        String helperScript = "Function Out-FileNoBom {\n" +
-        "[CmdletBinding()]\n" +
-        "param(\n" +
-        "  [Parameter(Mandatory=$true, Position=0)] [string] $FilePath,\n" +
-        "  [Parameter(ValueFromPipeline=$true)] $InputObject\n" +
-        ")\n" +
-        "  $out = New-Object IO.StreamWriter $FilePath, $false\n" +
-        "  try {\n" +
-        "    $Input | Out-String -Stream | % { $out.WriteLine($_) }\n" +
-        "  } finally {\n" +
-        "    $out.Dispose()\n" +
-        "  }\n" +
-        "}\n" +
-        "Function Execute-AndWriteOutput {\n" +
-        "[CmdletBinding()]\n" +
-        "param(\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$MainScript,\n" +
-        "  [Parameter(Mandatory=$false)] [string]$OutputFile,\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$LogFile,\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$ResultFile,\n" +
-        "  [Parameter(Mandatory=$false)] [switch]$CaptureOutput\n" +
-        ")\n" +
-        "  if ($CaptureOutput -eq $true) {\n" +
-        "      if ($PSVersionTable.PSVersion.Major -ge 5) {\n" +
-        "          $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
-        "      } else {\n" +
-        "          $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
-        "      }\n" +
-        "  } else {\n" +
-        "      & $MainScript *>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
-        "  }\n" +
+        String helperScript = "function Out-FileNoBom {\r\n" +
+        "[CmdletBinding()]\r\n" +
+        "param(\r\n" +
+        "  [Parameter(Mandatory=$true, Position=1)]  [IO.StreamWriter] $Writer,\r\n" +
+        "  [Parameter(Mandatory=$false, Position=2)] [int] $Width = 1024,\r\n" +
+        "  [Parameter(ValueFromPipeline=$true)] $InputObject\r\n" +
+        ")\r\n" +
+        "  Process {\r\n" +
+        "    $InputObject | Out-String -Stream -Width $Width | % { $Writer.WriteLine($_); $Writer.Flush(); }\r\n" +
+        "  }\r\n" +
+        "}\r\n" +
+        "function Execute-AndWriteOutput {\r\n" +
+        "[CmdletBinding()]\r\n" +
+        "param(\r\n" +
+        "  [Parameter(Mandatory=$true)]  [string]$MainScript,\r\n" +
+        "  [Parameter(Mandatory=$false)] [string]$OutputFile,\r\n" +
+        "  [Parameter(Mandatory=$true)]  [string]$LogFile,\r\n" +
+        "  [Parameter(Mandatory=$true)]  [string]$ResultFile,\r\n" +
+        "  [Parameter(Mandatory=$false)] [switch]$CaptureOutput\r\n" +
+        ")\r\n" +
+        "    [System.IO.Directory]::SetCurrentDirectory($PWD);\r\n" +
+        "    [IO.StreamWriter]$logWriter = New-Object IO.StreamWriter $LogFile, $false;\r\n" +
+        "    if ($CaptureOutput -eq $true) {\r\n" +
+        "        [IO.StreamWriter]$outputWriter = New-Object IO.StreamWriter $OutputFile, $false;\r\n" +
+        "        try {\r\n" +
+        "          if ($PSVersionTable.PSVersion.Major -ge 5) {\r\n" +
+        "              $(& $MainScript | Out-FileNoBom -Writer $outputWriter) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-FileNoBom -Writer $logWriter;\r\n" +
+        "          } else {\r\n" +
+        "              $(& $MainScript | Out-FileNoBom -Writer $outputWriter) 2>&1 3>&1 4>&1 5>&1 | Out-FileNoBom -Writer $logWriter;\r\n" +
+        "          }\r\n" +
+        "        } finally {\r\n" +
+        "          $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
+        "          $outputWriter.Dispose()\r\n" +
+        "          $logWriter.Dispose()\r\n" +
+        "          if (!(Test-Path -Path $OutputFile -PathType Leaf)) {\r\n" +
+        "            New-Item -Path $OutputFile -ItemType File;\r\n" +
+        "          }\r\n" +
+        "          if (!(Test-Path -Path $LogFile -PathType Leaf)) {\r\n" +
+        "            New-Item -Path $LogFile -ItemType File;\r\n" +
+        "          }\r\n" +
+        "        }\r\n" +
+        "    } else {\r\n" +
+        "        try {\r\n" +
+        "          & $MainScript *>&1 | Out-FileNoBom -Writer $logWriter;\r\n" +
+        "        } finally {\r\n" +
+        "          $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII; \r\n" +
+        "          $logWriter.Dispose()\r\n" +
+        "          if (!(Test-Path -Path $LogFile -PathType Leaf)) {\r\n" +
+        "            New-Item -Path $LogFile -ItemType File;\r\n" +
+        "          }\r\n" +
+        "        }\r\n" +
+        "    }\r\n" +
         "}";
         
         // Execute the script, and catch any errors in order to properly set the jenkins build status. $LastExitCode cannot be solely responsible for determining build status because
