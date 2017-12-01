@@ -124,11 +124,10 @@ public final class PowershellScript extends FileMonitoringTask {
         String wrapperScriptContent = "try {\r\n" + 
         "  & '" + quote(c.getPowerShellScriptFile(ws)) + "'\r\n" + 
         "} catch {\r\n" + 
-        "  Write-Error $_;" + 
-        "  exit 1;\r\n" + 
+        "  Write-Error ($_ | Out-String);\r\n" +
         "} finally {\r\n" +
         "  if ($LastExitCode -ne $null) {\r\n" +
-        "    if ($LastExitCode -eq 0 -and ($error.Count -gt 0 -or !$?)) {\r\n" +
+        "    if ($LastExitCode -eq 0 -and !$?) {\r\n" +
         "      exit 1;\r\n" +
         "    } else {\r\n" +
         "      exit $LastExitCode;\r\n" +
