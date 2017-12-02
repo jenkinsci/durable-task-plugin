@@ -86,17 +86,41 @@ public final class PowershellScript extends FileMonitoringTask {
         // By default PowerShell adds a byte order mark (BOM) to the beginning of a file when using Out-File with a unicode encoding such as UTF8.
         // This causes the Jenkins output to contain bogus characters because Java does not handle the BOM characters by default.
         // This code mimics Out-File, but does not write a BOM.  Hopefully PowerShell will provide a non-BOM option for writing files in future releases.
-        String helperScript = "function Out-FileNoBom {\r\n" +
+        String helperScript = "function Remove-BOMFromFile {\r\n" +
         "[CmdletBinding()]\r\n" +
         "param(\r\n" +
-        "  [Parameter(Mandatory=$true, Position=1)]  [IO.StreamWriter] $Writer,\r\n" +
-        "  [Parameter(Mandatory=$false, Position=2)] [int] $Width = 1024,\r\n" +
-        "  [Parameter(ValueFromPipeline=$true)] $InputObject\r\n" +
+        "  [Parameter(Mandatory=$true, Position=0)] [string] $FilePath\r\n" +
         ")\r\n" +
-        "  Process {\r\n" +
-        "    $InputObject | Out-String -Stream -Width $Width | % { $Writer.WriteLine($_); $Writer.Flush(); }\r\n" +
-        "  }\r\n" +
+        "    [System.IO.FileInfo] $file = Get-Item -Path $FilePath\r\n" +
+        "    $BOMBytes = New-Object System.Byte[] 3\r\n" +
+        "    $reader = $file.OpenRead()\r\n" +
+        "    $bytesRead = $reader.Read($BOMBytes, 0, 3)\r\n" +
+        "    $reader.Dispose()\r\n" +
+        "    if ($bytesRead -eq 3 -and $BOMBytes[0] -eq 0xEF -and $BOMBytes[1] -eq 0xBB -and $BOMBytes[2] -eq 0xBF) {\r\n" +
+        "        $tempFile = [System.IO.Path]::GetTempFileName()\r\n" +
+        "        Get-Content $FilePath | Out-FileNoBom -FilePath $tempFile\r\n" +
+        "        Move-Item -Path $tempFile -Destination $FilePath -Force\r\n" +
+        "    }\r\n" +
         "}\r\n" +
+        "\r\n" +
+        "function Out-FileNoBom {\r\n" +
+        "[CmdletBinding()]\r\n" +
+        "param(\r\n" +
+        "  [Parameter(Mandatory=$true, Position=0)] [string] $FilePath,\r\n" +
+        "  [Parameter(Mandatory=$false, Position=1)] [int] $Width = 1024,\r\n" +
+        "  [Parameter(ValueFromPipeline)] $InputObject\r\n" +
+        ")\r\n" +
+        "    [System.IO.Directory]::SetCurrentDirectory($PWD)\r\n" +
+        "    $FilePath = [IO.Path]::GetFullPath($FilePath)\r\n" +
+        "    $writer = New-Object IO.StreamWriter $FilePath, $false\r\n" +
+        "    $writer.AutoFlush = $true\r\n" +
+        "    try {\r\n" +
+        "        $Input | Out-String -Stream -Width $Width | ForEach-Object { $writer.WriteLine($_); }\r\n" +
+        "    } finally {\r\n" +
+        "        $writer.Dispose()\r\n" +
+        "    }\r\n" +
+        "}\r\n" +
+        "\r\n" +
         "function Execute-AndWriteOutput {\r\n" +
         "[CmdletBinding()]\r\n" +
         "param(\r\n" +
@@ -106,22 +130,19 @@ public final class PowershellScript extends FileMonitoringTask {
         "  [Parameter(Mandatory=$true)]  [string]$ResultFile,\r\n" +
         "  [Parameter(Mandatory=$false)] [switch]$CaptureOutput\r\n" +
         ")\r\n" +
-        "    [System.IO.Directory]::SetCurrentDirectory($PWD);\r\n" +
-        "    [IO.StreamWriter]$logWriter = New-Object IO.StreamWriter $LogFile, $false;\r\n" +
         "    if ($CaptureOutput -eq $true) {\r\n" +
-        "        [IO.StreamWriter]$outputWriter = New-Object IO.StreamWriter $OutputFile, $false;\r\n" +
         "        try {\r\n" +
         "          if ($PSVersionTable.PSVersion.Major -ge 5) {\r\n" +
-        "              $(& $MainScript | Out-FileNoBom -Writer $outputWriter) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-FileNoBom -Writer $logWriter;\r\n" +
+        "              $(& $MainScript | Out-File -FilePath $OutputFile -Encoding UTF8) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-FileNoBom -FilePath $LogFile;\r\n" +
         "          } else {\r\n" +
-        "              $(& $MainScript | Out-FileNoBom -Writer $outputWriter) 2>&1 3>&1 4>&1 5>&1 | Out-FileNoBom -Writer $logWriter;\r\n" +
+        "              $(& $MainScript | Out-File -FilePath $OutputFile -Encoding UTF8) 2>&1 3>&1 4>&1 5>&1 | Out-FileNoBom -FilePath $LogFile;\r\n" +
         "          }\r\n" +
         "        } finally {\r\n" +
         "          $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
-        "          $outputWriter.Dispose()\r\n" +
-        "          $logWriter.Dispose()\r\n" +
         "          if (!(Test-Path -Path $OutputFile -PathType Leaf)) {\r\n" +
         "            New-Item -Path $OutputFile -ItemType File;\r\n" +
+        "          } else {\r\n" +
+        "            Remove-BOMFromFile -FilePath $OutputFile\r\n" +
         "          }\r\n" +
         "          if (!(Test-Path -Path $LogFile -PathType Leaf)) {\r\n" +
         "            New-Item -Path $LogFile -ItemType File;\r\n" +
@@ -129,12 +150,13 @@ public final class PowershellScript extends FileMonitoringTask {
         "        }\r\n" +
         "    } else {\r\n" +
         "        try {\r\n" +
-        "          & $MainScript *>&1 | Out-FileNoBom -Writer $logWriter;\r\n" +
+        "          & $MainScript *>&1 | Out-File -FilePath $LogFile -Encoding UTF8;\r\n" +
         "        } finally {\r\n" +
-        "          $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII; \r\n" +
-        "          $logWriter.Dispose()\r\n" +
+        "          $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
         "          if (!(Test-Path -Path $LogFile -PathType Leaf)) {\r\n" +
         "            New-Item -Path $LogFile -ItemType File;\r\n" +
+        "          } else {\r\n" +
+        "            Remove-BOMFromFile -FilePath $LogFile\r\n" +
         "          }\r\n" +
         "        }\r\n" +
         "    }\r\n" +
