@@ -133,19 +133,19 @@ public final class PowershellScript extends FileMonitoringTask {
         "    if ($CaptureOutput -eq $true) {\r\n" +
         "        try {\r\n" +
         "          if ($PSVersionTable.PSVersion.Major -ge 5) {\r\n" +
-        "              $(& $MainScript | Out-File -FilePath $OutputFile -Encoding UTF8) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-FileNoBom -FilePath $LogFile;\r\n" +
+        "              $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-File -FilePath $LogFile -Encoding UTF8;\r\n" +
         "          } else {\r\n" +
-        "              $(& $MainScript | Out-File -FilePath $OutputFile -Encoding UTF8) 2>&1 3>&1 4>&1 5>&1 | Out-FileNoBom -FilePath $LogFile;\r\n" +
+        "              $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 | Out-File -FilePath $LogFile -Encoding UTF8;\r\n" +
         "          }\r\n" +
         "        } finally {\r\n" +
         "          $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
         "          if (!(Test-Path -Path $OutputFile -PathType Leaf)) {\r\n" +
         "            New-Item -Path $OutputFile -ItemType File;\r\n" +
-        "          } else {\r\n" +
-        "            Remove-BOMFromFile -FilePath $OutputFile\r\n" +
         "          }\r\n" +
         "          if (!(Test-Path -Path $LogFile -PathType Leaf)) {\r\n" +
         "            New-Item -Path $LogFile -ItemType File;\r\n" +
+        "          } else {\r\n" +
+        "            Remove-BOMFromFile -FilePath $LogFile;\r\n" +
         "          }\r\n" +
         "        }\r\n" +
         "    } else {\r\n" +
@@ -156,7 +156,7 @@ public final class PowershellScript extends FileMonitoringTask {
         "          if (!(Test-Path -Path $LogFile -PathType Leaf)) {\r\n" +
         "            New-Item -Path $LogFile -ItemType File;\r\n" +
         "          } else {\r\n" +
-        "            Remove-BOMFromFile -FilePath $LogFile\r\n" +
+        "            Remove-BOMFromFile -FilePath $LogFile;\r\n" +
         "          }\r\n" +
         "        }\r\n" +
         "    }\r\n" +
