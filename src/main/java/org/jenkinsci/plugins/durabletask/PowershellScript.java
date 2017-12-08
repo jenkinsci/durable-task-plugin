@@ -69,14 +69,14 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String cmd;
         if (capturingOutput) {
-            cmd = String.format(". \"%s\"; Execute-AndWriteOutput -MainScript \"%s\" -OutputFile \"%s\" -LogFile \"%s\" -ResultFile \"%s\" -CaptureOutput;", 
+            cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -OutputFile '%s' -LogFile '%s' -ResultFile '%s' -CaptureOutput;", 
                 quote(c.getPowerShellHelperFile(ws)),
                 quote(c.getPowerShellWrapperFile(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         } else {
-            cmd = String.format(". \"%s\"; Execute-AndWriteOutput -MainScript \"%s\" -LogFile \"%s\" -ResultFile \"%s\";",
+            cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -LogFile '%s' -ResultFile '%s';",
                 quote(c.getPowerShellHelperFile(ws)),
                 quote(c.getPowerShellWrapperFile(ws)),
                 quote(c.getLogFile(ws)),
@@ -157,7 +157,7 @@ public final class PowershellScript extends FileMonitoringTask {
     }
     
     private static String quote(FilePath f) {
-        return f.getRemote().replace("$", "`$");
+        return f.getRemote().replace("'", "''");
     }
     
     // In order for PowerShell to properly read a script that contains unicode characters the script should have a BOM, but there is no built in support for
