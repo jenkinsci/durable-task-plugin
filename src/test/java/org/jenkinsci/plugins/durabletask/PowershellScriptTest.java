@@ -127,7 +127,7 @@ public class PowershellScriptTest {
     }
     
     @Test public void implicitError() throws Exception {
-        Controller c = new PowershellScript("MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
+        Controller c = new PowershellScript("$ErrorActionPreference = 'Stop'; MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream tos = new TeeOutputStream(baos, System.err);
         while (c.exitStatus(ws, launcher) == null) {
