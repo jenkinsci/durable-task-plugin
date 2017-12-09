@@ -129,9 +129,9 @@ public final class PowershellScript extends FileMonitoringTask {
         "      if ($CaptureOutput -eq $true) {\r\n" +
         "        $null = New-Item $OutputFile -ItemType File -Force;\r\n" +
         "        [System.IO.StreamWriter]$OutputWriter = New-StreamWriter -FilePath $OutputFile -Encoding $encoding;\r\n" +
-        "        & $MainScript -ErrorAction 'Stop' | Out-FileNoBom -Writer $OutputWriter;\r\n" +
+        "        & $MainScript | Out-FileNoBom -Writer $OutputWriter;\r\n" +
         "      } else {\r\n" +
-        "        & $MainScript -ErrorAction 'Stop';\r\n" +
+        "        & $MainScript;\r\n" +
         "      }\r\n" +
         "    } *>&1 | Out-FileNoBom -Writer $LogWriter;\r\n" +
         "  } catch {\r\n" +
@@ -140,15 +140,13 @@ public final class PowershellScript extends FileMonitoringTask {
         "    $exceptionCaught = $true;\r\n" +
         "  } finally {\r\n" +
         "    $exitCode = 0;\r\n" +
-        "    if ($exceptionCaught -ne $null) {\r\n" +
-        "      $exitCode = 1;\r\n" +
-        "    } elseif ($LastExitCode -ne $null) {\r\n" +
+        "    if ($LastExitCode -ne $null) {\r\n" +
         "      if ($LastExitCode -eq 0 -and !$?) {\r\n" +
         "        $exitCode = 1;\r\n" +
         "      } else {\r\n" +
         "        $exitCode = $LastExitCode;\r\n" +
         "      }\r\n" +
-        "    } elseif (!$?) {\r\n" +
+        "    } elseif ($exceptionCaught -ne $null -or !$?) {\r\n" +
         "      $exitCode = 1;\r\n" +
         "    }\r\n" +
         "    $exitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
