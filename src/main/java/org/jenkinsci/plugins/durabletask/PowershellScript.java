@@ -185,11 +185,18 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String scriptWrapper = String.format("[CmdletBinding()]\r\nparam()\r\n%s %s -File '%s';", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
                    
-        // Write the PowerShell scripts out with a UTF8 BOM
-        writeWithBom(c.getPowerShellHelperFile(ws), helperScript);
-        writeWithBom(c.getPowerShellScriptFile(ws), script);
-        writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
-
+        if (launcher.isUnix()) {
+            // There is no need to add a BOM with Open PowerShell
+            c.getPowerShellHelperFile(ws).write(helperScript, "UTF-8");
+            c.getPowerShellScriptFile(ws).write(script, "UTF-8");
+            c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
+        } else {
+            // Write the Windows PowerShell scripts out with a UTF8 BOM
+            writeWithBom(c.getPowerShellHelperFile(ws), helperScript);
+            writeWithBom(c.getPowerShellScriptFile(ws), script);
+            writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
+        }
+        
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+(\\\\|/)", "") + "] Running PowerShell script");
         ps.readStdout().readStderr();
