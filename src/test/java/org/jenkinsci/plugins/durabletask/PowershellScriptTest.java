@@ -150,6 +150,7 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
         assertThat(baos.toString(), containsString("explicit error"));
+        assertEquals("Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
     }
     
@@ -160,10 +161,8 @@ public class PowershellScriptTest {
         while (c.exitStatus(ws, launcher) == null) {
             Thread.sleep(100);
         }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertThat(baos.toString(), containsString("Hello, World!"));
+        assertEquals("VERBOSE: Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
     }
 

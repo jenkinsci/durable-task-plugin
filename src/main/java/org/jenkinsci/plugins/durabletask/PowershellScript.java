@@ -69,14 +69,14 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String cmd;
         if (capturingOutput) {
-            cmd = String.format(". \"%s\"; Execute-AndWriteOutput -MainScript \"%s\" -OutputFile \"%s\" -LogFile \"%s\" -ResultFile \"%s\" -CaptureOutput;", 
+            cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -OutputFile '%s' -LogFile '%s' -ResultFile '%s' -CaptureOutput;", 
                 quote(c.getPowerShellHelperFile(ws)),
                 quote(c.getPowerShellWrapperFile(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         } else {
-            cmd = String.format(". \"%s\"; Execute-AndWriteOutput -MainScript \"%s\" -LogFile \"%s\" -ResultFile \"%s\";",
+            cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -LogFile '%s' -ResultFile '%s';",
                 quote(c.getPowerShellHelperFile(ws)),
                 quote(c.getPowerShellWrapperFile(ws)),
                 quote(c.getLogFile(ws)),
@@ -86,39 +86,27 @@ public final class PowershellScript extends FileMonitoringTask {
         // By default PowerShell adds a byte order mark (BOM) to the beginning of a file when using Out-File with a unicode encoding such as UTF8.
         // This causes the Jenkins output to contain bogus characters because Java does not handle the BOM characters by default.
         // This code mimics Out-File, but does not write a BOM.  Hopefully PowerShell will provide a non-BOM option for writing files in future releases.
-        String helperScript = "function Remove-BOMFromFile {\r\n" +
+        String helperScript = "function New-StreamWriter {\r\n" +
         "[CmdletBinding()]\r\n" +
-        "param(\r\n" +
-        "  [Parameter(Mandatory=$true, Position=0)] [string] $FilePath\r\n" +
+        "param (\r\n" +
+        "  [Parameter(Mandatory=$true)] [string] $FilePath,\r\n" +
+        "  [Parameter(Mandatory=$true)] [System.Text.Encoding] $Encoding\r\n" +
         ")\r\n" +
-        "    [System.IO.FileInfo] $file = Get-Item -Path $FilePath\r\n" +
-        "    $BOMBytes = New-Object System.Byte[] 3\r\n" +
-        "    $reader = $file.OpenRead()\r\n" +
-        "    $bytesRead = $reader.Read($BOMBytes, 0, 3)\r\n" +
-        "    $reader.Dispose()\r\n" +
-        "    if ($bytesRead -eq 3 -and $BOMBytes[0] -eq 0xEF -and $BOMBytes[1] -eq 0xBB -and $BOMBytes[2] -eq 0xBF) {\r\n" +
-        "        $tempFile = [System.IO.Path]::GetTempFileName()\r\n" +
-        "        Get-Content $FilePath | Out-FileNoBom -FilePath $tempFile\r\n" +
-        "        Move-Item -Path $tempFile -Destination $FilePath -Force\r\n" +
-        "    }\r\n" +
+        "  [string]$FullFilePath = [IO.Path]::GetFullPath( $FilePath );\r\n" +
+        "  [System.IO.StreamWriter]$writer = [System.IO.StreamWriter]::new( $FullFilePath, $true, $Encoding );\r\n" +
+        "  $writer.AutoFlush = $true;\r\n" +
+        "  return $writer;\r\n" +
         "}\r\n" +
         "\r\n" +
         "function Out-FileNoBom {\r\n" +
         "[CmdletBinding()]\r\n" +
         "param(\r\n" +
-        "  [Parameter(Mandatory=$true, Position=0)] [string] $FilePath,\r\n" +
-        "  [Parameter(Mandatory=$false, Position=1)] [int] $Width = 1024,\r\n" +
-        "  [Parameter(ValueFromPipeline)] $InputObject\r\n" +
+        "  [Parameter(Mandatory=$true, Position=0)] [System.IO.StreamWriter] $Writer,\r\n" +
+        "  [Parameter(ValueFromPipeline = $true)]   [object] $InputObject\r\n" +
         ")\r\n" +
-        "    [System.IO.Directory]::SetCurrentDirectory($PWD)\r\n" +
-        "    $FilePath = [IO.Path]::GetFullPath($FilePath)\r\n" +
-        "    $writer = New-Object IO.StreamWriter $FilePath, $false\r\n" +
-        "    $writer.AutoFlush = $true\r\n" +
-        "    try {\r\n" +
-        "        $Input | Out-String -Stream -Width $Width | ForEach-Object { $writer.WriteLine($_); }\r\n" +
-        "    } finally {\r\n" +
-        "        $writer.Dispose()\r\n" +
-        "    }\r\n" +
+        "  Process {\r\n" +
+        "    $Input | Out-String -Stream -Width 192 | ForEach-Object { $writer.WriteLine( $_ ); }\r\n" +
+        "  }\r\n" +
         "}\r\n" +
         "\r\n" +
         "function Execute-AndWriteOutput {\r\n" +
@@ -130,70 +118,77 @@ public final class PowershellScript extends FileMonitoringTask {
         "  [Parameter(Mandatory=$true)]  [string]$ResultFile,\r\n" +
         "  [Parameter(Mandatory=$false)] [switch]$CaptureOutput\r\n" +
         ")\r\n" +
-        "    if ($CaptureOutput -eq $true) {\r\n" +
-        "        try {\r\n" +
-        "          if ($PSVersionTable.PSVersion.Major -ge 5) {\r\n" +
-        "              $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-File -FilePath $LogFile -Encoding UTF8;\r\n" +
-        "          } else {\r\n" +
-        "              $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 | Out-File -FilePath $LogFile -Encoding UTF8;\r\n" +
-        "          }\r\n" +
-        "        } finally {\r\n" +
-        "          $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
-        "          if (!(Test-Path -Path $OutputFile -PathType Leaf)) {\r\n" +
-        "            New-Item -Path $OutputFile -ItemType File;\r\n" +
-        "          }\r\n" +
-        "          if (!(Test-Path -Path $LogFile -PathType Leaf)) {\r\n" +
-        "            New-Item -Path $LogFile -ItemType File;\r\n" +
-        "          } else {\r\n" +
-        "            Remove-BOMFromFile -FilePath $LogFile;\r\n" +
-        "          }\r\n" +
-        "        }\r\n" +
-        "    } else {\r\n" +
-        "        try {\r\n" +
-        "          & $MainScript *>&1 | Out-File -FilePath $LogFile -Encoding UTF8;\r\n" +
-        "        } finally {\r\n" +
-        "          $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
-        "          if (!(Test-Path -Path $LogFile -PathType Leaf)) {\r\n" +
-        "            New-Item -Path $LogFile -ItemType File;\r\n" +
-        "          } else {\r\n" +
-        "            Remove-BOMFromFile -FilePath $LogFile;\r\n" +
-        "          }\r\n" +
-        "        }\r\n" +
+        "  $exceptionCaught = $null\r\n" +
+        "  try {\r\n" +
+        "    [System.Text.Encoding] $encoding = [System.Text.UTF8Encoding]::new( $false );\r\n" +
+        "    [System.Console]::OutputEncoding = [System.Console]::InputEncoding = $encoding;\r\n" +
+        "    [System.IO.Directory]::SetCurrentDirectory( $PWD );\r\n" +
+        "    $null = New-Item $LogFile -ItemType File -Force;\r\n" +
+        "    [System.IO.StreamWriter] $LogWriter = New-StreamWriter -FilePath $LogFile -Encoding $encoding;\r\n" +
+        "    & {\r\n" +
+        "      if ($CaptureOutput -eq $true) {\r\n" +
+        "        $null = New-Item $OutputFile -ItemType File -Force;\r\n" +
+        "        [System.IO.StreamWriter]$OutputWriter = New-StreamWriter -FilePath $OutputFile -Encoding $encoding;\r\n" +
+        "        & $MainScript -ErrorAction 'Stop' | Out-FileNoBom -Writer $OutputWriter;\r\n" +
+        "      } else {\r\n" +
+        "        & $MainScript -ErrorAction 'Stop';\r\n" +
+        "      }\r\n" +
+        "    } *>&1 | Out-FileNoBom -Writer $LogWriter;\r\n" +
+        "  } catch {\r\n" +
+        "    $exceptionCaught = $_;\r\n" +
+        "    $exceptionCaught | Out-String -Width 192 | Out-FileNoBom -Writer $LogWriter;\r\n" +
+        "    $exceptionCaught = $true;\r\n" +
+        "  } finally {\r\n" +
+        "    $exitCode = 0;\r\n" +
+        "    if ($exceptionCaught -ne $null) {\r\n" +
+        "      $exitCode = 1;\r\n" +
+        "    } elseif ($LastExitCode -ne $null) {\r\n" +
+        "      if ($LastExitCode -eq 0 -and !$?) {\r\n" +
+        "        $exitCode = 1;\r\n" +
+        "      } else {\r\n" +
+        "        $exitCode = $LastExitCode;\r\n" +
+        "      }\r\n" +
+        "    } elseif (!$?) {\r\n" +
+        "      $exitCode = 1;\r\n" +
         "    }\r\n" +
-        "}";
-        
-        // Execute the script, and catch any errors in order to properly set the jenkins build status. $LastExitCode cannot be solely responsible for determining build status because
-        // there are several instances in which it is not set, e.g. thrown exceptions, and errors that aren't caused by native executables.
-        String wrapperScriptContent = "try {\r\n" + 
-        "  & '" + quote(c.getPowerShellScriptFile(ws)) + "'\r\n" + 
-        "} catch {\r\n" + 
-        "  Write-Error ($_ | Out-String);\r\n" +
-        "} finally {\r\n" +
-        "  if ($LastExitCode -ne $null) {\r\n" +
-        "    if ($LastExitCode -eq 0 -and !$?) {\r\n" +
-        "      exit 1;\r\n" +
-        "    } else {\r\n" +
-        "      exit $LastExitCode;\r\n" +
+        "    $exitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
+        "    if ($CaptureOutput -eq $true -and !(Test-Path $OutputFile)) {\r\n" +
+        "      $null = New-Item $OutputFile -ItemType File -Force;\r\n" +
         "    }\r\n" +
-        "  } elseif ($error.Count -gt 0 -or !$?) {\r\n" + 
-        "    exit 1;\r\n" +
-        "  } else {\r\n" +
-        "    exit 0;\r\n" +
+        "    if (!(Test-Path $LogFile)) {\r\n" +
+        "      $null = New-Item $LogFile -ItemType File -Force;\r\n" +
+        "    }\r\n" +
+        "    if ($CaptureOutput -eq $true -and $OutputWriter -ne $null) {\r\n" +
+        "        $OutputWriter.Flush();\r\n" +
+        "        $OutputWriter.Dispose();\r\n" +
+        "    }\r\n" +
+        "    if ($LogWriter -ne $null) {\r\n" +
+        "        $LogWriter.Flush();\r\n" +
+        "        $LogWriter.Dispose();\r\n" +
+        "    }\r\n" +
+        "    exit $exitCode;\r\n" +
         "  }\r\n" +
         "}";
+        
+        String powershellBinary;
+        String powershellArgs;
+        if (launcher.isUnix()) {
+            powershellBinary = "pwsh";
+            powershellArgs = "-NoProfile -NonInteractive";
+        } else {
+            powershellBinary = "powershell.exe";
+            powershellArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass";
+        }
+        args.add(powershellBinary);
+        args.addAll(Arrays.asList(powershellArgs.split(" ")));
+        args.addAll(Arrays.asList("-Command", cmd));
+        
+        String scriptWrapper = String.format("[CmdletBinding()]\r\nparam()\r\n%s %s -File '%s';", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
                    
         // Write the PowerShell scripts out with a UTF8 BOM
         writeWithBom(c.getPowerShellHelperFile(ws), helperScript);
         writeWithBom(c.getPowerShellScriptFile(ws), script);
-        writeWithBom(c.getPowerShellWrapperFile(ws), wrapperScriptContent);
-        writeWithBom(c.getPowerShellMainFile(ws), cmd);
-        
-        if (launcher.isUnix()) {
-            // Open-Powershell does not support ExecutionPolicy
-            args.addAll(Arrays.asList("pwsh", "-NonInteractive", "-File", quote(c.getPowerShellMainFile(ws))));
-        } else {
-            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", quote(c.getPowerShellMainFile(ws))));    
-        }
+        writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
 
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+(\\\\|/)", "") + "] Running PowerShell script");
@@ -226,16 +221,12 @@ public final class PowershellScript extends FileMonitoringTask {
             return controlDir(ws).child("powershellScript.ps1");
         }
         
-        public FilePath getPowerShellWrapperFile(FilePath ws) throws IOException, InterruptedException {
-            return controlDir(ws).child("powershellWrapper.ps1");
-        }
-        
         public FilePath getPowerShellHelperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellHelper.ps1");
         }
         
-        public FilePath getPowerShellMainFile(FilePath ws) throws IOException, InterruptedException {
-            return controlDir(ws).child("powershellMain.ps1");
+        public FilePath getPowerShellWrapperFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("powershellWrapper.ps1");
         }
 
         private static final long serialVersionUID = 1L;
