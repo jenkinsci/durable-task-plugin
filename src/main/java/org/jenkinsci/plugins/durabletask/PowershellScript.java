@@ -141,12 +141,12 @@ public final class PowershellScript extends FileMonitoringTask {
         "  } finally {\r\n" +
         "    $exitCode = 0;\r\n" +
         "    if ($LastExitCode -ne $null) {\r\n" +
-        "      if ($LastExitCode -eq 0 -and !$?) {\r\n" +
+        "      if ($LastExitCode -eq 0 -and (!$? -or $exceptionCaught -ne $null)) {\r\n" +
         "        $exitCode = 1;\r\n" +
         "      } else {\r\n" +
         "        $exitCode = $LastExitCode;\r\n" +
         "      }\r\n" +
-        "    } elseif ($exceptionCaught -ne $null -or !$?) {\r\n" +
+        "    } elseif (!$? -or $exceptionCaught -ne $null) {\r\n" +
         "      $exitCode = 1;\r\n" +
         "    }\r\n" +
         "    $exitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
