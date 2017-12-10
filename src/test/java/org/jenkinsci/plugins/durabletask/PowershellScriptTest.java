@@ -135,7 +135,24 @@ public class PowershellScriptTest {
             Thread.sleep(100);
         }
         c.writeLog(ws, tos);
+        String log = baos.toString();
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
+        assertTrue(log, log.contains("MyBogus-Cmdlet"));
+        c.cleanup(ws);
+    }
+    
+    @Test public void implicitErrorNegativeTest() throws Exception {
+        Controller c = new PowershellScript("MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
+        while (c.exitStatus(ws, launcher) == null) {
+            c.writeLog(ws, tos);
+            Thread.sleep(100);
+        }
+        c.writeLog(ws, tos);
+        String log = baos.toString();
+        assertTrue(c.exitStatus(ws, launcher).intValue() == 0);
+        assertTrue(log, log.contains("MyBogus-Cmdlet"));
         c.cleanup(ws);
     }
     
