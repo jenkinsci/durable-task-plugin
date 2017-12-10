@@ -120,7 +120,7 @@ public final class PowershellScript extends FileMonitoringTask {
         ")\r\n" +
         "  $exceptionCaught = $null\r\n" +
         "  try {\r\n" +
-        "    [System.Text.Encoding] $encoding = [System.Text.UTF8Encoding]::new( $false );\r\n" +
+        "    [System.Text.Encoding] $encoding = New-Object System.Text.UTF8Encoding $false;\r\n" +
         "    [System.Console]::OutputEncoding = [System.Console]::InputEncoding = $encoding;\r\n" +
         "    [System.IO.Directory]::SetCurrentDirectory( $PWD );\r\n" +
         "    $null = New-Item $LogFile -ItemType File -Force;\r\n" +
