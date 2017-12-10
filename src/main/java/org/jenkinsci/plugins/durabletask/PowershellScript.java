@@ -93,7 +93,7 @@ public final class PowershellScript extends FileMonitoringTask {
         "  [Parameter(Mandatory=$true)] [System.Text.Encoding] $Encoding\r\n" +
         ")\r\n" +
         "  [string]$FullFilePath = [IO.Path]::GetFullPath( $FilePath );\r\n" +
-        "  [System.IO.StreamWriter]$writer = [System.IO.StreamWriter]::new( $FullFilePath, $true, $Encoding );\r\n" +
+        "  [System.IO.StreamWriter]$writer = New-Object System.IO.StreamWriter( $FullFilePath, $true, $Encoding );\r\n" +
         "  $writer.AutoFlush = $true;\r\n" +
         "  return $writer;\r\n" +
         "}\r\n" +
@@ -120,7 +120,7 @@ public final class PowershellScript extends FileMonitoringTask {
         ")\r\n" +
         "  $exceptionCaught = $null\r\n" +
         "  try {\r\n" +
-        "    [System.Text.Encoding] $encoding = New-Object System.Text.UTF8Encoding $false;\r\n" +
+        "    [System.Text.Encoding] $encoding = New-Object System.Text.UTF8Encoding( $false );\r\n" +
         "    [System.Console]::OutputEncoding = [System.Console]::InputEncoding = $encoding;\r\n" +
         "    [System.IO.Directory]::SetCurrentDirectory( $PWD );\r\n" +
         "    $null = New-Item $LogFile -ItemType File -Force;\r\n" +
