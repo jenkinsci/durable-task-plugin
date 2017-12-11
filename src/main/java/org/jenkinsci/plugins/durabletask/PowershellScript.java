@@ -101,11 +101,15 @@ public final class PowershellScript extends FileMonitoringTask {
         "function Out-FileNoBom {\r\n" +
         "[CmdletBinding()]\r\n" +
         "param(\r\n" +
-        "  [Parameter(Mandatory=$true, Position=0)] [System.IO.StreamWriter] $Writer,\r\n" +
-        "  [Parameter(ValueFromPipeline = $true)]   [object] $InputObject\r\n" +
+        "  [Parameter(Mandatory=$true, Position=0)][AllowNull()] [System.IO.StreamWriter] $Writer,\r\n" +
+        "  [Parameter(ValueFromPipeline = $true)]                [object] $InputObject\r\n" +
         ")\r\n" +
         "  Process {\r\n" +
-        "    $Input | Out-String -Stream -Width 192 | ForEach-Object { $writer.WriteLine( $_ ); }\r\n" +
+        "    if ($Writer) {\r\n" +
+        "        $Input | Out-String -Stream -Width 192 | ForEach-Object { $Writer.WriteLine( $_ ); }\r\n" +
+        "    } else {\r\n" +
+        "        $Input;\r\n" +
+        "    }\r\n" +
         "  }\r\n" +
         "}\r\n" +
         "\r\n" +
@@ -125,27 +129,24 @@ public final class PowershellScript extends FileMonitoringTask {
         "    [System.IO.Directory]::SetCurrentDirectory( $PWD );\r\n" +
         "    $null = New-Item $LogFile -ItemType File -Force;\r\n" +
         "    [System.IO.StreamWriter] $LogWriter = New-StreamWriter -FilePath $LogFile -Encoding $encoding;\r\n" +
-        "    & {\r\n" +
-        "      if ($CaptureOutput -eq $true) {\r\n" +
-        "        $null = New-Item $OutputFile -ItemType File -Force;\r\n" +
-        "        [System.IO.StreamWriter]$OutputWriter = New-StreamWriter -FilePath $OutputFile -Encoding $encoding;\r\n" +
-        "        & $MainScript | Out-FileNoBom -Writer $OutputWriter;\r\n" +
-        "      } else {\r\n" +
-        "        & $MainScript;\r\n" +
-        "      }\r\n" +
-        "    } *>&1 | Out-FileNoBom -Writer $LogWriter;\r\n" +
+        "    $OutputWriter = $null;\r\n" +
+        "    if ($CaptureOutput -eq $true) {\r\n" +
+        "      $null = New-Item $OutputFile -ItemType File -Force;\r\n" +
+        "      [System.IO.StreamWriter]$OutputWriter = New-StreamWriter -FilePath $OutputFile -Encoding $encoding;\r\n" +
+        "    }\r\n" +
+        "    & { & $MainScript | Out-FileNoBom -Writer $OutputWriter } *>&1 | Out-FileNoBom -Writer $LogWriter;\r\n" +
         "  } catch {\r\n" +
         "    $errorCaught = $_;\r\n" +
         "    $errorCaught | Out-String -Width 192 | Out-FileNoBom -Writer $LogWriter;\r\n" +
         "  } finally {\r\n" +
         "    $exitCode = 0;\r\n" +
-        "    if ($LastExitCode -ne $null) {\r\n" +
-        "      if ($LastExitCode -eq 0 -and (!$? -or $errorCaught -ne $null)) {\r\n" +
+        "    if ($LASTEXITCODE -ne $null) {\r\n" +
+        "      if ($LASTEXITCODE -eq 0 -and $errorCaught -ne $null) {\r\n" +
         "        $exitCode = 1;\r\n" +
         "      } else {\r\n" +
-        "        $exitCode = $LastExitCode;\r\n" +
+        "        $exitCode = $LASTEXITCODE;\r\n" +
         "      }\r\n" +
-        "    } elseif (!$? -or $errorCaught -ne $null) {\r\n" +
+        "    } elseif ($errorCaught -ne $null) {\r\n" +
         "      $exitCode = 1;\r\n" +
         "    }\r\n" +
         "    $exitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
@@ -181,23 +182,16 @@ public final class PowershellScript extends FileMonitoringTask {
         args.addAll(Arrays.asList("-Command", cmd));
         
         // Exception propagation does not occur in legacy PowerShell versions. This means that an exception thrown in an inner PowerShell process
-        // does not propagate to the outer process regardless of $ErrorActionPreference selection. The intent here is to run scripts in the current
-        // PowerShell session for legacy versions of PowerShell, and in a new PowerShell session for PowerShell 5+. A side effect of this is
-        // that when running the PowerShell step with older versions of PowerShell the output will be missing stream indicators before special stream outputs,
-        // such as VERBOSE: and DEBUG.
+        // does not propagate to the outer process regardless of $ErrorActionPreference selection. This ensures the exit code is non-zero if an error occurs regardless of PowerShell version.
         String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
                                              "param()\r\n" +
-                                             "if ($PSVersionTable.PSVersion.Major -ge 5) {\r\n" +
-                                             "  & %s %s -File '%s';\r\n" +
+                                             "& %s %s -File '%s';\r\n" +
+                                             "if ($Error) {\r\n" +
+                                             "  exit 1;\r\n" +
                                              "} else {\r\n" +
-                                             "  & '%s';\r\n" +
-                                             "}\r\n" +
-                                             "exit $LastExitCode", 
-                                             powershellBinary, 
-                                             powershellArgs, 
-                                             c.getPowerShellScriptFile(ws).getRemote(),
-                                             c.getPowerShellScriptFile(ws).getRemote());
-                   
+                                             "  exit $LASTEXITCODE;\r\n" + 
+                                             "}", powershellBinary, powershellArgs, c.getPowerShellScriptFile(ws).getRemote());
+        
         if (launcher.isUnix()) {
             // There is no need to add a BOM with Open PowerShell
             c.getPowerShellHelperFile(ws).write(helperScript, "UTF-8");
