@@ -70,17 +70,17 @@ public final class PowershellScript extends FileMonitoringTask {
         String cmd;
         if (capturingOutput) {
             cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -OutputFile '%s' -LogFile '%s' -ResultFile '%s' -CaptureOutput;", 
-                c.getPowerShellHelperFile(ws).getRemote(),
-                c.getPowerShellWrapperFile(ws).getRemote(),
-                c.getOutputFile(ws).getRemote(),
-                c.getLogFile(ws).getRemote(),
-                c.getResultFile(ws).getRemote());
+                quote(c.getPowerShellHelperFile(ws)),
+                quote(c.getPowerShellWrapperFile(ws)),
+                quote(c.getOutputFile(ws)),
+                quote(c.getLogFile(ws)),
+                quote(c.getResultFile(ws)));
         } else {
             cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -LogFile '%s' -ResultFile '%s';",
-                c.getPowerShellHelperFile(ws).getRemote(),
-                c.getPowerShellWrapperFile(ws).getRemote(),
-                c.getLogFile(ws).getRemote(),
-                c.getResultFile(ws).getRemote());
+                quote(c.getPowerShellHelperFile(ws)),
+                quote(c.getPowerShellWrapperFile(ws)),
+                quote(c.getLogFile(ws)),
+                quote(c.getResultFile(ws)));
         }
        
         // By default PowerShell adds a byte order mark (BOM) to the beginning of a file when using Out-File with a unicode encoding such as UTF8.
@@ -190,7 +190,7 @@ public final class PowershellScript extends FileMonitoringTask {
                                              "  exit 1;\r\n" +
                                              "} else {\r\n" +
                                              "  exit $LASTEXITCODE;\r\n" + 
-                                             "}", powershellBinary, powershellArgs, c.getPowerShellScriptFile(ws).getRemote());
+                                             "}", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
         
         if (launcher.isUnix()) {
             // There is no need to add a BOM with Open PowerShell
@@ -210,6 +210,10 @@ public final class PowershellScript extends FileMonitoringTask {
         ps.start();
 
         return c;
+    }
+    
+    private static String quote(FilePath f) {
+        return f.getRemote().replace("'", "''");
     }
     
     // In order for PowerShell to properly read a script that contains unicode characters the script should have a BOM, but there is no built in support for
