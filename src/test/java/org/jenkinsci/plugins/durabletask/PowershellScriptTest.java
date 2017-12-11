@@ -56,7 +56,8 @@ public class PowershellScriptTest {
     private StreamTaskListener listener;
     private FilePath ws;
     private Launcher launcher;
-
+    private int psVersion;
+    
     @Before public void vars() throws IOException, InterruptedException {
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
@@ -86,7 +87,6 @@ public class PowershellScriptTest {
             ps.readStdout();
             Proc proc = ps.start();
             String psVersionStr = IOUtils.toString(proc.getStdout());
-            int psVersion;
             try {
                 psVersion = Integer.parseInt(psVersionStr.trim());
             } catch (NumberFormatException x) {
@@ -179,7 +179,11 @@ public class PowershellScriptTest {
             Thread.sleep(100);
         }
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertEquals("VERBOSE: Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        if (psVersion >= 5) {
+            assertEquals("VERBOSE: Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        } else {
+            assertEquals("Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        }
         c.cleanup(ws);
     }
 

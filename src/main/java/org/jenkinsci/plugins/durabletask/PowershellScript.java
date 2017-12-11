@@ -118,8 +118,8 @@ public final class PowershellScript extends FileMonitoringTask {
         "  [Parameter(Mandatory=$true)]  [string]$ResultFile,\r\n" +
         "  [Parameter(Mandatory=$false)] [switch]$CaptureOutput\r\n" +
         ")\r\n" +
-        "  $exceptionCaught = $null\r\n" +
         "  try {\r\n" +
+        "    $errorCaught = $null;\r\n" +
         "    [System.Text.Encoding] $encoding = New-Object System.Text.UTF8Encoding( $false );\r\n" +
         "    [System.Console]::OutputEncoding = [System.Console]::InputEncoding = $encoding;\r\n" +
         "    [System.IO.Directory]::SetCurrentDirectory( $PWD );\r\n" +
@@ -135,18 +135,17 @@ public final class PowershellScript extends FileMonitoringTask {
         "      }\r\n" +
         "    } *>&1 | Out-FileNoBom -Writer $LogWriter;\r\n" +
         "  } catch {\r\n" +
-        "    $exceptionCaught = $_;\r\n" +
-        "    $exceptionCaught | Out-String -Width 192 | Out-FileNoBom -Writer $LogWriter;\r\n" +
-        "    $exceptionCaught = $true;\r\n" +
+        "    $errorCaught = $_;\r\n" +
+        "    $errorCaught | Out-String -Width 192 | Out-FileNoBom -Writer $LogWriter;\r\n" +
         "  } finally {\r\n" +
         "    $exitCode = 0;\r\n" +
         "    if ($LastExitCode -ne $null) {\r\n" +
-        "      if ($LastExitCode -eq 0 -and (!$? -or $exceptionCaught -ne $null)) {\r\n" +
+        "      if ($LastExitCode -eq 0 -and (!$? -or $errorCaught -ne $null)) {\r\n" +
         "        $exitCode = 1;\r\n" +
         "      } else {\r\n" +
         "        $exitCode = $LastExitCode;\r\n" +
         "      }\r\n" +
-        "    } elseif (!$? -or $exceptionCaught -ne $null) {\r\n" +
+        "    } elseif (!$? -or $errorCaught -ne $null) {\r\n" +
         "      $exitCode = 1;\r\n" +
         "    }\r\n" +
         "    $exitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
@@ -181,7 +180,23 @@ public final class PowershellScript extends FileMonitoringTask {
         args.addAll(Arrays.asList(powershellArgs.split(" ")));
         args.addAll(Arrays.asList("-Command", cmd));
         
-        String scriptWrapper = String.format("[CmdletBinding()]\r\nparam()\r\n%s %s -File '%s';", powershellBinary, powershellArgs, c.getPowerShellScriptFile(ws).getRemote());
+        // Exception propagation does not occur in legacy PowerShell versions. This means that an exception thrown in an inner PowerShell process
+        // does not propagate to the outer process regardless of $ErrorActionPreference selection. The intent here is to run scripts in the current
+        // PowerShell session for legacy versions of PowerShell, and in a new PowerShell session for PowerShell 5+. A side effect of this is
+        // that when running the PowerShell step with older versions of PowerShell the output will be missing stream indicators before special stream outputs,
+        // such as VERBOSE: and DEBUG.
+        String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
+                                             "param()\r\n" +
+                                             "if ($PSVersionTable.PSVersion.Major -ge 5) {\r\n" +
+                                             "  & %s %s -File '%s';\r\n" +
+                                             "} else {\r\n" +
+                                             "  & '%s';\r\n" +
+                                             "}\r\n" +
+                                             "exit $LastExitCode", 
+                                             powershellBinary, 
+                                             powershellArgs, 
+                                             c.getPowerShellScriptFile(ws).getRemote(),
+                                             c.getPowerShellScriptFile(ws).getRemote());
                    
         if (launcher.isUnix()) {
             // There is no need to add a BOM with Open PowerShell
