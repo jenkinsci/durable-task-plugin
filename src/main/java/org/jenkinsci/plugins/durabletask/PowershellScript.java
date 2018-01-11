@@ -192,15 +192,18 @@ public final class PowershellScript extends FileMonitoringTask {
                                              "  exit $LASTEXITCODE;\r\n" + 
                                              "}", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
         
+        // Add an explicit exit to the end of the script so that exit codes are propagated
+        String scriptWithExit = script + "\r\nexit $LASTEXITCODE;";
+        
         if (launcher.isUnix()) {
             // There is no need to add a BOM with Open PowerShell
             c.getPowerShellHelperFile(ws).write(helperScript, "UTF-8");
-            c.getPowerShellScriptFile(ws).write(script, "UTF-8");
+            c.getPowerShellScriptFile(ws).write(scriptWithExit, "UTF-8");
             c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
         } else {
             // Write the Windows PowerShell scripts out with a UTF8 BOM
             writeWithBom(c.getPowerShellHelperFile(ws), helperScript);
-            writeWithBom(c.getPowerShellScriptFile(ws), script);
+            writeWithBom(c.getPowerShellScriptFile(ws), scriptWithExit);
             writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
         }
         
