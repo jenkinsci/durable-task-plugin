@@ -207,8 +207,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             return controlDir(ws).child("pid");
         }
 
-        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            Integer status = super.exitStatus(workspace, launcher);
+        @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
+            Integer status = super.exitStatus(workspace, launcher, listener);
             if (status != null) {
                 LOGGER.log(Level.FINE, "found exit code {0} in {1}", new Object[] {status, controlDir});
                 return status;
@@ -221,17 +221,18 @@ public final class BourneShellScript extends FileMonitoringTask {
                 lastCheck = now;
                 long currentTimestamp = getLogFile(workspace).lastModified();
                 if (currentTimestamp == 0) {
-                    LOGGER.log(Level.FINE, "apparently never started in {0}", controlDir);
+                    listener.getLogger().println("process apparently never started in " + controlDir);
                     return recordExitStatus(workspace, -2);
                 } else if (checkedTimestamp > 0) {
                     if (currentTimestamp < checkedTimestamp) {
-                        LOGGER.log(Level.WARNING, "apparent clock skew in {0}", controlDir);
+                        listener.getLogger().println("apparent clock skew in " + controlDir);
                     } else if (currentTimestamp < checkedTimestamp + TimeUnit.SECONDS.toMillis(HEARTBEAT_MINIMUM_DELTA)) {
                         FilePath pidFile = pidFile(workspace);
                         if (pidFile.exists()) {
-                            LOGGER.log(Level.FINE, "still have {0} so heartbeat checks unreliable; process may or may not be alive", pidFile);
+                            listener.getLogger().println("still have " + pidFile + " so heartbeat checks unreliable; process may or may not be alive");
                         } else {
-                            LOGGER.log(Level.FINE, "heartbeat touches apparently not running in {0}", controlDir);
+                            listener.getLogger().println("wrapper script does not seem to be touching the log file in " + controlDir);
+                            listener.getLogger().println("(JENKINS-48300: if on a laggy filesystem, consider -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=300)");
                             return recordExitStatus(workspace, -1);
                         }
                     }
