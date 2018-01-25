@@ -3,7 +3,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>3.0</version>
+        <version>3.2</version>
         <relativePath />
     </parent>
     <artifactId>durable-task</artifactId>
@@ -11,7 +11,7 @@
     <packaging>hpi</packaging>
     <name>Durable Task Plugin</name>
     <description>Library offering an extension point for processes which can run outside of Jenkins yet be monitored.</description>
-    <url>https://wiki.jenkins-ci.org/display/JENKINS/Durable+Task+Plugin</url>
+    <url>https://wiki.jenkins.io/display/JENKINS/Durable+Task+Plugin</url>
     <licenses>
         <license>
             <name>MIT License</name>
@@ -41,20 +41,20 @@
     <scm>
         <connection>scm:git:git://github.com/jenkinsci/${project.artifactId}-plugin.git</connection>
         <developerConnection>scm:git:git@github.com:jenkinsci/${project.artifactId}-plugin.git</developerConnection>
-        <url>http://github.com/jenkinsci/${project.artifactId}-plugin</url>
+        <url>https://github.com/jenkinsci/${project.artifactId}-plugin</url>
         <tag>HEAD</tag>
     </scm>
     <dependencies>
         <dependency>
             <groupId>org.jenkins-ci.test</groupId>
             <artifactId>docker-fixtures</artifactId>
-            <version>1.2</version>
+            <version>1.5</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-slaves</artifactId>
-            <version>1.22</version>
+            <version>1.25</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
