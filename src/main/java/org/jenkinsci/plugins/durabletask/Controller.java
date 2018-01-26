@@ -27,6 +27,7 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
+import hudson.model.TaskListener;
 import hudson.util.LogTaskListener;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -55,17 +56,27 @@ public abstract class Controller implements Serializable {
      * Checks whether the task has finished.
      * @param workspace the workspace in use
      * @param launcher a way to start processes
+     * @param logger a way to report special messages
      * @return an exit code (zero is successful), or null if the task appears to still be running
      */
-    public @CheckForNull Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-        if (Util.isOverridden(Controller.class, getClass(), "exitStatus", FilePath.class)) {
+    public @CheckForNull Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener logger) throws IOException, InterruptedException {
+        if (Util.isOverridden(Controller.class, getClass(), "exitStatus", FilePath.class, Launcher.class)) {
+            return exitStatus(workspace, launcher);
+        } else if (Util.isOverridden(Controller.class, getClass(), "exitStatus", FilePath.class)) {
             return exitStatus(workspace);
         } else {
-            throw new AbstractMethodError("implement exitStatus(FilePath, Launcher)");
+            throw new AbstractMethodError("implement exitStatus(FilePath, Launcher, TaskListener)");
         }
     }
 
-    /** @deprecated use {@link #exitStatus(FilePath, Launcher)} instead */
+    /** @deprecated use {@link #exitStatus(FilePath, Launcher, TaskListener)} instead */
+    @Deprecated
+    public @CheckForNull Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+        return exitStatus(workspace, launcher, TaskListener.NULL);
+    }
+
+    /** @deprecated use {@link #exitStatus(FilePath, Launcher, TaskListener)} instead */
+    @Deprecated
     public @CheckForNull Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
         return exitStatus(workspace, createLauncher(workspace));
     }

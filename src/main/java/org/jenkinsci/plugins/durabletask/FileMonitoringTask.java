@@ -33,11 +33,13 @@ import hudson.remoting.Channel;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
+import hudson.util.StreamTaskListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.io.StringWriter;
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
@@ -159,7 +161,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         // TODO would be more efficient to allow API to consolidate writeLog with exitStatus (save an RPC call)
-        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+        @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             if (status.exists()) {
                 try {
@@ -237,11 +239,12 @@ public abstract class FileMonitoringTask extends DurableTask {
             VirtualChannel channel = cd.getChannel();
             String node = (channel instanceof Channel) ? ((Channel) channel).getName() : null;
             String location = node != null ? cd.getRemote() + " on " + node : cd.getRemote();
-            Integer code = exitStatus(workspace, launcher);
+            StringWriter w = new StringWriter();
+            Integer code = exitStatus(workspace, launcher, new StreamTaskListener(w));
             if (code != null) {
-                return "completed process (code " + code + ") in " + location;
+                return w + "completed process (code " + code + ") in " + location;
             } else {
-                return "awaiting process completion in " + location;
+                return w + "awaiting process completion in " + location;
             }
         }
 
