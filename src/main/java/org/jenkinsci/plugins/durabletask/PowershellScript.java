@@ -82,92 +82,7 @@ public final class PowershellScript extends FileMonitoringTask {
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         }
-       
-        // By default PowerShell adds a byte order mark (BOM) to the beginning of a file when using Out-File with a unicode encoding such as UTF8.
-        // This causes the Jenkins output to contain bogus characters because Java does not handle the BOM characters by default.
-        // This code mimics Out-File, but does not write a BOM.  Hopefully PowerShell will provide a non-BOM option for writing files in future releases.
-        String helperScript = "function New-StreamWriter {\r\n" +
-        "[CmdletBinding()]\r\n" +
-        "param (\r\n" +
-        "  [Parameter(Mandatory=$true)] [string] $FilePath,\r\n" +
-        "  [Parameter(Mandatory=$true)] [System.Text.Encoding] $Encoding\r\n" +
-        ")\r\n" +
-        "  [string]$FullFilePath = [IO.Path]::GetFullPath( $FilePath );\r\n" +
-        "  [System.IO.StreamWriter]$writer = New-Object System.IO.StreamWriter( $FullFilePath, $true, $Encoding );\r\n" +
-        "  $writer.AutoFlush = $true;\r\n" +
-        "  return $writer;\r\n" +
-        "}\r\n" +
-        "\r\n" +
-        "function Out-FileNoBom {\r\n" +
-        "[CmdletBinding()]\r\n" +
-        "param(\r\n" +
-        "  [Parameter(Mandatory=$true, Position=0)][AllowNull()] [System.IO.StreamWriter] $Writer,\r\n" +
-        "  [Parameter(ValueFromPipeline = $true)]                [object] $InputObject\r\n" +
-        ")\r\n" +
-        "  Process {\r\n" +
-        "    if ($Writer) {\r\n" +
-        "        $Input | Out-String -Stream -Width 192 | ForEach-Object { $Writer.WriteLine( $_ ); }\r\n" +
-        "    } else {\r\n" +
-        "        $Input;\r\n" +
-        "    }\r\n" +
-        "  }\r\n" +
-        "}\r\n" +
-        "\r\n" +
-        "function Execute-AndWriteOutput {\r\n" +
-        "[CmdletBinding()]\r\n" +
-        "param(\r\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$MainScript,\r\n" +
-        "  [Parameter(Mandatory=$false)] [string]$OutputFile,\r\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$LogFile,\r\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$ResultFile,\r\n" +
-        "  [Parameter(Mandatory=$false)] [switch]$CaptureOutput\r\n" +
-        ")\r\n" +
-        "  try {\r\n" +
-        "    $errorCaught = $null;\r\n" +
-        "    [System.Text.Encoding] $encoding = New-Object System.Text.UTF8Encoding( $false );\r\n" +
-        "    [System.Console]::OutputEncoding = [System.Console]::InputEncoding = $encoding;\r\n" +
-        "    [System.IO.Directory]::SetCurrentDirectory( $PWD );\r\n" +
-        "    $null = New-Item $LogFile -ItemType File -Force;\r\n" +
-        "    [System.IO.StreamWriter] $LogWriter = New-StreamWriter -FilePath $LogFile -Encoding $encoding;\r\n" +
-        "    $OutputWriter = $null;\r\n" +
-        "    if ($CaptureOutput -eq $true) {\r\n" +
-        "      $null = New-Item $OutputFile -ItemType File -Force;\r\n" +
-        "      [System.IO.StreamWriter]$OutputWriter = New-StreamWriter -FilePath $OutputFile -Encoding $encoding;\r\n" +
-        "    }\r\n" +
-        "    & { & $MainScript | Out-FileNoBom -Writer $OutputWriter } *>&1 | Out-FileNoBom -Writer $LogWriter;\r\n" +
-        "  } catch {\r\n" +
-        "    $errorCaught = $_;\r\n" +
-        "    $errorCaught | Out-String -Width 192 | Out-FileNoBom -Writer $LogWriter;\r\n" +
-        "  } finally {\r\n" +
-        "    $exitCode = 0;\r\n" +
-        "    if ($LASTEXITCODE -ne $null) {\r\n" +
-        "      if ($LASTEXITCODE -eq 0 -and $errorCaught -ne $null) {\r\n" +
-        "        $exitCode = 1;\r\n" +
-        "      } else {\r\n" +
-        "        $exitCode = $LASTEXITCODE;\r\n" +
-        "      }\r\n" +
-        "    } elseif ($errorCaught -ne $null) {\r\n" +
-        "      $exitCode = 1;\r\n" +
-        "    }\r\n" +
-        "    $exitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\r\n" +
-        "    if ($CaptureOutput -eq $true -and !(Test-Path $OutputFile)) {\r\n" +
-        "      $null = New-Item $OutputFile -ItemType File -Force;\r\n" +
-        "    }\r\n" +
-        "    if (!(Test-Path $LogFile)) {\r\n" +
-        "      $null = New-Item $LogFile -ItemType File -Force;\r\n" +
-        "    }\r\n" +
-        "    if ($CaptureOutput -eq $true -and $OutputWriter -ne $null) {\r\n" +
-        "        $OutputWriter.Flush();\r\n" +
-        "        $OutputWriter.Dispose();\r\n" +
-        "    }\r\n" +
-        "    if ($LogWriter -ne $null) {\r\n" +
-        "        $LogWriter.Flush();\r\n" +
-        "        $LogWriter.Dispose();\r\n" +
-        "    }\r\n" +
-        "    exit $exitCode;\r\n" +
-        "  }\r\n" +
-        "}";
-        
+      
         String powershellBinary;
         String powershellArgs;
         if (launcher.isUnix()) {
@@ -195,14 +110,15 @@ public final class PowershellScript extends FileMonitoringTask {
         // Add an explicit exit to the end of the script so that exit codes are propagated
         String scriptWithExit = script + "\r\nexit $LASTEXITCODE;";
         
+        // Copy the helper script from the resources directory into the workspace
+        c.getPowerShellHelperFile(ws).copyFrom(getClass().getResource("powershellHelper.ps1"));
+        
         if (launcher.isUnix()) {
             // There is no need to add a BOM with Open PowerShell
-            c.getPowerShellHelperFile(ws).write(helperScript, "UTF-8");
             c.getPowerShellScriptFile(ws).write(scriptWithExit, "UTF-8");
             c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
         } else {
             // Write the Windows PowerShell scripts out with a UTF8 BOM
-            writeWithBom(c.getPowerShellHelperFile(ws), helperScript);
             writeWithBom(c.getPowerShellScriptFile(ws), scriptWithExit);
             writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
         }
