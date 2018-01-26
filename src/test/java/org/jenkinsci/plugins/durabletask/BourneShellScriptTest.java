@@ -82,12 +82,12 @@ public class BourneShellScriptTest {
     @Test
     public void smokeTest() throws Exception {
         Controller c = new BourneShellScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
     }
@@ -99,14 +99,14 @@ public class BourneShellScriptTest {
         Controller c = new BourneShellScript("trap 'echo got SIGCHLD' CHLD; trap 'echo got SIGTERM' TERM; trap 'echo exiting; exit 99' EXIT; sleep 999").launch(new EnvVars(), ws, launcher, listener);
         Thread.sleep(1000);
         c.stop(ws, launcher);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         String log = baos.toString();
         System.out.println(log);
-        assertEquals(99, c.exitStatus(ws, launcher).intValue());
+        assertEquals(99, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(log.contains("sleep 999"));
         assertTrue(log.contains("got SIG"));
         c.cleanup(ws);
@@ -117,37 +117,37 @@ public class BourneShellScriptTest {
         Thread.sleep(1000);
         launcher.kill(Collections.singletonMap("killemall", "true"));
         c.getResultFile(ws).delete();
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         String log = baos.toString();
         System.out.println(log);
-        assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher));
+        assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher, listener));
         assertTrue(log.contains("sleep 999"));
         c.cleanup(ws);
     }
 
     @Test public void justSlow() throws Exception {
         Controller c = new BourneShellScript("sleep 60").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         c.writeLog(ws, System.out);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
     }
 
     @Issue("JENKINS-27152")
     @Test public void cleanWorkspace() throws Exception {
         Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("---. .. stuff---"));
         c.cleanup(ws);
     }
@@ -157,12 +157,12 @@ public class BourneShellScriptTest {
         DurableTask task = new BourneShellScript("echo 42");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("+ echo 42"));
         assertEquals("42\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
@@ -171,24 +171,24 @@ public class BourneShellScriptTest {
     @Issue("JENKINS-40734")
     @Test public void envWithShellChar() throws Exception {
         Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
         c.cleanup(ws);
     }
 
     @Test public void shebang() throws Exception {
         Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, new TeeOutputStream(baos, System.out));
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("Hello, world!"));
         c.cleanup(ws);
     }
@@ -209,12 +209,12 @@ public class BourneShellScriptTest {
         FilePath dockerWS = s.getWorkspaceRoot();
         Launcher dockerLauncher = s.createLauncher(listener);
         Controller c = new BourneShellScript("echo hello world; sleep 10").launch(new EnvVars(), dockerWS, dockerLauncher, listener);
-        while (c.exitStatus(dockerWS, dockerLauncher) == null) {
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(dockerWS, baos);
-        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher).intValue());
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(dockerWS);
         do {

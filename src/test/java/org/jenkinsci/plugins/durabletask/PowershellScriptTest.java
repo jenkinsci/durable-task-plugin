@@ -98,7 +98,7 @@ public class PowershellScriptTest {
 
     @Test public void explicitExit() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Hello, World!\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -110,7 +110,7 @@ public class PowershellScriptTest {
     
     @Test public void implicitExit() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Success!\";").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -122,7 +122,7 @@ public class PowershellScriptTest {
     
     @Test public void implicitError() throws Exception {
         Controller c = new PowershellScript("MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -134,7 +134,7 @@ public class PowershellScriptTest {
     
     @Test public void implicitErrorNegativeTest() throws Exception {
         Controller c = new PowershellScript("$ErrorActionPreference = 'SilentlyContinue'; MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         assertTrue(c.exitStatus(ws, launcher).intValue() == 0);
@@ -145,12 +145,12 @@ public class PowershellScriptTest {
         DurableTask task = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
         assertThat(baos.toString(), containsString("explicit error"));
         assertEquals("Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
@@ -160,7 +160,7 @@ public class PowershellScriptTest {
         DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; Write-Verbose \"Hello, World!\"");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
@@ -171,7 +171,7 @@ public class PowershellScriptTest {
     @Test public void spacesInWorkspace() throws Exception {
         final FilePath newWs = new FilePath(ws, "subdirectory with spaces");
         Controller c = new PowershellScript("Write-Host 'Running in a workspace with spaces in the path'").launch(new EnvVars(), newWs, launcher, listener);
-        while (c.exitStatus(newWs, launcher) == null) {
+        while (c.exitStatus(newWs, launcher, listener) == null) {
             Thread.sleep(100);
         }
         assertEquals(0, c.exitStatus(newWs, launcher).intValue());
@@ -180,22 +180,22 @@ public class PowershellScriptTest {
 
     @Test public void echoEnvVar() throws Exception {
         Controller c = new PowershellScript("echo envvar=$env:MYVAR").launch(new EnvVars("MYVAR", "power$hell"), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("envvar=power$hell"));
         c.cleanup(ws);
     }
     
     @Test public void unicodeChars() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Helló, Wõrld ®\";").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-       ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
         String log = baos.toString("UTF-8");
