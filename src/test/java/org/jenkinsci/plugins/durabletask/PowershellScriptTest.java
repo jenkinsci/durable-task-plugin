@@ -66,10 +66,13 @@ public class PowershellScriptTest {
         String pathSeparator = properties.getProperty("path.separator");
         String[] paths = System.getenv("PATH").split(pathSeparator);
         boolean powershellExists = false;
-        String cmd = launcher.isUnix()?"pwsh":"powershell.exe";
+        // Note: This prevents this set of tests from running on PowerShell core unless a symlink is created that maps 'powershell' to 'pwsh' on *nix systems
+        String cmd = "powershell";
         for (String p : paths) {
-            File f = new File(p, cmd);
-            if (f.exists()) {
+            // If running on *nix then the binary does not have an extension.  Check for both variants to ensure *nix and windows+cygwin are both supported.
+            File withoutExtension = new File(p, cmd);
+            File withExtension = new File(p, cmd + ".exe");
+            if (withoutExtension.exists() || withExtension.exists()) {
                 powershellExists = true;
                 break;
             }

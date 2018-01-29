@@ -83,13 +83,12 @@ public final class PowershellScript extends FileMonitoringTask {
                 quote(c.getResultFile(ws)));
         }
       
-        String powershellBinary;
+        // Note: PowerShell core is now named pwsh. Workaround this issue on *nix systems by creating a symlink that maps 'powershell' to 'pwsh'.
+        String powershellBinary = "powershell";
         String powershellArgs;
         if (launcher.isUnix()) {
-            powershellBinary = "pwsh";
             powershellArgs = "-NoProfile -NonInteractive";
         } else {
-            powershellBinary = "powershell.exe";
             powershellArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass";
         }
         args.add(powershellBinary);
