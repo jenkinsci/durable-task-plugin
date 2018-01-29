@@ -69,85 +69,59 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String cmd;
         if (capturingOutput) {
-            cmd = String.format(". \"%s\"; Execute-AndWriteOutput -MainScript \"%s\" -OutputFile \"%s\" -LogFile \"%s\" -ResultFile \"%s\" -CaptureOutput;", 
+            cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -OutputFile '%s' -LogFile '%s' -ResultFile '%s' -CaptureOutput;", 
                 quote(c.getPowerShellHelperFile(ws)),
                 quote(c.getPowerShellWrapperFile(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         } else {
-            cmd = String.format(". \"%s\"; Execute-AndWriteOutput -MainScript \"%s\" -LogFile \"%s\" -ResultFile \"%s\";",
+            cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -LogFile '%s' -ResultFile '%s';",
                 quote(c.getPowerShellHelperFile(ws)),
                 quote(c.getPowerShellWrapperFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         }
-       
-        // By default PowerShell adds a byte order mark (BOM) to the beginning of a file when using Out-File with a unicode encoding such as UTF8.
-        // This causes the Jenkins output to contain bogus characters because Java does not handle the BOM characters by default.
-        // This code mimics Out-File, but does not write a BOM.  Hopefully PowerShell will provide a non-BOM option for writing files in future releases.
-        String helperScript = "Function Out-FileNoBom {\n" +
-        "[CmdletBinding()]\n" +
-        "param(\n" +
-        "  [Parameter(Mandatory=$true, Position=0)] [string] $FilePath,\n" +
-        "  [Parameter(ValueFromPipeline=$true)] $InputObject\n" +
-        ")\n" +
-        "  $out = New-Object IO.StreamWriter $FilePath, $false\n" +
-        "  try {\n" +
-        "    $Input | Out-String -Stream | % { $out.WriteLine($_) }\n" +
-        "  } finally {\n" +
-        "    $out.Dispose()\n" +
-        "  }\n" +
-        "}\n" +
-        "Function Execute-AndWriteOutput {\n" +
-        "[CmdletBinding()]\n" +
-        "param(\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$MainScript,\n" +
-        "  [Parameter(Mandatory=$false)] [string]$OutputFile,\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$LogFile,\n" +
-        "  [Parameter(Mandatory=$true)]  [string]$ResultFile,\n" +
-        "  [Parameter(Mandatory=$false)] [switch]$CaptureOutput\n" +
-        ")\n" +
-        "  if ($CaptureOutput -eq $true) {\n" +
-        "      if ($PSVersionTable.PSVersion.Major -ge 5) {\n" +
-        "          $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 6>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
-        "      } else {\n" +
-        "          $(& $MainScript | Out-FileNoBom -FilePath $OutputFile) 2>&1 3>&1 4>&1 5>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
-        "      }\n" +
-        "  } else {\n" +
-        "      & $MainScript *>&1 | Out-FileNoBom -FilePath $LogFile; $LastExitCode | Out-File -FilePath $ResultFile -Encoding ASCII;\n" +
-        "  }\n" +
-        "}";
-        
-        // Execute the script, and catch any errors in order to properly set the jenkins build status. $LastExitCode cannot be solely responsible for determining build status because
-        // there are several instances in which it is not set, e.g. thrown exceptions, and errors that aren't caused by native executables.
-        String wrapperScriptContent = "try {\r\n" + 
-        "  & '" + quote(c.getPowerShellScriptFile(ws)) + "'\r\n" + 
-        "} catch {\r\n" + 
-        "  Write-Error $_;" + 
-        "  exit 1;\r\n" + 
-        "} finally {\r\n" +
-        "  if ($LastExitCode -ne $null) {\r\n" + 
-        "    exit $LastExitCode;\r\n" +
-        "  } elseif ($error.Count -gt 0 -or !$?) {\r\n" + 
-        "    exit 1;\r\n" +
-        "  } else {\r\n" +
-        "    exit 0;\r\n" +
-        "  }\r\n" +
-        "}";
-                   
-        // Write the PowerShell scripts out with a UTF8 BOM
-        writeWithBom(c.getPowerShellHelperFile(ws), helperScript);
-        writeWithBom(c.getPowerShellScriptFile(ws), script);
-        writeWithBom(c.getPowerShellWrapperFile(ws), wrapperScriptContent);
-
+      
+        // Note: PowerShell core is now named pwsh. Workaround this issue on *nix systems by creating a symlink that maps 'powershell' to 'pwsh'.
+        String powershellBinary = "powershell";
+        String powershellArgs;
         if (launcher.isUnix()) {
-            // Open-Powershell does not support ExecutionPolicy
-            args.addAll(Arrays.asList("powershell", "-NonInteractive", "-Command", cmd));
+            powershellArgs = "-NoProfile -NonInteractive";
         } else {
-            args.addAll(Arrays.asList("powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", cmd));    
+            powershellArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass";
         }
-
+        args.add(powershellBinary);
+        args.addAll(Arrays.asList(powershellArgs.split(" ")));
+        args.addAll(Arrays.asList("-Command", cmd));
+        
+        // Exception propagation does not occur in legacy PowerShell versions. This means that an exception thrown in an inner PowerShell process
+        // does not propagate to the outer process regardless of $ErrorActionPreference selection. This ensures the exit code is non-zero if an error occurs regardless of PowerShell version.
+        String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
+                                             "param()\r\n" +
+                                             "& %s %s -File '%s';\r\n" +
+                                             "if ($Error) {\r\n" +
+                                             "  exit 1;\r\n" +
+                                             "} else {\r\n" +
+                                             "  exit $LASTEXITCODE;\r\n" + 
+                                             "}", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
+        
+        // Add an explicit exit to the end of the script so that exit codes are propagated
+        String scriptWithExit = script + "\r\nexit $LASTEXITCODE;";
+        
+        // Copy the helper script from the resources directory into the workspace
+        c.getPowerShellHelperFile(ws).copyFrom(getClass().getResource("powershellHelper.ps1"));
+        
+        if (launcher.isUnix()) {
+            // There is no need to add a BOM with Open PowerShell
+            c.getPowerShellScriptFile(ws).write(scriptWithExit, "UTF-8");
+            c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
+        } else {
+            // Write the Windows PowerShell scripts out with a UTF8 BOM
+            writeWithBom(c.getPowerShellScriptFile(ws), scriptWithExit);
+            writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
+        }
+        
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+(\\\\|/)", "") + "] Running PowerShell script");
         ps.readStdout().readStderr();
@@ -157,7 +131,7 @@ public final class PowershellScript extends FileMonitoringTask {
     }
     
     private static String quote(FilePath f) {
-        return f.getRemote().replace("$", "`$");
+        return f.getRemote().replace("'", "''");
     }
     
     // In order for PowerShell to properly read a script that contains unicode characters the script should have a BOM, but there is no built in support for
@@ -179,12 +153,12 @@ public final class PowershellScript extends FileMonitoringTask {
             return controlDir(ws).child("powershellScript.ps1");
         }
         
-        public FilePath getPowerShellWrapperFile(FilePath ws) throws IOException, InterruptedException {
-            return controlDir(ws).child("powershellWrapper.ps1");
-        }
-        
         public FilePath getPowerShellHelperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellHelper.ps1");
+        }
+        
+        public FilePath getPowerShellWrapperFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("powershellWrapper.ps1");
         }
 
         private static final long serialVersionUID = 1L;

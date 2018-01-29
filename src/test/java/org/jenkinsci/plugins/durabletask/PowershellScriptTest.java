@@ -56,7 +56,8 @@ public class PowershellScriptTest {
     private StreamTaskListener listener;
     private FilePath ws;
     private Launcher launcher;
-
+    private int psVersion;
+    
     @Before public void vars() throws IOException, InterruptedException {
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
@@ -65,10 +66,13 @@ public class PowershellScriptTest {
         String pathSeparator = properties.getProperty("path.separator");
         String[] paths = System.getenv("PATH").split(pathSeparator);
         boolean powershellExists = false;
-        String cmd = launcher.isUnix()?"powershell":"powershell.exe";
+        // Note: This prevents this set of tests from running on PowerShell core unless a symlink is created that maps 'powershell' to 'pwsh' on *nix systems
+        String cmd = "powershell";
         for (String p : paths) {
-            File f = new File(p, cmd);
-            if (f.exists()) {
+            // If running on *nix then the binary does not have an extension.  Check for both variants to ensure *nix and windows+cygwin are both supported.
+            File withoutExtension = new File(p, cmd);
+            File withExtension = new File(p, cmd + ".exe");
+            if (withoutExtension.exists() || withExtension.exists()) {
                 powershellExists = true;
                 break;
             }
@@ -81,12 +85,11 @@ public class PowershellScriptTest {
             if (!launcher.isUnix()) {
                 args.addAll(Arrays.asList("-ExecutionPolicy", "Bypass"));
             }
-            args.add("$PSVersionTable.PSVersion.Major");
+            args.addAll(Arrays.asList("-Command", "& {Write-Output $PSVersionTable.PSVersion.Major}"));
             Launcher.ProcStarter ps = launcher.launch().cmds(args).quiet(true);
             ps.readStdout();
             Proc proc = ps.start();
             String psVersionStr = IOUtils.toString(proc.getStdout());
-            int psVersion;
             try {
                 psVersion = Integer.parseInt(psVersionStr.trim());
             } catch (NumberFormatException x) {
@@ -98,44 +101,46 @@ public class PowershellScriptTest {
 
     @Test public void explicitExit() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Hello, World!\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
         while (c.exitStatus(ws, launcher, listener) == null) {
-            c.writeLog(ws, tos);
             Thread.sleep(100);
         }
-        c.writeLog(ws, tos);
-        assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher, listener));
-        String log = baos.toString();
-        assertTrue(log, log.contains("Hello, World!"));
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher));
+        assertThat(baos.toString(), containsString("Hello, World!"));
         c.cleanup(ws);
     }
     
     @Test public void implicitExit() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Success!\";").launch(new EnvVars(), ws, launcher, listener);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
         while (c.exitStatus(ws, launcher, listener) == null) {
-            c.writeLog(ws, tos);
             Thread.sleep(100);
         }
-        c.writeLog(ws, tos);
-        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, listener));
-        String log = baos.toString();
-        assertTrue(log, log.contains("Success!"));
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
+        assertThat(baos.toString(), containsString("Success!"));
         c.cleanup(ws);
     }
     
     @Test public void implicitError() throws Exception {
         Controller c = new PowershellScript("MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
         while (c.exitStatus(ws, launcher, listener) == null) {
-            c.writeLog(ws, tos);
             Thread.sleep(100);
         }
-        c.writeLog(ws, tos);
-        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
+        assertThat(baos.toString(), containsString("MyBogus-Cmdlet"));
+        c.cleanup(ws);
+    }
+    
+    @Test public void implicitErrorNegativeTest() throws Exception {
+        Controller c = new PowershellScript("$ErrorActionPreference = 'SilentlyContinue'; MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        assertTrue(c.exitStatus(ws, launcher).intValue() == 0);
         c.cleanup(ws);
     }
     
@@ -150,6 +155,7 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
         assertThat(baos.toString(), containsString("explicit error"));
+        assertEquals("Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
     }
     
@@ -160,10 +166,18 @@ public class PowershellScriptTest {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("Hello, World!"));
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals("VERBOSE: Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        c.cleanup(ws);
+    }
+
+    @Test public void spacesInWorkspace() throws Exception {
+        final FilePath newWs = new FilePath(ws, "subdirectory with spaces");
+        Controller c = new PowershellScript("Write-Host 'Running in a workspace with spaces in the path'").launch(new EnvVars(), newWs, launcher, listener);
+        while (c.exitStatus(newWs, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        assertEquals(0, c.exitStatus(newWs, launcher).intValue());
         c.cleanup(ws);
     }
 
@@ -181,14 +195,12 @@ public class PowershellScriptTest {
     
     @Test public void unicodeChars() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Helló, Wõrld ®\";").launch(new EnvVars(), ws, launcher, listener);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
         while (c.exitStatus(ws, launcher, listener) == null) {
-            c.writeLog(ws, tos);
             Thread.sleep(100);
         }
-        c.writeLog(ws, tos);
-        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, listener));
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
         String log = baos.toString("UTF-8");
         assertTrue(log, log.contains("Helló, Wõrld ®"));
         c.cleanup(ws);
