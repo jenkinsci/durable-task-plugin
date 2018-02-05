@@ -39,6 +39,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
@@ -49,10 +52,30 @@ import org.kohsuke.stapler.DataBoundConstructor;
  */
 public final class BourneShellScript extends FileMonitoringTask {
 
+    private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
+
+    private static enum OsType {DARWIN, UNIX, WINDOWS}
+
     /** Number of times we will show launch diagnostics in a newly encountered workspace before going mute to save resources. */
-    private static /* not final */ int NOVEL_WORKSPACE_DIAGNOSTICS_COUNT = Integer.getInteger(BourneShellScript.class.getName() + ".NOVEL_WORKSPACE_DIAGNOSTICS_COUNT", 10);
-    /** Number of seconds we will wait for a controller script to be launched before assuming the launch failed. */
-    private static /* not final */ int LAUNCH_FAILURE_TIMEOUT = Integer.getInteger(BourneShellScript.class.getName() + ".LAUNCH_FAILURE_TIMEOUT", 15);
+    @SuppressWarnings("FieldMayBeFinal")
+    // TODO use SystemProperties if and when unrestricted
+    private static int NOVEL_WORKSPACE_DIAGNOSTICS_COUNT = Integer.getInteger(BourneShellScript.class.getName() + ".NOVEL_WORKSPACE_DIAGNOSTICS_COUNT", 10);
+
+    /**
+     * Seconds between heartbeat checks, where we check to see if
+     * {@code jenkins-log.txt} is still being modified.
+     */
+    @SuppressWarnings("FieldMayBeFinal")
+    private static int HEARTBEAT_CHECK_INTERVAL = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_CHECK_INTERVAL", 15);
+
+    /**
+     * Minimum timestamp difference on {@code jenkins-log.txt} that is
+     * considered an actual modification. Theoretically could be zero (if
+     * {@code <} became {@code <=}, else infinitesimal positive) but on some
+     * platforms file timestamps are not that precise.
+     */
+    @SuppressWarnings("FieldMayBeFinal")
+    private static int HEARTBEAT_MINIMUM_DELTA = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_MINIMUM_DELTA", 2);
 
     private final @Nonnull String script;
     private boolean capturingOutput;
@@ -89,7 +112,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         FilePath shf = c.getScriptFile(ws);
 
-        String s = script;
+        String s = script, scriptPath;
         final Jenkins jenkins = Jenkins.getInstance();
         if (!s.startsWith("#!") && jenkins != null) {
             String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
@@ -98,35 +121,51 @@ public final class BourneShellScript extends FileMonitoringTask {
         shf.write(s, "UTF-8");
         shf.chmod(0755);
 
+        scriptPath = shf.getRemote();
+        List<String> args = new ArrayList<>();
+
+        OsType os = ws.act(new getOsType());
+
+        if (os != OsType.DARWIN) { // JENKINS-25848
+            args.add("nohup");
+        }
+        if (os == OsType.WINDOWS) { // JENKINS-40255
+            scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
+        }
+
         envVars.put(cookieVariable, "please-do-not-kill-me");
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         String cmd;
+        FilePath logFile = c.getLogFile(ws);
+        FilePath resultFile = c.getResultFile(ws);
+        FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
-            cmd = String.format("echo $$ > '%s'; jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s'",
-                c.pidFile(ws),
+            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s'; wait",
+                controlDir,
+                resultFile,
+                logFile,
                 cookieValue,
                 cookieVariable,
-                shf,
+                scriptPath,
                 c.getOutputFile(ws),
-                c.getLogFile(ws),
-                c.getResultFile(ws));
+                logFile,
+                resultFile);
         } else {
-            cmd = String.format("echo $$ > '%s'; jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s'",
-                c.pidFile(ws),
+            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s'; wait",
+                controlDir,
+                resultFile,
+                logFile,
                 cookieValue,
                 cookieVariable,
-                shf,
-                c.getLogFile(ws),
-                c.getResultFile(ws));
+                scriptPath,
+                logFile,
+                resultFile);
         }
         cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
-        List<String> args = new ArrayList<String>();
-        if (!ws.act(new DarwinCheck())) { // JENKINS-25848
-            args.add("nohup");
-        }
         args.addAll(Arrays.asList("sh", "-c", cmd));
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(envVars).pwd(ws).quiet(true);
+        LOGGER.log(Level.FINE, "launching {0}", args);
+        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
         boolean novel;
         synchronized (encounteredPaths) {
@@ -150,8 +189,10 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     /*package*/ static final class ShellController extends FileMonitoringController {
 
-        private int pid;
-        private final long startTime = System.currentTimeMillis();
+        /** Last time we checked the timestamp, in nanoseconds on the master. */
+        private transient long lastCheck;
+        /** Last-observed modification time of {@link getLogFile} on remote computer, in milliseconds. */
+        private transient long checkedTimestamp;
 
         private ShellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
@@ -161,39 +202,51 @@ public final class BourneShellScript extends FileMonitoringTask {
             return controlDir(ws).child("script.sh");
         }
 
-        FilePath pidFile(FilePath ws) throws IOException, InterruptedException {
+        /** Only here for compatibility. */
+        private FilePath pidFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("pid");
         }
 
-        private synchronized int pid(FilePath ws) throws IOException, InterruptedException {
-            if (pid == 0) {
-                FilePath pidFile = pidFile(ws);
-                if (pidFile.exists()) {
-                    try {
-                        pid = Integer.parseInt(pidFile.readToString().trim());
-                    } catch (NumberFormatException x) {
-                        throw new IOException("corrupted content in " + pidFile + ": " + x, x);
+        @Override protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
+            Integer status = super.exitStatus(workspace, listener);
+            if (status != null) {
+                LOGGER.log(Level.FINE, "found exit code {0} in {1}", new Object[] {status, controlDir});
+                return status;
+            }
+            long now = System.nanoTime();
+            if (lastCheck == 0) {
+                LOGGER.log(Level.FINE, "starting check in {0}", controlDir);
+                lastCheck = now;
+            } else if (now > lastCheck + TimeUnit.SECONDS.toNanos(HEARTBEAT_CHECK_INTERVAL)) {
+                lastCheck = now;
+                long currentTimestamp = getLogFile(workspace).lastModified();
+                if (currentTimestamp == 0) {
+                    listener.getLogger().println("process apparently never started in " + controlDir);
+                    return recordExitStatus(workspace, -2);
+                } else if (checkedTimestamp > 0) {
+                    if (currentTimestamp < checkedTimestamp) {
+                        listener.getLogger().println("apparent clock skew in " + controlDir);
+                    } else if (currentTimestamp < checkedTimestamp + TimeUnit.SECONDS.toMillis(HEARTBEAT_MINIMUM_DELTA)) {
+                        FilePath pidFile = pidFile(workspace);
+                        if (pidFile.exists()) {
+                            listener.getLogger().println("still have " + pidFile + " so heartbeat checks unreliable; process may or may not be alive");
+                        } else {
+                            listener.getLogger().println("wrapper script does not seem to be touching the log file in " + controlDir);
+                            listener.getLogger().println("(JENKINS-48300: if on a laggy filesystem, consider -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=300)");
+                            return recordExitStatus(workspace, -1);
+                        }
                     }
+                } else {
+                    LOGGER.log(Level.FINE, "seeing recent log file modifications in {0}", controlDir);
                 }
+                checkedTimestamp = currentTimestamp;
             }
-            return pid;
+            return null;
         }
 
-        @Override protected Integer specialExitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            int _pid = pid(workspace);
-            if (_pid > 0 && !ProcessLiveness.isAlive(workspace.getChannel(), _pid, launcher)) {
-                // it looks like the process has disappeared; use fake exit code to distinguish from 0 (success) and 1+ (observed failure)
-                // TODO would be better to have exitStatus accept a TaskListener so we could print an informative message
-                return -1;
-            } else if (_pid == 0 && /* compatibility */ startTime > 0 && System.currentTimeMillis() - startTime > 1000 * LAUNCH_FAILURE_TIMEOUT) {
-                return -2; // apparently never started
-            } else {
-                return null;
-            }
-        }
-
-        @Override public String getDiagnostics(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            return super.getDiagnostics(workspace, launcher) + " (pid: " + pid + ")";
+        private int recordExitStatus(FilePath workspace, int code) throws IOException, InterruptedException {
+            getResultFile(workspace).write(Integer.toString(code), null);
+            return code;
         }
 
         private static final long serialVersionUID = 1L;
@@ -207,10 +260,16 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     }
 
-    private static final class DarwinCheck extends MasterToSlaveCallable<Boolean,RuntimeException> {
-        @Override public Boolean call() throws RuntimeException {
-            return Platform.isDarwin();
+    private static final class getOsType extends MasterToSlaveCallable<OsType,RuntimeException> {
+        @Override public OsType call() throws RuntimeException {
+            if (Platform.isDarwin()) {
+              return OsType.DARWIN;
+            } else if (Platform.current() == Platform.WINDOWS) {
+              return OsType.WINDOWS;
+            } else {
+              return OsType.UNIX; // Default Value
+            }
         }
+        private static final long serialVersionUID = 1L;
     }
-
 }

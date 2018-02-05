@@ -27,6 +27,7 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
+import hudson.model.TaskListener;
 import hudson.util.LogTaskListener;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -49,9 +50,10 @@ public abstract class Controller implements Serializable {
      * though it is advisable to still call it occasionally to verify that the process is still running.
      * @param workspace the workspace in use
      * @param handler a remotable callback
+     * @param listener a remotable destination for messages
      * @throws UnsupportedOperationException when this mode is not available, so you must fall back to polling {@link #writeLog} and {@link #exitStatus(FilePath, Launcher)}
      */
-    public void watch(@Nonnull FilePath workspace, @Nonnull Handler handler) throws IOException, InterruptedException, UnsupportedOperationException {
+    public void watch(@Nonnull FilePath workspace, @Nonnull Handler handler, @Nonnull TaskListener listener) throws IOException, InterruptedException, UnsupportedOperationException {
         throw new UnsupportedOperationException("Asynchronous mode is not implemented in " + getClass().getName());
     }
 
@@ -67,18 +69,28 @@ public abstract class Controller implements Serializable {
     /**
      * Checks whether the task has finished.
      * @param workspace the workspace in use
-     * @param launcher a way to start processes
+     * @param launcher a way to start processes (currently unused)
+     * @param logger a way to report special messages
      * @return an exit code (zero is successful), or null if the task appears to still be running
      */
-    public @CheckForNull Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-        if (Util.isOverridden(Controller.class, getClass(), "exitStatus", FilePath.class)) {
+    public @CheckForNull Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener logger) throws IOException, InterruptedException {
+        if (Util.isOverridden(Controller.class, getClass(), "exitStatus", FilePath.class, Launcher.class)) {
+            return exitStatus(workspace, launcher);
+        } else if (Util.isOverridden(Controller.class, getClass(), "exitStatus", FilePath.class)) {
             return exitStatus(workspace);
         } else {
-            throw new AbstractMethodError("implement exitStatus(FilePath, Launcher)");
+            throw new AbstractMethodError("implement exitStatus(FilePath, Launcher, TaskListener)");
         }
     }
 
-    /** @deprecated use {@link #exitStatus(FilePath, Launcher)} instead */
+    /** @deprecated use {@link #exitStatus(FilePath, Launcher, TaskListener)} instead */
+    @Deprecated
+    public @CheckForNull Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+        return exitStatus(workspace, launcher, TaskListener.NULL);
+    }
+
+    /** @deprecated use {@link #exitStatus(FilePath, Launcher, TaskListener)} instead */
+    @Deprecated
     public @CheckForNull Integer exitStatus(FilePath workspace) throws IOException, InterruptedException {
         return exitStatus(workspace, createLauncher(workspace));
     }
@@ -88,7 +100,7 @@ public abstract class Controller implements Serializable {
      * Intended for use after {@link #exitStatus(FilePath, Launcher)} has returned a non-null status.
      * The result is undefined if {@link DurableTask#captureOutput} was not called before launch; generally an {@link IOException} will result.
      * @param workspace the workspace in use
-     * @param launcher a way to start processes
+     * @param launcher a way to start processes (currently unused)
      * @return the output of the process as raw bytes (may be empty but not null)
      */
     public @Nonnull byte[] getOutput(@Nonnull FilePath workspace, @Nonnull Launcher launcher) throws IOException, InterruptedException {

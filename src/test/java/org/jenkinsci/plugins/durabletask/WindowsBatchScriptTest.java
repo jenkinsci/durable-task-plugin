@@ -31,6 +31,7 @@ import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import org.apache.commons.io.output.TeeOutputStream;
+import static org.hamcrest.Matchers.containsString;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Assume;
@@ -75,12 +76,12 @@ public class WindowsBatchScriptTest {
 
     private void testWithPath(String path) throws Exception {
         Controller c = new WindowsBatchScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
+        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, listener));
         String log = baos.toString();
         System.err.print(log);
         assertTrue(log, log.contains("hello world"));
@@ -92,12 +93,12 @@ public class WindowsBatchScriptTest {
         Controller c = new WindowsBatchScript("echo hello world\r\nexit 1").launch(new EnvVars(), ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream tos = new TeeOutputStream(baos, System.err);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             c.writeLog(ws, tos);
             Thread.sleep(100);
         }
         c.writeLog(ws, tos);
-        assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher));
+        assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher, listener));
         String log = baos.toString();
         assertTrue(log, log.contains("hello world"));
         c.cleanup(ws);
@@ -108,13 +109,26 @@ public class WindowsBatchScriptTest {
         DurableTask task = new WindowsBatchScript("@echo 42"); // http://stackoverflow.com/a/8486061/12916
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher) == null) {
+        while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertEquals("42\r\n", new String(c.getOutput(ws, launcher)));
+        c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-40734")
+    @Test public void envWithShellChar() throws Exception {
+        Controller c = new WindowsBatchScript("echo value=%MYNEWVAR%").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws,baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("value=foo$$bar"));
         c.cleanup(ws);
     }
 

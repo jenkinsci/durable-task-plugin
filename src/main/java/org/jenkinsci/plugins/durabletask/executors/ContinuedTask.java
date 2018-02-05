@@ -52,23 +52,31 @@ public interface ContinuedTask extends Queue.Task {
     @Restricted(DoNotUse.class) // implementation
     @Extension class Scheduler extends QueueTaskDispatcher {
 
+        private static final Logger LOGGER = Logger.getLogger(ContinuedTask.class.getName());
+
         private static boolean isContinued(Queue.Task task) {
             return task instanceof ContinuedTask && ((ContinuedTask) task).isContinued();
         }
 
         @Override public CauseOfBlockage canTake(Node node, Queue.BuildableItem item) {
             if (isContinued(item.task)) {
+                LOGGER.log(Level.FINER, "{0} is a continued task, so we are not blocking it", item.task);
                 return null;
             }
             for (Queue.BuildableItem other : Queue.getInstance().getBuildableItems()) {
                 if (isContinued(other.task)) {
                     Label label = other.task.getAssignedLabel();
                     if (label == null || label.matches(node)) { // conservative; might actually go to a different node
-                        Logger.getLogger(ContinuedTask.class.getName()).log(Level.FINE, "blocking {0} in favor of {1}", new Object[] {item.task, other.task});
+                        LOGGER.log(Level.FINE, "blocking {0} in favor of {1}", new Object[] {item.task, other.task});
                         return new HoldOnPlease(other.task);
+                    } else {
+                        LOGGER.log(Level.FINER, "{0}’s label {1} does not match {2}", new Object[] {other.task, label, node});
                     }
+                } else {
+                    LOGGER.log(Level.FINER, "{0} is not continued, so it would not block {1}", new Object[] {other.task, item.task});
                 }
             }
+            LOGGER.log(Level.FINER, "no reason to block {0}", item.task);
             return null;
         }
 

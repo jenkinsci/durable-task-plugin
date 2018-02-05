@@ -35,6 +35,7 @@ import hudson.remoting.NamingThreadFactory;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
+import hudson.util.StreamTaskListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -47,14 +48,16 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.io.StringWriter;
 import java.util.Collections;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckForNull;
 import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.input.CountingInputStream;
@@ -96,13 +99,24 @@ public abstract class FileMonitoringTask extends DurableTask {
     }
 
     /**
+     * JENKINS-40734: blocks the substitutions of {@link EnvVars#overrideExpandingAll} done by {@link Launcher}.
+     */
+    protected static Map<String, String> escape(EnvVars envVars) {
+        Map<String, String> m = new TreeMap<String, String>();
+        for (Map.Entry<String, String> entry : envVars.entrySet()) {
+            m.put(entry.getKey(), entry.getValue().replace("$", "$$"));
+        }
+        return m;
+    }
+
+    /**
      * Tails a log file and watches for an exit status file.
      * Must be remotable so that {@link #watch} can transfer the implementation.
      */
     protected static class FileMonitoringController extends Controller {
 
         /** Absolute path of {@link #controlDir(FilePath)}. */
-        private String controlDir;
+        String controlDir;
 
         /**
          * @deprecated used only in pre-1.8
@@ -164,58 +178,31 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
-        @Override public Integer exitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            FilePath status = getResultFile(workspace);
-            if (status.exists()) {
-                return readStatus(status);
-            } else {
-                Integer code = specialExitStatus(workspace, launcher);
-                if (code != null) {
-                    // recheck normal file to defend against race conditions
-                    if (status.exists()) {
-                        return readStatus(status);
-                    }
-                    // Make sure that an exitStatus with a decorated launcher will ultimately result in Handler.exited being called
-                    // and the task idled, even if the result file was never created normally:
-                    status.write(Integer.toString(code), null);
-                }
-                return code;
-            }
+        @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
+            return exitStatus(workspace, listener);
         }
 
-        /** Like {@link #exitStatus} but when we cannot rely on a {@link Launcher}. */
-        Integer _exitStatus(FilePath workspace) throws IOException, InterruptedException {
+        protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             if (status.exists()) {
-                return readStatus(status);
+                try {
+                    return Integer.parseInt(status.readToString().trim());
+                } catch (NumberFormatException x) {
+                    throw new IOException("corrupted content in " + status + ": " + x, x);
+                }
             } else {
                 return null;
             }
         }
 
-        private int readStatus(FilePath status) throws IOException, InterruptedException {
-            try {
-                return Integer.parseInt(status.readToString().trim());
-            } catch (NumberFormatException x) {
-                throw new IOException("corrupted content in " + status + ": " + x, x);
-            }
-        }
-
-        /**
-         * A way to provide specialized exit statuses other than watching {@link #getResultFile}.
-         * @return a possible exit status, or null for the default behavior
-         */
-        protected @CheckForNull Integer specialExitStatus(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            return null;
-        }
-
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            return _getOutput(workspace);
+            return getOutput(workspace);
         }
 
-        /** Like {@link #getOutput} but when we cannot rely on a {@link Launcher}. */
-        byte[] _getOutput(FilePath workspace) throws IOException, InterruptedException {
-            return IOUtils.toByteArray(getOutputFile(workspace).read());
+        protected byte[] getOutput(FilePath workspace) throws IOException, InterruptedException {
+            try (InputStream is = getOutputFile(workspace).read()) {
+                return IOUtils.toByteArray(is);
+            }
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
@@ -276,16 +263,17 @@ public abstract class FileMonitoringTask extends DurableTask {
             VirtualChannel channel = cd.getChannel();
             String node = (channel instanceof Channel) ? ((Channel) channel).getName() : null;
             String location = node != null ? cd.getRemote() + " on " + node : cd.getRemote();
-            Integer code = exitStatus(workspace, launcher);
+            StringWriter w = new StringWriter();
+            Integer code = exitStatus(workspace, launcher, new StreamTaskListener(w));
             if (code != null) {
-                return "completed process (code " + code + ") in " + location;
+                return w + "completed process (code " + code + ") in " + location;
             } else {
-                return "awaiting process completion in " + location;
+                return w + "awaiting process completion in " + location;
             }
         }
 
-        @Override public void watch(FilePath workspace, Handler handler) throws IOException, InterruptedException, ClassCastException {
-            workspace.actAsync(new StartWatching(this, handler));
+        @Override public void watch(FilePath workspace, Handler handler, TaskListener listener) throws IOException, InterruptedException, ClassCastException {
+            workspace.actAsync(new StartWatching(this, handler, listener));
             LOGGER.log(Level.FINE, "started asynchronous watch in {0}", controlDir);
         }
 
@@ -313,14 +301,16 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         private final FileMonitoringController controller;
         private final Handler handler;
+        private final TaskListener listener;
 
-        StartWatching(FileMonitoringController controller, Handler handler) {
+        StartWatching(FileMonitoringController controller, Handler handler, TaskListener listener) {
             this.controller = controller;
             this.handler = handler;
+            this.listener = listener;
         }
 
         @Override public Void invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
-            watchService().submit(new Watcher(controller, new FilePath(workspace), handler));
+            watchService().submit(new Watcher(controller, new FilePath(workspace), handler, listener));
             return null;
         }
 
@@ -331,16 +321,18 @@ public abstract class FileMonitoringTask extends DurableTask {
         private final FileMonitoringController controller;
         private final FilePath workspace;
         private final Handler handler;
+        private final TaskListener listener;
 
-        Watcher(FileMonitoringController controller, FilePath workspace, Handler handler) {
+        Watcher(FileMonitoringController controller, FilePath workspace, Handler handler, TaskListener listener) {
             this.controller = controller;
             this.workspace = workspace;
             this.handler = handler;
+            this.listener = listener;
         }
 
         @Override public void run() {
             try {
-                Integer exitStatus = controller._exitStatus(workspace); // check before collecting output, in case the process is just now finishing
+                Integer exitStatus = controller.exitStatus(workspace, listener); // check before collecting output, in case the process is just now finishing
                 long lastLocation = 0;
                 FilePath lastLocationFile = controller.getLastLocationFile(workspace);
                 if (lastLocationFile.exists()) {
@@ -367,7 +359,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                 if (exitStatus != null) {
                     byte[] output;
                     if (controller.getOutputFile(workspace).exists()) {
-                        output = controller._getOutput(workspace);
+                        output = controller.getOutput(workspace);
                     } else {
                         output = null;
                     }
