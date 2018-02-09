@@ -182,6 +182,9 @@ public abstract class FileMonitoringTask extends DurableTask {
             return exitStatus(workspace, listener);
         }
 
+        /**
+         * Like {@link #exitStatus(FilePath, Launcher, TaskListener)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
+         */
         protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             if (status.exists()) {
@@ -199,6 +202,9 @@ public abstract class FileMonitoringTask extends DurableTask {
             return getOutput(workspace);
         }
 
+        /**
+         * Like {@link #getOutput(FilePath, Launcher)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
+         */
         protected byte[] getOutput(FilePath workspace) throws IOException, InterruptedException {
             try (InputStream is = getOutputFile(workspace).read()) {
                 return IOUtils.toByteArray(is);
@@ -207,6 +213,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
+            // TODO after 10s, if the control dir still exists, write a flag file and have the Watcher shut down (interrupting any ongoing handler.output call if possible)
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
@@ -366,7 +373,9 @@ public abstract class FileMonitoringTask extends DurableTask {
                     handler.exited(exitStatus, output);
                     controller.cleanup(workspace);
                 } else {
-                    watchService().schedule(this, 100, TimeUnit.MILLISECONDS); // TODO consider an adaptive timeout as in DurableTaskStep.Execution in polling mode
+                    // Could use an adaptive timeout as in DurableTaskStep.Execution in polling mode,
+                    // though less relevant here since there is no network overhead to the check.
+                    watchService().schedule(this, 100, TimeUnit.MILLISECONDS);
                 }
             } catch (Exception x) {
                 // note that LOGGER here is going to the agent log, not master log
