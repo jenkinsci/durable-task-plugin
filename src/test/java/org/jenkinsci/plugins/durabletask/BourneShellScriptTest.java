@@ -27,15 +27,21 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
+import hudson.remoting.VirtualChannel;
 import hudson.slaves.DumbSlave;
 import hudson.slaves.OfflineCause;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.InputStream;
 import java.util.Collections;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
 import org.jenkinsci.test.acceptance.docker.Docker;
@@ -166,6 +172,51 @@ public class BourneShellScriptTest {
         assertThat(baos.toString(), containsString("+ echo 42"));
         assertEquals("42\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-38381")
+    @Test public void watch() throws Exception {
+        Slave s = j.createOnlineSlave();
+        ws = s.getWorkspaceRoot();
+        launcher = s.createLauncher(listener);
+        DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        BlockingQueue<Integer> status = new LinkedBlockingQueue<>();
+        BlockingQueue<String> output = new LinkedBlockingQueue<>();
+        BlockingQueue<String> lines = new LinkedBlockingQueue<>();
+        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals("+ set +x", lines.take());
+        assertEquals(0, status.take().intValue());
+        assertEquals("<no output>", output.take());
+        assertEquals("[1, 2, 3, 4, 5]", lines.toString());
+        task = new BourneShellScript("echo result");
+        task.captureOutput();
+        c = task.launch(new EnvVars(), ws, launcher, listener);
+        status = new LinkedBlockingQueue<>();
+        output = new LinkedBlockingQueue<>();
+        lines = new LinkedBlockingQueue<>();
+        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals(0, status.take().intValue());
+        assertEquals("result\n", output.take());
+        assertEquals("[+ echo result]", lines.toString());
+    }
+    private static class MockHandler extends Handler {
+        private final BlockingQueue<Integer> status;
+        private final BlockingQueue<String> output;
+        private final BlockingQueue<String> lines;
+        @SuppressWarnings("unchecked")
+        MockHandler(VirtualChannel channel, BlockingQueue<Integer> status, BlockingQueue<String> output, BlockingQueue<String> lines) {
+            this.status = channel.export(BlockingQueue.class, status);
+            this.output = channel.export(BlockingQueue.class, output);
+            this.lines = channel.export(BlockingQueue.class, lines);
+        }
+        @Override public void output(InputStream stream) throws Exception {
+            lines.addAll(IOUtils.readLines(stream));
+        }
+        @Override public void exited(int code, byte[] data) throws Exception {
+            status.add(code);
+            output.add(data != null ? new String(data) : "<no output>");
+        }
     }
 
     @Issue("JENKINS-40734")

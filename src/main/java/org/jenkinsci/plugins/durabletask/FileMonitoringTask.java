@@ -30,6 +30,8 @@ import hudson.Launcher;
 import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
+import hudson.remoting.DaemonThreadFactory;
+import hudson.remoting.NamingThreadFactory;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
@@ -39,15 +41,23 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.io.StringWriter;
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.input.CountingInputStream;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -95,6 +105,10 @@ public abstract class FileMonitoringTask extends DurableTask {
         return m;
     }
 
+    /**
+     * Tails a log file and watches for an exit status file.
+     * Must be remotable so that {@link #watch} can transfer the implementation.
+     */
     protected static class FileMonitoringController extends Controller {
 
         /** Absolute path of {@link #controlDir(FilePath)}. */
@@ -107,6 +121,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         /**
          * Byte offset in the file that has been reported thus far.
+         * Only used if {@link #writeLog(FilePath, OutputStream)} is used; not used for {@link #watch}.
          */
         private long lastLocation;
 
@@ -146,7 +161,6 @@ public abstract class FileMonitoringTask extends DurableTask {
                         if (toRead > Integer.MAX_VALUE) { // >2Gb of output at once is unlikely
                             throw new IOException("large reads not yet implemented");
                         }
-                        // TODO is this efficient for large amounts of output? Would it be better to stream data, or return a byte[] from the callable?
                         byte[] buf = new byte[(int) toRead];
                         raf.readFully(buf);
                         sink.write(buf);
@@ -160,8 +174,14 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
-        // TODO would be more efficient to allow API to consolidate writeLog with exitStatus (save an RPC call)
         @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
+            return exitStatus(workspace, listener);
+        }
+
+        /**
+         * Like {@link #exitStatus(FilePath, Launcher, TaskListener)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
+         */
+        protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             if (status.exists()) {
                 try {
@@ -175,7 +195,13 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            // TODO could perhaps be more efficient for large files to send a MasterToSlaveFileCallable<byte[]>
+            return getOutput(workspace);
+        }
+
+        /**
+         * Like {@link #getOutput(FilePath, Launcher)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
+         */
+        protected byte[] getOutput(FilePath workspace) throws IOException, InterruptedException {
             try (InputStream is = getOutputFile(workspace).read()) {
                 return IOUtils.toByteArray(is);
             }
@@ -183,6 +209,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
+            // TODO after 10s, if the control dir still exists, write a flag file and have the Watcher shut down (interrupting any ongoing handler.output call if possible)
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
@@ -248,7 +275,102 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
+        @Override public void watch(FilePath workspace, Handler handler, TaskListener listener) throws IOException, InterruptedException, ClassCastException {
+            workspace.actAsync(new StartWatching(this, handler, listener));
+            LOGGER.log(Level.FINE, "started asynchronous watch in {0}", controlDir);
+        }
+
+        /**
+         * File in which a last-read position is stored if {@link #watch} is used.
+         */
+        public FilePath getLastLocationFile(FilePath workspace) throws IOException, InterruptedException {
+            return controlDir(workspace).child("last-location.txt");
+        }
+
         private static final long serialVersionUID = 1L;
+    }
+
+    private static ScheduledExecutorService watchService;
+    private synchronized static ScheduledExecutorService watchService() {
+        if (watchService == null) {
+            watchService = new /*ErrorLogging*/ScheduledThreadPoolExecutor(5, new NamingThreadFactory(new DaemonThreadFactory(), "FileMonitoringTask watcher"));
+        }
+        return watchService;
+    }
+
+    private static class StartWatching extends MasterToSlaveFileCallable<Void> {
+
+        private static final long serialVersionUID = 1L;
+
+        private final FileMonitoringController controller;
+        private final Handler handler;
+        private final TaskListener listener;
+
+        StartWatching(FileMonitoringController controller, Handler handler, TaskListener listener) {
+            this.controller = controller;
+            this.handler = handler;
+            this.listener = listener;
+        }
+
+        @Override public Void invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
+            watchService().submit(new Watcher(controller, new FilePath(workspace), handler, listener));
+            return null;
+        }
+
+    }
+
+    private static class Watcher implements Runnable {
+
+        private final FileMonitoringController controller;
+        private final FilePath workspace;
+        private final Handler handler;
+        private final TaskListener listener;
+
+        Watcher(FileMonitoringController controller, FilePath workspace, Handler handler, TaskListener listener) {
+            this.controller = controller;
+            this.workspace = workspace;
+            this.handler = handler;
+            this.listener = listener;
+        }
+
+        @Override public void run() {
+            try {
+                Integer exitStatus = controller.exitStatus(workspace, listener); // check before collecting output, in case the process is just now finishing
+                long lastLocation = 0;
+                FilePath lastLocationFile = controller.getLastLocationFile(workspace);
+                if (lastLocationFile.exists()) {
+                    lastLocation = Long.parseLong(lastLocationFile.readToString());
+                }
+                FilePath logFile = controller.getLogFile(workspace);
+                long len = logFile.length();
+                if (len > lastLocation) {
+                    assert !logFile.isRemote();
+                    try (FileChannel ch = FileChannel.open(Paths.get(logFile.getRemote()), StandardOpenOption.READ)) {
+                        CountingInputStream cis = new CountingInputStream(Channels.newInputStream(ch.position(lastLocation)));
+                        handler.output(cis);
+                        lastLocationFile.write(Long.toString(lastLocation + cis.getByteCount()), null);
+                    }
+                }
+                if (exitStatus != null) {
+                    byte[] output;
+                    if (controller.getOutputFile(workspace).exists()) {
+                        output = controller.getOutput(workspace);
+                    } else {
+                        output = null;
+                    }
+                    handler.exited(exitStatus, output);
+                    controller.cleanup(workspace);
+                } else {
+                    // Could use an adaptive timeout as in DurableTaskStep.Execution in polling mode,
+                    // though less relevant here since there is no network overhead to the check.
+                    watchService().schedule(this, 100, TimeUnit.MILLISECONDS);
+                }
+            } catch (Exception x) {
+                // note that LOGGER here is going to the agent log, not master log
+                LOGGER.log(Level.WARNING, "giving up on watching " + controller.controlDir, x);
+            }
+        }
+
     }
 
 }
