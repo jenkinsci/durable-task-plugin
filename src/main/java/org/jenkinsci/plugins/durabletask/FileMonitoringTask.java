@@ -36,18 +36,24 @@ import hudson.slaves.WorkspaceList;
 import hudson.util.StreamTaskListener;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.io.StringWriter;
+import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.charset.Charset;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
-import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.FileUtils;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -58,17 +64,32 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final String COOKIE = "JENKINS_SERVER_COOKIE";
 
+    /**
+     * Charset name to use for transcoding, or the empty string for node system default, or null for no transcoding.
+     */
+    private @CheckForNull String charset;
+
     private static String cookieFor(FilePath workspace) {
         return "durable-" + Util.getDigestOf(workspace.getRemote());
     }
 
     @Override public final Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-        return launchWithCookie(workspace, launcher, listener, env, COOKIE, cookieFor(workspace));
+        FileMonitoringController controller = launchWithCookie(workspace, launcher, listener, env, COOKIE, cookieFor(workspace));
+        controller.charset = charset;
+        return controller;
     }
 
     protected FileMonitoringController launchWithCookie(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         envVars.put(cookieVariable, cookieValue); // ensure getCharacteristicEnvVars does not match, so Launcher.killAll will leave it alone
         return doLaunch(workspace, launcher, listener, envVars);
+    }
+
+    @Override public final void charset(Charset cs) {
+        charset = cs.name();
+    }
+
+    @Override public final void defaultCharset() {
+        charset = "";
     }
 
     /**
@@ -110,6 +131,9 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         private long lastLocation;
 
+        /** @see FileMonitoringTask#charset */
+        private @CheckForNull String charset;
+
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
@@ -120,7 +144,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
             FilePath log = getLogFile(workspace);
-            Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink)));
+            Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink), charset));
             if (newLocation != null) {
                 LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, log});
                 lastLocation = newLocation;
@@ -132,9 +156,11 @@ public abstract class FileMonitoringTask extends DurableTask {
         private static class WriteLog extends MasterToSlaveFileCallable<Long> {
             private final long lastLocation;
             private final OutputStream sink;
-            WriteLog(long lastLocation, OutputStream sink) {
+            private final @CheckForNull String charset;
+            WriteLog(long lastLocation, OutputStream sink, String charset) {
                 this.lastLocation = lastLocation;
                 this.sink = sink;
+                this.charset = charset;
             }
             @Override public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 long len = f.length();
@@ -149,7 +175,12 @@ public abstract class FileMonitoringTask extends DurableTask {
                         // TODO is this efficient for large amounts of output? Would it be better to stream data, or return a byte[] from the callable?
                         byte[] buf = new byte[(int) toRead];
                         raf.readFully(buf);
-                        sink.write(buf);
+                        ByteBuffer transcoded = maybeTranscode(buf, charset);
+                        if (transcoded == null) {
+                            sink.write(buf);
+                        } else {
+                            Channels.newChannel(sink).write(transcoded);
+                        }
                     } finally {
                         raf.close();
                     }
@@ -174,11 +205,38 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
-        @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            // TODO could perhaps be more efficient for large files to send a MasterToSlaveFileCallable<byte[]>
-            try (InputStream is = getOutputFile(workspace).read()) {
-                return IOUtils.toByteArray(is);
+        /**
+         * Transcode process output to UTF-8 if necessary.
+         * @param data output presumed to be in local encoding
+         * @param charset a particular encoding name, or the empty string for the system default encoding, or null to skip transcoding
+         * @return a newly allocate buffer of UTF-8 encoded data ({@link CodingErrorAction#REPLACE} is used),
+         *         or null if not performing transcoding because it was not requested or the data was already thought to be in UTF-8
+         */
+        private static @CheckForNull ByteBuffer maybeTranscode(@Nonnull byte[] data, @CheckForNull String charset) {
+            if (charset == null) { // no transcoding requested, do raw copy and YMMV
+                return null;
+            } else {
+                Charset cs = charset.isEmpty() ? Charset.defaultCharset() : Charset.forName(charset);
+                if (cs.equals(StandardCharsets.UTF_8)) { // transcoding unnecessary as output was already UTF-8
+                    return null;
+                } else { // decode output in specified charset and reëncode in UTF-8
+                    return StandardCharsets.UTF_8.encode(cs.decode(ByteBuffer.wrap(data)));
+                }
             }
+        }
+
+        @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
+            return getOutputFile(workspace).act(new MasterToSlaveFileCallable<byte[]>() {
+                @Override public byte[] invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+                    byte[] buf = FileUtils.readFileToByteArray(f);
+                    ByteBuffer transcoded = maybeTranscode(buf, charset);
+                    if (transcoded == null) {
+                        return buf;
+                    } else {
+                        return transcoded.array();
+                    }
+                }
+            });
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {

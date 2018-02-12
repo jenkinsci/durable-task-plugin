@@ -34,8 +34,11 @@ import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.logging.Level;
+import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
 import org.jenkinsci.test.acceptance.docker.Docker;
@@ -234,6 +237,143 @@ public class BourneShellScriptTest {
     @Test public void runWithTiniCommandLauncher() throws Exception {
         assumeTrue("Docker required for this test", new Docker().isAvailable());
         runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
+    }
+
+    @Issue("JENKINS-31096")
+    @Test public void encoding() throws Exception {
+        JavaContainer container = dockerUbuntu.get();
+        DumbSlave s = new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "-Dfile.encoding=ISO-8859-1"));
+        j.jenkins.addNode(s);
+        j.waitOnline(s);
+        assertEquals("ISO-8859-1", s.getChannel().call(new DetectCharset()));
+        FilePath dockerWS = s.getWorkspaceRoot();
+        dockerWS.child("latin").write("¡Ole!", "ISO-8859-1");
+        dockerWS.child("eastern").write("Čau!", "ISO-8859-2");
+        dockerWS.child("mixed").write("¡Čau → there!", "UTF-8");
+        Launcher dockerLauncher = s.createLauncher(listener);
+        // control: no transcoding
+        Controller c = new BourneShellScript("cat latin").launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(dockerWS, baos);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(baos.toString("ISO-8859-1"), containsString("¡Ole!"));
+        c.cleanup(dockerWS);
+        // and with output capture:
+        BourneShellScript dt = new BourneShellScript("cat latin");
+        dt.captureOutput();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        c.writeLog(dockerWS, System.err);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(new String(c.getOutput(dockerWS, launcher), "ISO-8859-1"), containsString("¡Ole!"));
+        c.cleanup(dockerWS);
+        // test: specify particular charset (UTF-8)
+        dt = new BourneShellScript("cat mixed");
+        dt.charset(StandardCharsets.UTF_8);
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        baos = new ByteArrayOutputStream();
+        c.writeLog(dockerWS, baos);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(baos.toString("UTF-8"), containsString("¡Čau → there!"));
+        c.cleanup(dockerWS);
+        // and with output capture:
+        dt = new BourneShellScript("cat mixed");
+        dt.charset(StandardCharsets.UTF_8);
+        dt.captureOutput();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        c.writeLog(dockerWS, System.err);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(new String(c.getOutput(dockerWS, launcher), "UTF-8"), containsString("¡Čau → there!"));
+        c.cleanup(dockerWS);
+        // test: specify particular charset (unrelated)
+        dt = new BourneShellScript("cat eastern");
+        dt.charset(Charset.forName("ISO-8859-2"));
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        baos = new ByteArrayOutputStream();
+        c.writeLog(dockerWS, baos);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(baos.toString("UTF-8"), containsString("Čau!"));
+        c.cleanup(dockerWS);
+        // and with output capture:
+        dt = new BourneShellScript("cat eastern");
+        dt.charset(Charset.forName("ISO-8859-2"));
+        dt.captureOutput();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        c.writeLog(dockerWS, System.err);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(new String(c.getOutput(dockerWS, launcher), "UTF-8"), containsString("Čau!"));
+        c.cleanup(dockerWS);
+        // test: specify agent default charset
+        dt = new BourneShellScript("cat latin");
+        dt.defaultCharset();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        baos = new ByteArrayOutputStream();
+        c.writeLog(dockerWS, baos);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(baos.toString("UTF-8"), containsString("¡Ole!"));
+        c.cleanup(dockerWS);
+        // and with output capture:
+        dt = new BourneShellScript("cat latin");
+        dt.defaultCharset();
+        dt.captureOutput();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        c.writeLog(dockerWS, System.err);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(new String(c.getOutput(dockerWS, launcher), "UTF-8"), containsString("¡Ole!"));
+        c.cleanup(dockerWS);
+        // test: inappropriate charset, some replacement characters
+        dt = new BourneShellScript("cat mixed");
+        dt.charset(StandardCharsets.US_ASCII);
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        baos = new ByteArrayOutputStream();
+        c.writeLog(dockerWS, baos);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(baos.toString("UTF-8"), containsString("����au ��� there!"));
+        c.cleanup(dockerWS);
+        // and with output capture:
+        dt = new BourneShellScript("cat mixed");
+        dt.charset(StandardCharsets.US_ASCII);
+        dt.captureOutput();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            Thread.sleep(100);
+        }
+        c.writeLog(dockerWS, System.err);
+        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertThat(new String(c.getOutput(dockerWS, launcher), "UTF-8"), containsString("����au ��� there!"));
+        c.cleanup(dockerWS);
+        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+    }
+    private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
+        @Override public String call() throws RuntimeException {
+            return Charset.defaultCharset().name();
+        }
     }
 
 }
