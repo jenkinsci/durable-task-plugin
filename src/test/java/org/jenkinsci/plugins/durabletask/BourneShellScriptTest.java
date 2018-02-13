@@ -469,7 +469,56 @@ public class BourneShellScriptTest {
         assertEquals(0, status.take().intValue());
         assertEquals("Čau!", output.take());
         assertEquals("[]", lines.toString());
-        // TODO agent default; mojibake
+        // with agent default charset:
+        dt = new BourneShellScript("cat latin");
+        dt.defaultCharset();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        status = new LinkedBlockingQueue<>();
+        output = new LinkedBlockingQueue<>();
+        lines = new LinkedBlockingQueue<>();
+        c.watch(dockerWS, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals("+ cat latin", lines.take());
+        assertEquals(0, status.take().intValue());
+        assertEquals("<no output>", output.take());
+        assertEquals("[¡Ole!]", lines.toString());
+        // and with output capture:
+        dt = new BourneShellScript("cat latin");
+        dt.defaultCharset();
+        dt.captureOutput();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        status = new LinkedBlockingQueue<>();
+        output = new LinkedBlockingQueue<>();
+        lines = new LinkedBlockingQueue<>();
+        c.watch(dockerWS, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals("+ cat latin", lines.take());
+        assertEquals(0, status.take().intValue());
+        assertEquals("¡Ole!", output.take());
+        assertEquals("[]", lines.toString());
+        // and mojibake:
+        dt = new BourneShellScript("cat mixed");
+        dt.charset(StandardCharsets.US_ASCII);
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        status = new LinkedBlockingQueue<>();
+        output = new LinkedBlockingQueue<>();
+        lines = new LinkedBlockingQueue<>();
+        c.watch(dockerWS, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals("+ cat mixed", lines.take());
+        assertEquals(0, status.take().intValue());
+        assertEquals("<no output>", output.take());
+        assertEquals("[����au ��� there!]", lines.toString());
+        // and with output capture:
+        dt = new BourneShellScript("cat mixed");
+        dt.charset(StandardCharsets.US_ASCII);
+        dt.captureOutput();
+        c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        status = new LinkedBlockingQueue<>();
+        output = new LinkedBlockingQueue<>();
+        lines = new LinkedBlockingQueue<>();
+        c.watch(dockerWS, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals("+ cat mixed", lines.take());
+        assertEquals(0, status.take().intValue());
+        assertEquals("����au ��� there!", output.take());
+        assertEquals("[]", lines.toString());
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
     }
     private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
