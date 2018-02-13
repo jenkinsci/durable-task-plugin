@@ -44,18 +44,34 @@ import javax.annotation.Nonnull;
 public abstract class Controller implements Serializable {
 
     /**
+     * Begins watching the process asynchronously, so that the master may receive notification when output is available or the process has exited.
+     * This should be called as soon as the process is launched, and thereafter whenever reconnecting to the agent.
+     * You should not call {@link #writeLog} or {@link #cleanup} in this case; you do not need to call {@link #exitStatus(FilePath, Launcher)} frequently,
+     * though it is advisable to still call it occasionally to verify that the process is still running.
+     * @param workspace the workspace in use
+     * @param handler a remotable callback
+     * @param listener a remotable destination for messages
+     * @throws UnsupportedOperationException when this mode is not available, so you must fall back to polling {@link #writeLog} and {@link #exitStatus(FilePath, Launcher)}
+     */
+    public void watch(@Nonnull FilePath workspace, @Nonnull Handler handler, @Nonnull TaskListener listener) throws IOException, InterruptedException, UnsupportedOperationException {
+        throw new UnsupportedOperationException("Asynchronous mode is not implemented in " + getClass().getName());
+    }
+
+    /**
      * Obtains any new task log output.
      * Could use a serializable field to keep track of how much output has been previously written.
      * @param workspace the workspace in use
      * @param sink where to send new log output
      * @return true if something was written and the controller should be resaved, false if everything is idle
+     * @see DurableTask#charset
+     * @see DurableTask#defaultCharset
      */
     public abstract boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException;
 
     /**
      * Checks whether the task has finished.
      * @param workspace the workspace in use
-     * @param launcher a way to start processes
+     * @param launcher a way to start processes (currently unused)
      * @param logger a way to report special messages
      * @return an exit code (zero is successful), or null if the task appears to still be running
      */
@@ -86,8 +102,10 @@ public abstract class Controller implements Serializable {
      * Intended for use after {@link #exitStatus(FilePath, Launcher)} has returned a non-null status.
      * The result is undefined if {@link DurableTask#captureOutput} was not called before launch; generally an {@link IOException} will result.
      * @param workspace the workspace in use
-     * @param launcher a way to start processes
+     * @param launcher a way to start processes (currently unused)
      * @return the output of the process as raw bytes (may be empty but not null)
+     * @see DurableTask#charset
+     * @see DurableTask#defaultCharset
      */
     public @Nonnull byte[] getOutput(@Nonnull FilePath workspace, @Nonnull Launcher launcher) throws IOException, InterruptedException {
         throw new IOException("Did not implement getOutput in " + getClass().getName());

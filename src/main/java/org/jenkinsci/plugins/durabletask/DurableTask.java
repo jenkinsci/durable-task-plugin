@@ -31,6 +31,8 @@ import hudson.Launcher;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.TaskListener;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import javax.annotation.Nonnull;
 
 /**
  * A task which may be run asynchronously on a build node and withstand disconnection of the slave agent.
@@ -53,14 +55,34 @@ public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> i
     public abstract Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException;
 
     /**
-     * Requests that standard output of the task be captured rather than streamed to {@link Controller#writeLog}.
-     * If so, you may call {@link Controller#getOutput}.
+     * Requests that standard output of the task be captured rather than streamed.
+     * If you use {@link Controller#watch}, standard output will not be sent to {@link Handler#output}; it will be included in {@link Handler#exited} instead.
+     * Otherwise (using polling mode), standard output will not be sent to {@link Controller#writeLog}; call {@link Controller#getOutput} to collect.
      * Standard error should still be streamed to the log.
      * Should be called prior to {@link #launch} to take effect.
      * @throws UnsupportedOperationException if this implementation does not support that mode
      */
     public void captureOutput() throws UnsupportedOperationException {
         throw new UnsupportedOperationException("Capturing of output is not implemented in " + getClass().getName());
+    }
+
+    /**
+     * Requests that a specified charset be used to transcode process output.
+     * The encoding of {@link Controller#writeLog} and {@link Controller#getOutput} is then presumed to be UTF-8.
+     * If not called, no translation is performed.
+     * @param cs the character set in which process output is expected to be
+     */
+    public void charset(@Nonnull Charset cs) {
+        // by default, ignore
+    }
+
+    /**
+     * Requests that the node’s system charset be used to transcode process output.
+     * The encoding of {@link Controller#writeLog} and {@link Controller#getOutput} is then presumed to be UTF-8.
+     * If not called, no translation is performed.
+     */
+    public void defaultCharset() {
+        // by default, ignore
     }
 
 }
