@@ -42,13 +42,15 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.io.StringWriter;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.io.StringWriter;
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
@@ -58,8 +60,10 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
-import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
 import org.apache.commons.io.input.ReaderInputStream;
 
@@ -72,17 +76,32 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final String COOKIE = "JENKINS_SERVER_COOKIE";
 
+    /**
+     * Charset name to use for transcoding, or the empty string for node system default, or null for no transcoding.
+     */
+    private @CheckForNull String charset;
+
     private static String cookieFor(FilePath workspace) {
         return "durable-" + Util.getDigestOf(workspace.getRemote());
     }
 
     @Override public final Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-        return launchWithCookie(workspace, launcher, listener, env, COOKIE, cookieFor(workspace));
+        FileMonitoringController controller = launchWithCookie(workspace, launcher, listener, env, COOKIE, cookieFor(workspace));
+        controller.charset = charset;
+        return controller;
     }
 
     protected FileMonitoringController launchWithCookie(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         envVars.put(cookieVariable, cookieValue); // ensure getCharacteristicEnvVars does not match, so Launcher.killAll will leave it alone
         return doLaunch(workspace, launcher, listener, envVars);
+    }
+
+    @Override public final void charset(Charset cs) {
+        charset = cs.name();
+    }
+
+    @Override public final void defaultCharset() {
+        charset = "";
     }
 
     /**
@@ -129,6 +148,9 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         private long lastLocation;
 
+        /** @see FileMonitoringTask#charset */
+        private @CheckForNull String charset;
+
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
@@ -139,7 +161,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
             FilePath log = getLogFile(workspace);
-            Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink)));
+            Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink), charset));
             if (newLocation != null) {
                 LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, log});
                 lastLocation = newLocation;
@@ -151,9 +173,11 @@ public abstract class FileMonitoringTask extends DurableTask {
         private static class WriteLog extends MasterToSlaveFileCallable<Long> {
             private final long lastLocation;
             private final OutputStream sink;
-            WriteLog(long lastLocation, OutputStream sink) {
+            private final @CheckForNull String charset;
+            WriteLog(long lastLocation, OutputStream sink, String charset) {
                 this.lastLocation = lastLocation;
                 this.sink = sink;
+                this.charset = charset;
             }
             @Override public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 long len = f.length();
@@ -167,7 +191,12 @@ public abstract class FileMonitoringTask extends DurableTask {
                         }
                         byte[] buf = new byte[(int) toRead];
                         raf.readFully(buf);
-                        sink.write(buf);
+                        ByteBuffer transcoded = maybeTranscode(buf, charset);
+                        if (transcoded == null) {
+                            sink.write(buf);
+                        } else {
+                            Channels.newChannel(sink).write(transcoded);
+                        }
                     } finally {
                         raf.close();
                     }
@@ -206,8 +235,47 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Like {@link #getOutput(FilePath, Launcher)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
          */
         protected byte[] getOutput(FilePath workspace) throws IOException, InterruptedException {
-            try (InputStream is = getOutputFile(workspace).read()) {
-                return IOUtils.toByteArray(is);
+            return getOutputFile(workspace).act(new MasterToSlaveFileCallable<byte[]>() {
+                @Override public byte[] invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+                    byte[] buf = FileUtils.readFileToByteArray(f);
+                    ByteBuffer transcoded = maybeTranscode(buf, charset);
+                    if (transcoded == null) {
+                        return buf;
+                    } else {
+                        byte[] buf2 = new byte[transcoded.remaining()];
+                        transcoded.get(buf2);
+                        return buf2;
+                    }
+                }
+            });
+        }
+
+        /**
+         * Transcode process output to UTF-8 if necessary.
+         * @param data output presumed to be in local encoding
+         * @param charset a particular encoding name, or the empty string for the system default encoding, or null to skip transcoding
+         * @return a buffer of UTF-8 encoded data ({@link CodingErrorAction#REPLACE} is used),
+         *         or null if not performing transcoding because it was not requested or the data was already thought to be in UTF-8
+         */
+        private static @CheckForNull ByteBuffer maybeTranscode(@Nonnull byte[] data, @CheckForNull String charset) {
+            Charset cs = transcodingCharset(charset);
+            if (cs == null) {
+                return null;
+            } else {
+                return StandardCharsets.UTF_8.encode(cs.decode(ByteBuffer.wrap(data)));
+            }
+        }
+
+        private static @CheckForNull Charset transcodingCharset(@CheckForNull String charset) {
+            if (charset == null) {
+                return null;
+            } else {
+                Charset cs = charset.isEmpty() ? Charset.defaultCharset() : Charset.forName(charset);
+                if (cs.equals(StandardCharsets.UTF_8)) { // transcoding unnecessary as output was already UTF-8
+                    return null;
+                } else { // decode output in specified charset and reëncode in UTF-8
+                    return cs;
+                }
             }
         }
 
@@ -330,12 +398,14 @@ public abstract class FileMonitoringTask extends DurableTask {
         private final FilePath workspace;
         private final Handler handler;
         private final TaskListener listener;
+        private final @CheckForNull Charset cs;
 
         Watcher(FileMonitoringController controller, FilePath workspace, Handler handler, TaskListener listener) {
             this.controller = controller;
             this.workspace = workspace;
             this.handler = handler;
             this.listener = listener;
+            cs = FileMonitoringController.transcodingCharset(controller.charset);
         }
 
         @Override public void run() {
@@ -352,13 +422,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     assert !logFile.isRemote();
                     try (FileChannel ch = FileChannel.open(Paths.get(logFile.getRemote()), StandardOpenOption.READ)) {
                         InputStream locallyEncodedStream = Channels.newInputStream(ch.position(lastLocation));
-                        InputStream utf8EncodedStream;
-                        Charset nativeEncoding = Charset.defaultCharset();
-                        if (nativeEncoding.equals(StandardCharsets.UTF_8)) {
-                            utf8EncodedStream = locallyEncodedStream;
-                        } else {
-                            utf8EncodedStream = new ReaderInputStream(new InputStreamReader(locallyEncodedStream, nativeEncoding), StandardCharsets.UTF_8);
-                        }
+                        InputStream utf8EncodedStream = cs == null ? locallyEncodedStream : new ReaderInputStream(new InputStreamReader(locallyEncodedStream, cs), StandardCharsets.UTF_8);
                         CountingInputStream cis = new CountingInputStream(utf8EncodedStream);
                         handler.output(cis);
                         lastLocationFile.write(Long.toString(lastLocation + cis.getByteCount()), null);
