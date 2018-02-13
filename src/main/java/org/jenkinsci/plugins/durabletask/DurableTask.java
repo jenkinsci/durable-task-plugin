@@ -31,6 +31,8 @@ import hudson.Launcher;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.TaskListener;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import javax.annotation.Nonnull;
 
 /**
  * A task which may be run asynchronously on a build node and withstand disconnection of the slave agent.
@@ -62,6 +64,25 @@ public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> i
      */
     public void captureOutput() throws UnsupportedOperationException {
         throw new UnsupportedOperationException("Capturing of output is not implemented in " + getClass().getName());
+    }
+
+    /**
+     * Requests that a specified charset be used to transcode process output.
+     * The encoding of {@link Controller#writeLog} and {@link Controller#getOutput} is then presumed to be UTF-8.
+     * If not called, no translation is performed.
+     * @param cs the character set in which process output is expected to be
+     */
+    public void charset(@Nonnull Charset cs) {
+        // by default, ignore
+    }
+
+    /**
+     * Requests that the node’s system charset be used to transcode process output.
+     * The encoding of {@link Controller#writeLog} and {@link Controller#getOutput} is then presumed to be UTF-8.
+     * If not called, no translation is performed.
+     */
+    public void defaultCharset() {
+        // by default, ignore
     }
 
 }
