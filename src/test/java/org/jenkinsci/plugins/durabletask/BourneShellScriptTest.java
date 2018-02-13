@@ -321,7 +321,7 @@ public class BourneShellScriptTest {
         }
         c.writeLog(dockerWS, System.err);
         assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
-        assertThat(new String(c.getOutput(dockerWS, launcher), "ISO-8859-1"), containsString("¡Ole!"));
+        assertEquals("¡Ole!", new String(c.getOutput(dockerWS, launcher), "ISO-8859-1"));
         c.cleanup(dockerWS);
         // test: specify particular charset (UTF-8)
         dt = new BourneShellScript("cat mixed");
@@ -345,7 +345,7 @@ public class BourneShellScriptTest {
         }
         c.writeLog(dockerWS, System.err);
         assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
-        assertThat(new String(c.getOutput(dockerWS, launcher), "UTF-8"), containsString("¡Čau → there!"));
+        assertEquals("¡Čau → there!", new String(c.getOutput(dockerWS, launcher), "UTF-8"));
         c.cleanup(dockerWS);
         // test: specify particular charset (unrelated)
         dt = new BourneShellScript("cat eastern");
@@ -369,7 +369,7 @@ public class BourneShellScriptTest {
         }
         c.writeLog(dockerWS, System.err);
         assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
-        assertThat(new String(c.getOutput(dockerWS, launcher), "UTF-8"), containsString("Čau!"));
+        assertEquals("Čau!", new String(c.getOutput(dockerWS, launcher), "UTF-8"));
         c.cleanup(dockerWS);
         // test: specify agent default charset
         dt = new BourneShellScript("cat latin");
@@ -393,7 +393,7 @@ public class BourneShellScriptTest {
         }
         c.writeLog(dockerWS, System.err);
         assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
-        assertThat(new String(c.getOutput(dockerWS, launcher), "UTF-8"), containsString("¡Ole!"));
+        assertEquals("¡Ole!", new String(c.getOutput(dockerWS, launcher), "UTF-8"));
         c.cleanup(dockerWS);
         // test: inappropriate charset, some replacement characters
         dt = new BourneShellScript("cat mixed");
@@ -417,7 +417,7 @@ public class BourneShellScriptTest {
         }
         c.writeLog(dockerWS, System.err);
         assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
-        assertThat(new String(c.getOutput(dockerWS, launcher), "UTF-8"), containsString("����au ��� there!"));
+        assertEquals("����au ��� there!", new String(c.getOutput(dockerWS, launcher), "UTF-8"));
         c.cleanup(dockerWS);
         // test: using watch with particular charset
         dt = new BourneShellScript("cat mixed");
@@ -467,7 +467,7 @@ public class BourneShellScriptTest {
         c.watch(dockerWS, new MockHandler(s.getChannel(), status, output, lines), listener);
         assertEquals("+ cat eastern", lines.take());
         assertEquals(0, status.take().intValue());
-        assertEquals("Čau!", output.take()./* TODO */trim());
+        assertEquals("Čau!", output.take());
         assertEquals("[]", lines.toString());
         // TODO agent default; mojibake
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));

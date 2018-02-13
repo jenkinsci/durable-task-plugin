@@ -242,7 +242,9 @@ public abstract class FileMonitoringTask extends DurableTask {
                     if (transcoded == null) {
                         return buf;
                     } else {
-                        return transcoded.array();
+                        byte[] buf2 = new byte[transcoded.remaining()];
+                        transcoded.get(buf2);
+                        return buf2;
                     }
                 }
             });
@@ -252,7 +254,7 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Transcode process output to UTF-8 if necessary.
          * @param data output presumed to be in local encoding
          * @param charset a particular encoding name, or the empty string for the system default encoding, or null to skip transcoding
-         * @return a newly allocate buffer of UTF-8 encoded data ({@link CodingErrorAction#REPLACE} is used),
+         * @return a buffer of UTF-8 encoded data ({@link CodingErrorAction#REPLACE} is used),
          *         or null if not performing transcoding because it was not requested or the data was already thought to be in UTF-8
          */
         private static @CheckForNull ByteBuffer maybeTranscode(@Nonnull byte[] data, @CheckForNull String charset) {
