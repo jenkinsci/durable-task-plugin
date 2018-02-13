@@ -38,6 +38,8 @@ import hudson.slaves.WorkspaceList;
 import hudson.util.StreamTaskListener;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.io.StringWriter;
@@ -63,6 +65,7 @@ import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.CountingInputStream;
+import org.apache.commons.io.input.ReaderInputStream;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -253,14 +256,23 @@ public abstract class FileMonitoringTask extends DurableTask {
          *         or null if not performing transcoding because it was not requested or the data was already thought to be in UTF-8
          */
         private static @CheckForNull ByteBuffer maybeTranscode(@Nonnull byte[] data, @CheckForNull String charset) {
-            if (charset == null) { // no transcoding requested, do raw copy and YMMV
+            Charset cs = transcodingCharset(charset);
+            if (cs == null) {
+                return null;
+            } else {
+                return StandardCharsets.UTF_8.encode(cs.decode(ByteBuffer.wrap(data)));
+            }
+        }
+
+        private static @CheckForNull Charset transcodingCharset(@CheckForNull String charset) {
+            if (charset == null) {
                 return null;
             } else {
                 Charset cs = charset.isEmpty() ? Charset.defaultCharset() : Charset.forName(charset);
                 if (cs.equals(StandardCharsets.UTF_8)) { // transcoding unnecessary as output was already UTF-8
                     return null;
                 } else { // decode output in specified charset and reëncode in UTF-8
-                    return StandardCharsets.UTF_8.encode(cs.decode(ByteBuffer.wrap(data)));
+                    return cs;
                 }
             }
         }
@@ -384,12 +396,14 @@ public abstract class FileMonitoringTask extends DurableTask {
         private final FilePath workspace;
         private final Handler handler;
         private final TaskListener listener;
+        private final @CheckForNull Charset cs;
 
         Watcher(FileMonitoringController controller, FilePath workspace, Handler handler, TaskListener listener) {
             this.controller = controller;
             this.workspace = workspace;
             this.handler = handler;
             this.listener = listener;
+            cs = FileMonitoringController.transcodingCharset(controller.charset);
         }
 
         @Override public void run() {
@@ -405,7 +419,9 @@ public abstract class FileMonitoringTask extends DurableTask {
                 if (len > lastLocation) {
                     assert !logFile.isRemote();
                     try (FileChannel ch = FileChannel.open(Paths.get(logFile.getRemote()), StandardOpenOption.READ)) {
-                        CountingInputStream cis = new CountingInputStream(Channels.newInputStream(ch.position(lastLocation)));
+                        InputStream locallyEncodedStream = Channels.newInputStream(ch.position(lastLocation));
+                        InputStream utf8EncodedStream = cs == null ? locallyEncodedStream : new ReaderInputStream(new InputStreamReader(locallyEncodedStream, cs), StandardCharsets.UTF_8);
+                        CountingInputStream cis = new CountingInputStream(utf8EncodedStream);
                         handler.output(cis);
                         lastLocationFile.write(Long.toString(lastLocation + cis.getByteCount()), null);
                     }
