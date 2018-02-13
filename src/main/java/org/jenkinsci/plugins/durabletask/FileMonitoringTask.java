@@ -293,6 +293,7 @@ public abstract class FileMonitoringTask extends DurableTask {
     private static ScheduledExecutorService watchService;
     private synchronized static ScheduledExecutorService watchService() {
         if (watchService == null) {
+            // TODO 2.105+ use ClassLoaderSanityThreadFactory
             watchService = new /*ErrorLogging*/ScheduledThreadPoolExecutor(5, new NamingThreadFactory(new DaemonThreadFactory(), "FileMonitoringTask watcher"));
         }
         return watchService;
