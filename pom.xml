@@ -7,7 +7,7 @@
         <relativePath />
     </parent>
     <artifactId>durable-task</artifactId>
-    <version>1.18</version>
+    <version>1.19-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <name>Durable Task Plugin</name>
     <description>Library offering an extension point for processes which can run outside of Jenkins yet be monitored.</description>
@@ -42,7 +42,7 @@
         <connection>scm:git:git://github.com/jenkinsci/${project.artifactId}-plugin.git</connection>
         <developerConnection>scm:git:git@github.com:jenkinsci/${project.artifactId}-plugin.git</developerConnection>
         <url>https://github.com/jenkinsci/${project.artifactId}-plugin</url>
-        <tag>durable-task-1.18</tag>
+        <tag>HEAD</tag>
     </scm>
     <dependencies>
         <dependency>
