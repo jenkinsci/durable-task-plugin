@@ -76,8 +76,11 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final String COOKIE = "JENKINS_SERVER_COOKIE";
 
+    /** Value of {@link #charset} used to mean the node’s system default. */
+    private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
+
     /**
-     * Charset name to use for transcoding, or the empty string for node system default, or null for no transcoding.
+     * Charset name to use for transcoding, or {@link #SYSTEM_DEFAULT_CHARSET}, or null for no transcoding.
      */
     private @CheckForNull String charset;
 
@@ -101,7 +104,7 @@ public abstract class FileMonitoringTask extends DurableTask {
     }
 
     @Override public final void defaultCharset() {
-        charset = "";
+        charset = SYSTEM_DEFAULT_CHARSET;
     }
 
     /**
@@ -270,7 +273,7 @@ public abstract class FileMonitoringTask extends DurableTask {
             if (charset == null) {
                 return null;
             } else {
-                Charset cs = charset.isEmpty() ? Charset.defaultCharset() : Charset.forName(charset);
+                Charset cs = charset.equals(SYSTEM_DEFAULT_CHARSET) ? Charset.defaultCharset() : Charset.forName(charset);
                 if (cs.equals(StandardCharsets.UTF_8)) { // transcoding unnecessary as output was already UTF-8
                     return null;
                 } else { // decode output in specified charset and reëncode in UTF-8
