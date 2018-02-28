@@ -124,7 +124,7 @@ public class PowershellScriptTest {
     }
     
     @Test public void implicitError() throws Exception {
-        Controller c = new PowershellScript("MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
+        Controller c = new PowershellScript("$ErrorActionPreference = 'Stop'; MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
@@ -161,13 +161,40 @@ public class PowershellScriptTest {
     
     @Test public void verbose() throws Exception {
         DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; Write-Verbose \"Hello, World!\"");
-        task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertEquals("VERBOSE: Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        assertThat(baos.toString(), containsString("VERBOSE: Hello, World!\r\n"));
+        c.cleanup(ws);
+    }
+    
+    @Test public void debug() throws Exception {
+        DurableTask task = new PowershellScript("$DebugPreference = \"Continue\"; Write-Debug \"Hello, World!\"");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertThat(baos.toString(), containsString("DEBUG: Hello, World!\r\n"));
+        c.cleanup(ws);
+    }
+    
+    @Test public void warning() throws Exception {
+        DurableTask task = new PowershellScript("$WarningPreference = \"Continue\"; Write-Warning \"Hello, World!\"");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertThat(baos.toString(), containsString("WARNING: Hello, World!\r\n"));
         c.cleanup(ws);
     }
 
