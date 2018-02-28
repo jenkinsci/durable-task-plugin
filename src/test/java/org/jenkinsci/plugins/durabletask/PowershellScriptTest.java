@@ -168,7 +168,22 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertThat(baos.toString(), containsString("VERBOSE: Hello, World!\r\n"));
+        assertThat(baos.toString(), containsString("VERBOSE: Hello, World!"));
+        c.cleanup(ws);
+    }
+    
+    @Test public void verboseNegativeTest() throws Exception {
+        DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; Write-Verbose \"Hello, World!\"; Write-Output \"Success\"");
+        task.captureOutput();
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() == 0);
+        assertThat(baos.toString(), containsString("Hello, World!"));
+        assertEquals("Success\r\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
     }
     
@@ -181,7 +196,7 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertThat(baos.toString(), containsString("DEBUG: Hello, World!\r\n"));
+        assertThat(baos.toString(), containsString("DEBUG: Hello, World!"));
         c.cleanup(ws);
     }
     
@@ -194,7 +209,7 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertThat(baos.toString(), containsString("WARNING: Hello, World!\r\n"));
+        assertThat(baos.toString(), containsString("WARNING: Hello, World!"));
         c.cleanup(ws);
     }
 
