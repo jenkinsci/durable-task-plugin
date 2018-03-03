@@ -138,9 +138,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         String cmd;
         FilePath logFile = c.getLogFile(ws);
         FilePath resultFile = c.getResultFile(ws);
+        if (resultFile.exists()) {
+            resultFile.delete();  // Maybe overly cautious, but better safe than sorry, similarly we should make sure no duplicate logfile?
+        }
         FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
-            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s'; wait",
+            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
@@ -149,9 +152,10 @@ public final class BourneShellScript extends FileMonitoringTask {
                 scriptPath,
                 c.getOutputFile(ws),
                 logFile,
+                resultFile,
                 resultFile);
         } else {
-            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s'; wait",
+            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
@@ -159,6 +163,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 cookieVariable,
                 scriptPath,
                 logFile,
+                resultFile,
                 resultFile);
         }
         cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
@@ -231,7 +236,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                         if (pidFile.exists()) {
                             listener.getLogger().println("still have " + pidFile + " so heartbeat checks unreliable; process may or may not be alive");
                         } else {
-                            listener.getLogger().println("wrapper script does not seem to be touching the log file in " + controlDir);
+                            listener.getLogger().println("s " + controlDir);
                             listener.getLogger().println("(JENKINS-48300: if on a laggy filesystem, consider -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=300)");
                             return recordExitStatus(workspace, -1);
                         }

@@ -163,7 +163,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         // TODO would be more efficient to allow API to consolidate writeLog with exitStatus (save an RPC call)
         @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
-            if (status.exists()) {
+            if (status.exists() && status.length() > 0) {  // Length 0 can happen if we're sloppy and do not write status atomically.
                 try {
                     return Integer.parseInt(status.readToString().trim());
                 } catch (NumberFormatException x) {
