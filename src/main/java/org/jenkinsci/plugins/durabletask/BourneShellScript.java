@@ -138,9 +138,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         String cmd;
         FilePath logFile = c.getLogFile(ws);
         FilePath resultFile = c.getResultFile(ws);
-        if (resultFile.exists()) {
-            resultFile.delete();  // Maybe overly cautious, but better safe than sorry, similarly we should make sure no duplicate logfile?
-        }
         FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
             cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
