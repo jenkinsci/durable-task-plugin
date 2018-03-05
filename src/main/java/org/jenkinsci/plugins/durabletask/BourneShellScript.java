@@ -235,7 +235,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                         if (pidFile.exists()) {
                             listener.getLogger().println("still have " + pidFile + " so heartbeat checks unreliable; process may or may not be alive");
                         } else {
-                            listener.getLogger().println("s " + controlDir);
+                            listener.getLogger().println("wrapper script does not seem to be touching the log file in " + controlDir);
                             listener.getLogger().println("(JENKINS-48300: if on a laggy filesystem, consider -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=300)");
                             return recordExitStatus(workspace, -1);
                         }
