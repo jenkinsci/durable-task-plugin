@@ -172,7 +172,17 @@ public abstract class FileMonitoringTask extends DurableTask {
             public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 if (f.exists() && f.length() > 0) {
                     try {
-                        return Integer.parseInt(Files.readFirstLine(f, Charset.defaultCharset()));
+                        String fileString = Files.readFirstLine(f, Charset.defaultCharset());
+                        if (fileString == null || fileString.isEmpty()) {
+                            return null;
+                        } else {
+                            fileString = fileString.trim();
+                            if (fileString.isEmpty()) {
+                                return null;
+                            } else {
+                                return Integer.parseInt(fileString);
+                            }
+                        }
                     } catch (NumberFormatException x) {
                         throw new IOException("corrupted content in " + f + ": " + x, x);
                     }
