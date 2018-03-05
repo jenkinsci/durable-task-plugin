@@ -193,7 +193,6 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         static final StatusCheck STATUS_CHECK_INSTANCE = new StatusCheck();
 
-        // TODO would be more efficient to allow API to consolidate writeLog with exitStatus (save an RPC call)
         @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             return status.act(STATUS_CHECK_INSTANCE);
