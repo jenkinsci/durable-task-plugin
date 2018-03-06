@@ -60,17 +60,18 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         BatchController c = new BatchController(ws);
 
         String cmd;
+        String quotedResultFile = quote(c.getResultFile(ws));
         if (capturingOutput) {
-            cmd = String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2> \"%s\"\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+            cmd = String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2> \"%s\"\r\necho %%ERRORLEVEL%% > \"%s.tmp\"\r\nmove \"%s.tmp\" \"%s\"\r\n",
                 quote(c.getBatchFile2(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)));
+                quotedResultFile, quotedResultFile, quotedResultFile);
         } else {
-            cmd = String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+            cmd = String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s.tmp\"\r\nmove \"%s.tmp\" \"%s\"\n",
                 quote(c.getBatchFile2(ws)),
                 quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)));
+                quotedResultFile, quotedResultFile, quotedResultFile);
         }
         c.getBatchFile1(ws).write(cmd, "UTF-8");
         c.getBatchFile2(ws).write(script, "UTF-8");

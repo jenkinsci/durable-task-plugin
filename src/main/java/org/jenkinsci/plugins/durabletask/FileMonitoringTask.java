@@ -24,6 +24,7 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import com.google.common.io.Files;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
@@ -40,6 +41,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.io.StringWriter;
+import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
@@ -48,6 +50,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.io.IOUtils;
+import org.jenkinsci.remoting.RoleChecker;
+
+import javax.annotation.CheckForNull;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -160,18 +165,37 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
-        // TODO would be more efficient to allow API to consolidate writeLog with exitStatus (save an RPC call)
-        @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-            FilePath status = getResultFile(workspace);
-            if (status.exists()) {
-                try {
-                    return Integer.parseInt(status.readToString().trim());
-                } catch (NumberFormatException x) {
-                    throw new IOException("corrupted content in " + status + ": " + x, x);
+        /** Avoids excess round-tripping when reading status file. */
+        static class StatusCheck extends MasterToSlaveFileCallable<Integer> {
+            @Override
+            @CheckForNull
+            public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+                if (f.exists() && f.length() > 0) {
+                    try {
+                        String fileString = Files.readFirstLine(f, Charset.defaultCharset());
+                        if (fileString == null || fileString.isEmpty()) {
+                            return null;
+                        } else {
+                            fileString = fileString.trim();
+                            if (fileString.isEmpty()) {
+                                return null;
+                            } else {
+                                return Integer.parseInt(fileString);
+                            }
+                        }
+                    } catch (NumberFormatException x) {
+                        throw new IOException("corrupted content in " + f + ": " + x, x);
+                    }
                 }
-            } else {
                 return null;
             }
+        }
+
+        static final StatusCheck STATUS_CHECK_INSTANCE = new StatusCheck();
+
+        @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
+            FilePath status = getResultFile(workspace);
+            return status.act(STATUS_CHECK_INSTANCE);
         }
 
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
