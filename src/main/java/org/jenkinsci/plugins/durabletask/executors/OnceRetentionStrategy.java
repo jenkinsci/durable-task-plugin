@@ -38,7 +38,6 @@ import hudson.util.TimeUnit2;
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import jenkins.security.NotReallyRoleSensitiveCallable;
 
 /**
  * Retention strategy that allows a cloud slave to run only a single build before disconnecting.
@@ -121,8 +120,8 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         Computer.threadPoolForRemoting.submit(new Runnable() {
             @Override
             public void run() {
-                Queue.withLock(new NotReallyRoleSensitiveCallable<Void,RuntimeException>() {
-                    @Override public Void call() {
+                Queue.withLock(new Runnable() {
+                    @Override public void run() {
                         try {
                             AbstractCloudSlave node = c.getNode();
                             if (node != null) {
@@ -139,7 +138,6 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
                                 terminating = false;
                             }
                         }
-                        return null;
                     }
                 });
             }
