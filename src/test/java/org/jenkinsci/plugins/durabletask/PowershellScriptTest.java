@@ -124,7 +124,7 @@ public class PowershellScriptTest {
     }
     
     @Test public void implicitError() throws Exception {
-        Controller c = new PowershellScript("MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
+        Controller c = new PowershellScript("$ErrorActionPreference = 'Stop'; MyBogus-Cmdlet").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
@@ -155,19 +155,58 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
         assertThat(baos.toString(), containsString("explicit error"));
-        assertEquals("Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        if (launcher.isUnix()) {
+            assertEquals("Hello, World!\n", new String(c.getOutput(ws, launcher)));
+        } else {
+            assertEquals("Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        }
         c.cleanup(ws);
     }
     
-    @Test public void verbose() throws Exception {
-        DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; Write-Verbose \"Hello, World!\"");
+    @Test public void noStdoutPollution() throws Exception {
+        DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
+                                                "$WarningPreference = \"Continue\"; " +
+                                                "$DebugPreference = \"Continue\"; " +
+                                                "Write-Verbose \"Hello, Verbose!\"; " +
+                                                "Write-Warning \"Hello, Warning!\"; " +
+                                                "Write-Debug \"Hello, Debug!\"; " +
+                                                "Write-Output \"Success\"");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() == 0);
+        assertThat(baos.toString(), containsString("Hello, Verbose!"));
+        assertThat(baos.toString(), containsString("Hello, Warning!"));
+        assertThat(baos.toString(), containsString("Hello, Debug!"));
+        if (launcher.isUnix()) {
+            assertEquals("Success\n", new String(c.getOutput(ws, launcher)));
+        } else {
+            assertEquals("Success\r\n", new String(c.getOutput(ws, launcher)));
+        }
+        c.cleanup(ws);
+    }
+    
+    @Test public void specialStreams() throws Exception {
+        DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
+                                                "$WarningPreference = \"Continue\"; " +
+                                                "$DebugPreference = \"Continue\"; " +
+                                                "Write-Verbose \"Hello, Verbose!\"; " +
+                                                "Write-Warning \"Hello, Warning!\"; " +
+                                                "Write-Debug \"Hello, Debug!\";");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        assertEquals("VERBOSE: Hello, World!\r\n", new String(c.getOutput(ws, launcher)));
+        assertThat(baos.toString(), containsString("VERBOSE: Hello, Verbose!"));
+        assertThat(baos.toString(), containsString("WARNING: Hello, Warning!"));
+        assertThat(baos.toString(), containsString("DEBUG: Hello, Debug!"));
         c.cleanup(ws);
     }
 

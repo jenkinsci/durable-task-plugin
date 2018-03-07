@@ -71,7 +71,7 @@ public final class PowershellScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -OutputFile '%s' -LogFile '%s' -ResultFile '%s' -CaptureOutput;", 
                 quote(c.getPowerShellHelperFile(ws)),
-                quote(c.getPowerShellWrapperFile(ws)),
+                quote(c.getPowerShellScriptFile(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
@@ -115,11 +115,15 @@ public final class PowershellScript extends FileMonitoringTask {
         if (launcher.isUnix()) {
             // There is no need to add a BOM with Open PowerShell
             c.getPowerShellScriptFile(ws).write(scriptWithExit, "UTF-8");
-            c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
+            if (!capturingOutput) {
+                c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
+            }
         } else {
             // Write the Windows PowerShell scripts out with a UTF8 BOM
             writeWithBom(c.getPowerShellScriptFile(ws), scriptWithExit);
-            writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
+            if (!capturingOutput) {
+                writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
+            }
         }
         
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
