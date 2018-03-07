@@ -115,11 +115,15 @@ public final class PowershellScript extends FileMonitoringTask {
         if (launcher.isUnix()) {
             // There is no need to add a BOM with Open PowerShell
             c.getPowerShellScriptFile(ws).write(scriptWithExit, "UTF-8");
-            c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
+            if (!capturingOutput) {
+                c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
+            }
         } else {
             // Write the Windows PowerShell scripts out with a UTF8 BOM
             writeWithBom(c.getPowerShellScriptFile(ws), scriptWithExit);
-            writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
+            if (!capturingOutput) {
+                writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
+            }
         }
         
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);

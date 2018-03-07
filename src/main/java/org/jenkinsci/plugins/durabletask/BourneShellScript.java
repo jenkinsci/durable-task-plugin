@@ -140,7 +140,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
-            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s'; wait",
+            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
@@ -149,9 +149,9 @@ public final class BourneShellScript extends FileMonitoringTask {
                 scriptPath,
                 c.getOutputFile(ws),
                 logFile,
-                resultFile);
+                resultFile, resultFile, resultFile);
         } else {
-            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s'; wait",
+            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
@@ -159,7 +159,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 cookieVariable,
                 scriptPath,
                 logFile,
-                resultFile);
+                resultFile, resultFile, resultFile);
         }
         cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
@@ -207,6 +207,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             return controlDir(ws).child("pid");
         }
 
+        // TODO run as one big MasterToSlaveCallable<Integer> to avoid extra network roundtrips
         @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
             Integer status = super.exitStatus(workspace, launcher, listener);
             if (status != null) {
