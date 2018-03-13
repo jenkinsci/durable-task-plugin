@@ -95,16 +95,16 @@ public final class PowershellScript extends FileMonitoringTask {
         args.addAll(Arrays.asList(powershellArgs.split(" ")));
         args.addAll(Arrays.asList("-Command", cmd));
         
-        // Exception propagation does not occur in legacy PowerShell versions. This means that an exception thrown in an inner PowerShell process
-        // does not propagate to the outer process regardless of $ErrorActionPreference selection. This ensures the exit code is non-zero if an error occurs regardless of PowerShell version.
+        // Ensure backwards compatibility with PowerShell 3,4 for proper error propagation while also ensuring that output stream designations are present in PowerShell 5+
         String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
                                              "param()\r\n" +
-                                             "& %s %s -File '%s';\r\n" +
-                                             "if ($Error) {\r\n" +
-                                             "  exit 1;\r\n" +
+                                             "$scriptPath = '%s';\r\n" +
+                                             "if ($PSVersionTable.PSVersion.Major -ge 5) {\r\n" +
+                                             "  & " + powershellBinary + " " + powershellArgs + " -File $scriptPath;\r\n" +
                                              "} else {\r\n" +
-                                             "  exit $LASTEXITCODE;\r\n" + 
-                                             "}", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
+                                             "  & $scriptPath;\r\n" +
+                                             "}\r\n" +
+                                             "exit $LASTEXITCODE;", quote(c.getPowerShellScriptFile(ws)));
         
         // Add an explicit exit to the end of the script so that exit codes are propagated
         String scriptWithExit = script + "\r\nexit $LASTEXITCODE;";
