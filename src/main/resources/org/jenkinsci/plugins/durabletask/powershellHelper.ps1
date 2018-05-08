@@ -14,6 +14,24 @@ param (
   return $writer;
 }
 
+function Get-StreamDesignation {
+[CmdletBinding()]
+param(
+  [Parameter(ValueFromPipeline = $true)] [object] $InputObject
+)
+  $StreamPrefix = "";
+  if ($InputObject) {
+      if ($InputObject.GetType().Name -eq 'VerboseRecord') {
+        $StreamPrefix = 'VERBOSE: ';
+      } elseif ($InputObject.GetType().Name -eq 'DebugRecord') {
+        $StreamPrefix = 'DEBUG: ';
+      } elseif ($InputObject.GetType().Name -eq 'WarningRecord') {
+        $StreamPrefix = 'WARNING: ';
+      }
+  }
+  $StreamPrefix
+}
+
 function Out-FileNoBom {
 [CmdletBinding()]
 param(
@@ -22,7 +40,8 @@ param(
 )
   Process {
     if ($Writer) {
-      $Input | Out-String -Stream -Width 192 | ForEach-Object { $Writer.WriteLine( $_ ); }
+      $StreamDesignation = $InputObject | Get-StreamDesignation;
+      $Input | Out-String -Stream -Width 192 | ForEach-Object { $Writer.WriteLine( $StreamDesignation + $_ ); }
     } else {
       $Input;
     }
