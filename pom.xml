@@ -3,11 +3,11 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>3.2</version>
+        <version>3.14</version>
         <relativePath />
     </parent>
     <artifactId>durable-task</artifactId>
-    <version>1.23-SNAPSHOT</version>
+    <version>${revision}${changelist}</version>
     <packaging>hpi</packaging>
     <name>Durable Task Plugin</name>
     <description>Library offering an extension point for processes which can run outside of Jenkins yet be monitored.</description>
@@ -20,9 +20,11 @@
     </licenses>
     
     <properties>
-      <jenkins.version>2.7.3</jenkins.version>
-      <java.level>7</java.level>
-      <findbugs.failOnError>false</findbugs.failOnError>
+        <revision>1.23</revision>
+        <changelist>-SNAPSHOT</changelist>
+        <jenkins.version>2.7.3</jenkins.version>
+        <java.level>7</java.level>
+        <findbugs.failOnError>false</findbugs.failOnError>
     </properties>
     
     <repositories>
@@ -42,7 +44,7 @@
         <connection>scm:git:git://github.com/jenkinsci/${project.artifactId}-plugin.git</connection>
         <developerConnection>scm:git:git@github.com:jenkinsci/${project.artifactId}-plugin.git</developerConnection>
         <url>https://github.com/jenkinsci/${project.artifactId}-plugin</url>
-        <tag>HEAD</tag>
+        <tag>${scmTag}</tag>
     </scm>
     <dependencies>
         <dependency>
