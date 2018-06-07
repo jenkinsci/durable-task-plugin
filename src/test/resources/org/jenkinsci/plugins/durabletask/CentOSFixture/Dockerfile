@@ -1,7 +1,7 @@
 FROM centos:7.4.1708
 RUN yum -y install \
-        openssh-server-7.4p1-13.el7_4 \
-        java-1.8.0-openjdk-headless-1.8.0.151-1.b12.el7_4 \
+        openssh-server \
+        java-1.8.0-openjdk-headless \
     && yum clean all
 RUN ssh-keygen -A
 RUN useradd test -d /home/test && \
