@@ -39,6 +39,7 @@ param(
   [Parameter(Mandatory=$false)] [switch]$CaptureOutput
 )
   try {
+    $exitCode = 0;
     $errorCaught = $null;
     [System.Text.Encoding] $encoding = New-Object System.Text.UTF8Encoding( $false );
     [System.Console]::OutputEncoding = [System.Console]::InputEncoding = $encoding;
@@ -55,7 +56,6 @@ param(
     $errorCaught = $_;
     $errorCaught | Out-String -Width 192 | Out-FileNoBom -Writer $LogWriter;
   } finally {
-    $exitCode = 0;
     if ($LASTEXITCODE -ne $null) {
       if ($LASTEXITCODE -eq 0 -and $errorCaught -ne $null) {
         $exitCode = 1;
