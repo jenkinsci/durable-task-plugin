@@ -33,7 +33,7 @@ import hudson.model.queue.QueueTaskDispatcher;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.kohsuke.accmod.Restricted;
-import org.kohsuke.accmod.restrictions.DoNotUse;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 /**
  * Marker for tasks which should perhaps “jump ahead” in the queue because they continue an earlier task.
@@ -49,7 +49,7 @@ public interface ContinuedTask extends Queue.Task {
      */
     boolean isContinued();
 
-    @Restricted(DoNotUse.class) // implementation
+    @Restricted(NoExternalUse.class) // implementation
     @Extension class Scheduler extends QueueTaskDispatcher {
 
         private static final Logger LOGGER = Logger.getLogger(ContinuedTask.class.getName());
