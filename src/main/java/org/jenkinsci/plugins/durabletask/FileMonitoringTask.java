@@ -212,7 +212,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         /**
          * Like {@link #exitStatus(FilePath, Launcher, TaskListener)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
          */
-        protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
+        protected @CheckForNull Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
             return status.act(STATUS_CHECK_INSTANCE);
         }

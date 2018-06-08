@@ -28,6 +28,7 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
 import hudson.model.TaskListener;
+import hudson.remoting.ChannelClosedException;
 import hudson.util.LogTaskListener;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -51,6 +52,7 @@ public abstract class Controller implements Serializable {
      * @param workspace the workspace in use
      * @param handler a remotable callback
      * @param listener a remotable destination for messages
+     * @throws IOException if initiating the watch fails, for example with a {@link ChannelClosedException}
      * @throws UnsupportedOperationException when this mode is not available, so you must fall back to polling {@link #writeLog} and {@link #exitStatus(FilePath, Launcher)}
      */
     public void watch(@Nonnull FilePath workspace, @Nonnull Handler handler, @Nonnull TaskListener listener) throws IOException, InterruptedException, UnsupportedOperationException {
