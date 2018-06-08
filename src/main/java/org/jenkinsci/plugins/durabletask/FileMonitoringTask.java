@@ -232,7 +232,6 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
-            // TODO after 10s, if the control dir still exists, write a flag file and have the Watcher shut down (interrupting any ongoing handler.output call if possible)
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
@@ -385,6 +384,10 @@ public abstract class FileMonitoringTask extends DurableTask {
                     handler.exited(exitStatus, output);
                     controller.cleanup(workspace);
                 } else {
+                    if (!controller.controlDir(workspace).isDirectory()) {
+                        LOGGER.log(Level.WARNING, "giving up on watching nonexistent {0}", controller.controlDir);
+                        return;
+                    }
                     // Could use an adaptive timeout as in DurableTaskStep.Execution in polling mode,
                     // though less relevant here since there is no network overhead to the check.
                     watchService().schedule(this, 100, TimeUnit.MILLISECONDS);
