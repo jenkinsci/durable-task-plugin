@@ -32,6 +32,8 @@ import hudson.model.AbstractDescribableImpl;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 
 /**
@@ -39,6 +41,8 @@ import javax.annotation.Nonnull;
  * Should have a descriptor, and a {@code config.jelly} for form data binding.
  */
 public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> implements ExtensionPoint {
+
+    private static final Logger LOGGER = Logger.getLogger(DurableTask.class.getName());
 
     @Override public DurableTaskDescriptor getDescriptor() {
         return (DurableTaskDescriptor) super.getDescriptor();
@@ -73,7 +77,7 @@ public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> i
      * @param cs the character set in which process output is expected to be
      */
     public void charset(@Nonnull Charset cs) {
-        // by default, ignore
+        LOGGER.log(Level.WARNING, "The charset method should be overridden in {0}", getClass().getName());
     }
 
     /**
@@ -82,7 +86,7 @@ public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> i
      * If not called, no translation is performed.
      */
     public void defaultCharset() {
-        // by default, ignore
+        LOGGER.log(Level.WARNING, "The defaultCharset method should be overridden in {0}", getClass().getName());
     }
 
 }
