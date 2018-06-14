@@ -84,9 +84,12 @@ public final class PowershellScript extends FileMonitoringTask {
         }
       
         // Note: PowerShell core is now named pwsh. Workaround this issue on *nix systems by creating a symlink that maps 'powershell' to 'pwsh'.
+		// symlink works only in console/termninal , when Jenkins run the task it fails with, The managed DLL bound to this executable: 'pwsh.dll', did not match own name 'powershell.dll'.A fatal error was encountered. This executable was not bound to load a managed DLL.
+
         String powershellBinary = "powershell";
         String powershellArgs;
         if (launcher.isUnix()) {
+			powershellBinary = "pwsh"
             powershellArgs = "-NoProfile -NonInteractive";
         } else {
             powershellArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass";

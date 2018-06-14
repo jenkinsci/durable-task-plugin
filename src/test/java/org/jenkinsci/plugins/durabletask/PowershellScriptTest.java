@@ -67,7 +67,11 @@ public class PowershellScriptTest {
         String[] paths = System.getenv("PATH").split(pathSeparator);
         boolean powershellExists = false;
         // Note: This prevents this set of tests from running on PowerShell core unless a symlink is created that maps 'powershell' to 'pwsh' on *nix systems
+		// symlink works only in console/termninal , when Jenkins run the task it fails with, The managed DLL bound to this executable: 'pwsh.dll', did not match own name 'powershell.dll'.A fatal error was encountered. This executable was not bound to load a managed DLL.
         String cmd = "powershell";
+		if (launcher.isUnix())){			
+			cmd = "pwsh"
+		}
         for (String p : paths) {
             // If running on *nix then the binary does not have an extension.  Check for both variants to ensure *nix and windows+cygwin are both supported.
             File withoutExtension = new File(p, cmd);
