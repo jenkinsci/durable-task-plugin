@@ -89,7 +89,7 @@ public final class PowershellScript extends FileMonitoringTask {
         String powershellBinary = "powershell";
         String powershellArgs;
         if (launcher.isUnix()) {
-			powershellBinary = "pwsh"
+			powershellBinary = "pwsh";
             powershellArgs = "-NoProfile -NonInteractive";
         } else {
             powershellArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass";
