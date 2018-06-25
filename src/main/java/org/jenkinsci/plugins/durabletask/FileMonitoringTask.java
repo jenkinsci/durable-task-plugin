@@ -126,7 +126,6 @@ public abstract class FileMonitoringTask extends DurableTask {
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
             FilePath log = getLogFile(workspace);
             CountingOutputStream cos = new CountingOutputStream(sink);
-            long start = System.currentTimeMillis();
             try {
                 log.act(new WriteLog(lastLocation, new RemoteOutputStream(cos)));
                 return cos.getByteCount() > 0;
