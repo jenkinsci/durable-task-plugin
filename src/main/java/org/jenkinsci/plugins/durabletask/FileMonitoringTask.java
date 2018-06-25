@@ -55,7 +55,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.output.CountingOutputStream;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -149,16 +149,20 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
             FilePath log = getLogFile(workspace);
-            Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink), charset));
-            if (newLocation != null) {
-                LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, log});
-                lastLocation = newLocation;
-                return true;
-            } else {
-                return false;
+            CountingOutputStream cos = new CountingOutputStream(sink);
+            long start = System.currentTimeMillis();
+            try {
+                log.act(new WriteLog(lastLocation, new RemoteOutputStream(cos), charset));
+                return cos.getByteCount() > 0;
+            } finally { // even if RemoteOutputStream write was interrupted, record what we actually received
+                long written = cos.getByteCount();
+                if (written > 0) {
+                    LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {written, log});
+                    lastLocation += written;
+                }
             }
         }
-        private static class WriteLog extends MasterToSlaveFileCallable<Long> {
+        private static class WriteLog extends MasterToSlaveFileCallable<Void> {
             private final long lastLocation;
             private final OutputStream sink;
             private final @CheckForNull String charset;
@@ -167,17 +171,15 @@ public abstract class FileMonitoringTask extends DurableTask {
                 this.sink = sink;
                 this.charset = charset;
             }
-            @Override public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+            @Override public Void invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 long len = f.length();
                 if (len > lastLocation) {
-                    RandomAccessFile raf = new RandomAccessFile(f, "r");
-                    try {
+                    try (RandomAccessFile raf = new RandomAccessFile(f, "r")) {
                         raf.seek(lastLocation);
                         long toRead = len - lastLocation;
                         if (toRead > Integer.MAX_VALUE) { // >2Gb of output at once is unlikely
                             throw new IOException("large reads not yet implemented");
                         }
-                        // TODO is this efficient for large amounts of output? Would it be better to stream data, or return a byte[] from the callable?
                         byte[] buf = new byte[(int) toRead];
                         raf.readFully(buf);
                         ByteBuffer transcoded = maybeTranscode(buf, charset);
@@ -186,13 +188,9 @@ public abstract class FileMonitoringTask extends DurableTask {
                         } else {
                             Channels.newChannel(sink).write(transcoded);
                         }
-                    } finally {
-                        raf.close();
                     }
-                    return len;
-                } else {
-                    return null;
                 }
+                return null;
             }
         }
 
