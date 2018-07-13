@@ -28,7 +28,6 @@ import com.google.common.io.Files;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.Platform;
 import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
