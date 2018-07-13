@@ -118,7 +118,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
             s = "#!"+defaultShell+" -xe\n" + s;
         }
-        shf.write(s, "UTF-8");
+        shf.write(s, "CP1047");
         shf.chmod(0755);
 
         scriptPath = shf.getRemote();

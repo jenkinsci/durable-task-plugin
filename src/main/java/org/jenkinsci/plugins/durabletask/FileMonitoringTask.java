@@ -28,6 +28,7 @@ import com.google.common.io.Files;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Platform;
 import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
@@ -154,7 +155,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                         // TODO is this efficient for large amounts of output? Would it be better to stream data, or return a byte[] from the callable?
                         byte[] buf = new byte[(int) toRead];
                         raf.readFully(buf);
-                        sink.write(buf);
+                        sink.write(new String(buf, "CP1047").getBytes());
                     } finally {
                         raf.close();
                     }
@@ -172,7 +173,7 @@ public abstract class FileMonitoringTask extends DurableTask {
             public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 if (f.exists() && f.length() > 0) {
                     try {
-                        String fileString = Files.readFirstLine(f, Charset.defaultCharset());
+                        String fileString = Files.readFirstLine(f, Charset.forName("CP1047")); 
                         if (fileString == null || fileString.isEmpty()) {
                             return null;
                         } else {
