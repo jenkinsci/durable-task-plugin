@@ -38,24 +38,28 @@ import hudson.util.StreamTaskListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.RandomAccessFile;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
+import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.CountingOutputStream;
+import org.apache.commons.io.output.WriterOutputStream;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -139,6 +143,12 @@ public abstract class FileMonitoringTask extends DurableTask {
         /** @see FileMonitoringTask#charset */
         private @CheckForNull String charset;
 
+        /**
+         * {@link #transcodingCharset} on the remote side when using {@link #writeLog}.
+         * May be a wrapper for null; initialized on demand.
+         */
+        private transient volatile AtomicReference<Charset> writeLogCs;
+
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
@@ -148,12 +158,31 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
+            if (writeLogCs == null) {
+                if (SYSTEM_DEFAULT_CHARSET.equals(charset)) {
+                    String cs = workspace.act(new TranscodingCharsetForSystemDefault());
+                    writeLogCs = new AtomicReference<>(cs == null ? null : Charset.forName(cs));
+                } else {
+                    // Does not matter what system default charset on the remote side is, so save the Remoting call.
+                    writeLogCs = new AtomicReference<>(transcodingCharset(charset));
+                }
+                LOGGER.log(Level.FINE, "remote transcoding charset: {0}", writeLogCs);
+            }
             FilePath log = getLogFile(workspace);
-            CountingOutputStream cos = new CountingOutputStream(sink);
+            OutputStream transcodedSink;
+            if (writeLogCs.get() == null) {
+                transcodedSink = sink;
+            } else {
+                // WriterOutputStream constructor taking Charset calls .replaceWith("?") which we do not want:
+                CharsetDecoder decoder = writeLogCs.get().newDecoder().onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE);
+                transcodedSink = new WriterOutputStream(new OutputStreamWriter(sink, StandardCharsets.UTF_8), decoder, 1024, true);
+            }
+            CountingOutputStream cos = new CountingOutputStream(transcodedSink);
             try {
-                log.act(new WriteLog(lastLocation, new RemoteOutputStream(cos), charset));
+                log.act(new WriteLog(lastLocation, new RemoteOutputStream(cos)));
                 return cos.getByteCount() > 0;
             } finally { // even if RemoteOutputStream write was interrupted, record what we actually received
+                transcodedSink.flush(); // writeImmediately flag does not seem to work
                 long written = cos.getByteCount();
                 if (written > 0) {
                     LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {written, log});
@@ -164,11 +193,9 @@ public abstract class FileMonitoringTask extends DurableTask {
         private static class WriteLog extends MasterToSlaveFileCallable<Void> {
             private final long lastLocation;
             private final OutputStream sink;
-            private final @CheckForNull String charset;
-            WriteLog(long lastLocation, OutputStream sink, String charset) {
+            WriteLog(long lastLocation, OutputStream sink) {
                 this.lastLocation = lastLocation;
                 this.sink = sink;
-                this.charset = charset;
             }
             @Override public Void invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 long len = f.length();
@@ -181,15 +208,17 @@ public abstract class FileMonitoringTask extends DurableTask {
                         }
                         byte[] buf = new byte[(int) toRead];
                         raf.readFully(buf);
-                        ByteBuffer transcoded = maybeTranscode(buf, charset);
-                        if (transcoded == null) {
-                            sink.write(buf);
-                        } else {
-                            Channels.newChannel(sink).write(transcoded);
-                        }
+                        sink.write(buf);
                     }
                 }
                 return null;
+            }
+        }
+
+        private static class TranscodingCharsetForSystemDefault extends MasterToSlaveCallable<String, RuntimeException> {
+            @Override public String call() throws RuntimeException {
+                Charset cs = transcodingCharset(SYSTEM_DEFAULT_CHARSET);
+                return cs != null ? cs.name() : null;
             }
         }
 
@@ -226,26 +255,6 @@ public abstract class FileMonitoringTask extends DurableTask {
             return status.act(STATUS_CHECK_INSTANCE);
         }
 
-        /**
-         * Transcode process output to UTF-8 if necessary.
-         * @param data output presumed to be in local encoding
-         * @param charset a particular encoding name, or the empty string for the system default encoding, or null to skip transcoding
-         * @return a buffer of UTF-8 encoded data ({@link CodingErrorAction#REPLACE} is used),
-         *         or null if not performing transcoding because it was not requested or the data was already thought to be in UTF-8
-         */
-        private static @CheckForNull ByteBuffer maybeTranscode(@Nonnull byte[] data, @CheckForNull String charset) {
-            if (charset == null) { // no transcoding requested, do raw copy and YMMV
-                return null;
-            } else {
-                Charset cs = charset.equals(SYSTEM_DEFAULT_CHARSET) ? Charset.defaultCharset() : Charset.forName(charset);
-                if (cs.equals(StandardCharsets.UTF_8)) { // transcoding unnecessary as output was already UTF-8
-                    return null;
-                } else { // decode output in specified charset and reëncode in UTF-8
-                    return StandardCharsets.UTF_8.encode(cs.decode(ByteBuffer.wrap(data)));
-                }
-            }
-        }
-
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             return getOutputFile(workspace).act(new MasterToSlaveFileCallable<byte[]>() {
                 @Override public byte[] invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
@@ -260,6 +269,35 @@ public abstract class FileMonitoringTask extends DurableTask {
                     }
                 }
             });
+        }
+
+        /**
+         * Transcode process output to UTF-8 if necessary.
+         * @param data output presumed to be in local encoding
+         * @param charset a particular encoding name, or the empty string for the system default encoding, or null to skip transcoding
+         * @return a buffer of UTF-8 encoded data ({@link CodingErrorAction#REPLACE} is used),
+         *         or null if not performing transcoding because it was not requested or the data was already thought to be in UTF-8
+         */
+        private static @CheckForNull ByteBuffer maybeTranscode(@Nonnull byte[] data, @CheckForNull String charset) {
+            Charset cs = transcodingCharset(charset);
+            if (cs == null) {
+                return null;
+            } else {
+                return StandardCharsets.UTF_8.encode(cs.decode(ByteBuffer.wrap(data)));
+            }
+        }
+
+        private static @CheckForNull Charset transcodingCharset(@CheckForNull String charset) {
+            if (charset == null) {
+                return null;
+            } else {
+                Charset cs = charset.equals(SYSTEM_DEFAULT_CHARSET) ? Charset.defaultCharset() : Charset.forName(charset);
+                if (cs.equals(StandardCharsets.UTF_8)) { // transcoding unnecessary as output was already UTF-8
+                    return null;
+                } else { // decode output in specified charset and reëncode in UTF-8
+                    return cs;
+                }
+            }
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
