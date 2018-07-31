@@ -95,16 +95,10 @@ public final class PowershellScript extends FileMonitoringTask {
         args.addAll(Arrays.asList(powershellArgs.split(" ")));
         args.addAll(Arrays.asList("-Command", cmd));
         
-        // Ensure backwards compatibility with PowerShell 3,4 for proper error propagation while also ensuring that output stream designations are present in PowerShell 5+
         String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
                                              "param()\r\n" +
-                                             "$scriptPath = '%s';\r\n" +
-                                             "if ($PSVersionTable.PSVersion.Major -ge 5) {\r\n" +
-                                             "  & " + powershellBinary + " " + powershellArgs + " -File $scriptPath;\r\n" +
-                                             "} else {\r\n" +
-                                             "  & $scriptPath;\r\n" +
-                                             "}\r\n" +
-                                             "exit $LASTEXITCODE;", quote(c.getPowerShellScriptFile(ws)));
+                                             "& %s %s -Command \"& '%s'\";\r\n" +
+                                             "exit $LASTEXITCODE;", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
         
         // Add an explicit exit to the end of the script so that exit codes are propagated
         String scriptWithExit = script + "\r\nexit $LASTEXITCODE;";
