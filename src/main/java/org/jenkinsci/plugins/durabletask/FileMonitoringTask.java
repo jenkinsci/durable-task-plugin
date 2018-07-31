@@ -50,7 +50,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.MasterToSlaveFileCallable;
 import org.apache.commons.io.IOUtils;
-import org.jenkinsci.remoting.RoleChecker;
+import org.apache.commons.io.output.CountingOutputStream;
 
 import javax.annotation.CheckForNull;
 
@@ -125,43 +125,40 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
             FilePath log = getLogFile(workspace);
-            Long newLocation = log.act(new WriteLog(lastLocation, new RemoteOutputStream(sink)));
-            if (newLocation != null) {
-                LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, log});
-                lastLocation = newLocation;
-                return true;
-            } else {
-                return false;
+            CountingOutputStream cos = new CountingOutputStream(sink);
+            try {
+                log.act(new WriteLog(lastLocation, new RemoteOutputStream(cos)));
+                return cos.getByteCount() > 0;
+            } finally { // even if RemoteOutputStream write was interrupted, record what we actually received
+                long written = cos.getByteCount();
+                if (written > 0) {
+                    LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {written, log});
+                    lastLocation += written;
+                }
             }
         }
-        private static class WriteLog extends MasterToSlaveFileCallable<Long> {
+        private static class WriteLog extends MasterToSlaveFileCallable<Void> {
             private final long lastLocation;
             private final OutputStream sink;
             WriteLog(long lastLocation, OutputStream sink) {
                 this.lastLocation = lastLocation;
                 this.sink = sink;
             }
-            @Override public Long invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+            @Override public Void invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 long len = f.length();
                 if (len > lastLocation) {
-                    RandomAccessFile raf = new RandomAccessFile(f, "r");
-                    try {
+                    try (RandomAccessFile raf = new RandomAccessFile(f, "r")) {
                         raf.seek(lastLocation);
                         long toRead = len - lastLocation;
                         if (toRead > Integer.MAX_VALUE) { // >2Gb of output at once is unlikely
                             throw new IOException("large reads not yet implemented");
                         }
-                        // TODO is this efficient for large amounts of output? Would it be better to stream data, or return a byte[] from the callable?
                         byte[] buf = new byte[(int) toRead];
                         raf.readFully(buf);
                         sink.write(buf);
-                    } finally {
-                        raf.close();
                     }
-                    return len;
-                } else {
-                    return null;
                 }
+                return null;
             }
         }
 
