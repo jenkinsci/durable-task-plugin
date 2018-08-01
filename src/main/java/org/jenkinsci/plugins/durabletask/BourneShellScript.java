@@ -140,7 +140,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
-            cmd = String.format("pid=$$; { while ps -o pid -p $pid | grep -q $pid && [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmd = String.format("pid=$$; { while ps -o pid | grep -q \"^$pid$\" && [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
@@ -151,7 +151,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 logFile,
                 resultFile, resultFile, resultFile);
         } else {
-            cmd = String.format("pid=$$; { while ps -o pid -p $pid | grep -q $pid && [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmd = String.format("pid=$$; { while ps -o pid | grep -q \"^$pid$\" && [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
