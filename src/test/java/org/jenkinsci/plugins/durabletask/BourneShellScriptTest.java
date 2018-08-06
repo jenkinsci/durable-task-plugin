@@ -34,8 +34,12 @@ import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.OutputStream;
+import java.nio.charset.Charset;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.logging.Level;
+import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
 import org.jenkinsci.test.acceptance.docker.Docker;
@@ -67,7 +71,7 @@ public class BourneShellScriptTest {
         assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
     }
 
-    @Rule public LoggerRule logging = new LoggerRule().record(BourneShellScript.class, Level.FINE);
+    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
     private StreamTaskListener listener;
     private FilePath ws;
@@ -234,6 +238,66 @@ public class BourneShellScriptTest {
     @Test public void runWithTiniCommandLauncher() throws Exception {
         assumeTrue("Docker required for this test", new Docker().isAvailable());
         runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
+    }
+
+    @Issue("JENKINS-31096")
+    @Test public void encoding() throws Exception {
+        JavaContainer container = dockerUbuntu.get();
+        DumbSlave s = new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "-Dfile.encoding=ISO-8859-1"));
+        j.jenkins.addNode(s);
+        j.waitOnline(s);
+        assertEquals("ISO-8859-1", s.getChannel().call(new DetectCharset()));
+        FilePath dockerWS = s.getWorkspaceRoot();
+        dockerWS.child("latin").write("¡Ole!\n", "ISO-8859-1");
+        dockerWS.child("eastern").write("Čau!\n", "ISO-8859-2");
+        dockerWS.child("mixed").write("¡Čau → there!\n", "UTF-8");
+        Launcher dockerLauncher = s.createLauncher(listener);
+        assertEncoding("control: no transcoding", "latin", null, "¡Ole!", "ISO-8859-1", dockerWS, dockerLauncher);
+        assertEncoding("test: specify particular charset (UTF-8)", "mixed", "UTF-8", "¡Čau → there!", "UTF-8", dockerWS, dockerLauncher);
+        assertEncoding("test: specify particular charset (unrelated)", "eastern", "ISO-8859-2", "Čau!", "UTF-8", dockerWS, dockerLauncher);
+        assertEncoding("test: specify agent default charset", "latin", "", "¡Ole!", "UTF-8", dockerWS, dockerLauncher);
+        assertEncoding("test: inappropriate charset, some replacement characters", "mixed", "US-ASCII", "����au ��� there!", "UTF-8", dockerWS, dockerLauncher);
+        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+    }
+    private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
+        @Override public String call() throws RuntimeException {
+            return Charset.defaultCharset().name();
+        }
+    }
+    private void assertEncoding(String description, String file, String charset, String expected, String expectedEncoding, FilePath dockerWS, Launcher dockerLauncher) throws Exception {
+        assertEncoding(description, file, charset, expected, expectedEncoding, false, dockerWS, dockerLauncher);
+        assertEncoding(description, file, charset, expected, expectedEncoding, true, dockerWS, dockerLauncher);
+    }
+    private void assertEncoding(String description, String file, String charset, String expected, String expectedEncoding, boolean output, FilePath dockerWS, Launcher dockerLauncher) throws Exception {
+        System.err.println(description + " (output=" + output + ")"); // TODO maybe this should just be moved into a new class and @RunWith(Parameterized.class) for clarity
+        BourneShellScript dt = new BourneShellScript("set +x; cat " + file + "; sleep 1; tr '[a-z]' '[A-Z]' < " + file);
+        if (charset != null) {
+            if (charset.isEmpty()) {
+                dt.defaultCharset();
+            } else {
+                dt.charset(Charset.forName(charset));
+            }
+        }
+        if (output) {
+            dt.captureOutput();
+        }
+        Controller c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        OutputStream tee = new TeeOutputStream(baos, System.err);
+        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            c.writeLog(dockerWS, tee);
+            Thread.sleep(100);
+        }
+        c.writeLog(dockerWS, tee);
+        assertEquals(description, 0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        String fullExpected = expected + "\n" + expected.toUpperCase(Locale.ENGLISH) + "\n";
+        if (output) {
+            assertEquals(description, fullExpected, new String(c.getOutput(dockerWS, launcher), expectedEncoding));
+        } else {
+            assertThat(description, baos.toString(expectedEncoding), containsString(fullExpected));
+        }
+        c.cleanup(dockerWS);
+        
     }
 
 }

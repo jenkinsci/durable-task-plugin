@@ -49,6 +49,8 @@ public abstract class Controller implements Serializable {
      * @param workspace the workspace in use
      * @param sink where to send new log output
      * @return true if something was written and the controller should be resaved, false if everything is idle
+     * @see DurableTask#charset
+     * @see DurableTask#defaultCharset
      */
     public abstract boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException;
 
@@ -88,6 +90,8 @@ public abstract class Controller implements Serializable {
      * @param workspace the workspace in use
      * @param launcher a way to start processes
      * @return the output of the process as raw bytes (may be empty but not null)
+     * @see DurableTask#charset
+     * @see DurableTask#defaultCharset
      */
     public @Nonnull byte[] getOutput(@Nonnull FilePath workspace, @Nonnull Launcher launcher) throws IOException, InterruptedException {
         throw new IOException("Did not implement getOutput in " + getClass().getName());
