@@ -217,15 +217,9 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher).intValue());
-        if (psVersion >= 5) {
-            assertThat(baos.toString(), containsString("VERBOSE: Hello, Verbose!"));
-            assertThat(baos.toString(), containsString("WARNING: Hello, Warning!"));
-            assertThat(baos.toString(), containsString("DEBUG: Hello, Debug!"));
-        } else {
-            assertThat(baos.toString(), containsString("Hello, Verbose!"));
-            assertThat(baos.toString(), containsString("Hello, Warning!"));
-            assertThat(baos.toString(), containsString("Hello, Debug!"));
-        }
+        assertThat(baos.toString(), containsString("VERBOSE: Hello, Verbose!"));
+        assertThat(baos.toString(), containsString("WARNING: Hello, Warning!"));
+        assertThat(baos.toString(), containsString("DEBUG: Hello, Debug!"));
         c.cleanup(ws);
     }
 
