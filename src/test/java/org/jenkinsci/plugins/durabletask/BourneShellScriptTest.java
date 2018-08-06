@@ -37,9 +37,11 @@ import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
@@ -76,7 +78,7 @@ public class BourneShellScriptTest {
         assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
     }
 
-    @Rule public LoggerRule logging = new LoggerRule().record(BourneShellScript.class, Level.FINE);
+    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
     private StreamTaskListener listener;
     private FilePath ws;
@@ -298,9 +300,9 @@ public class BourneShellScriptTest {
         j.waitOnline(s);
         assertEquals("ISO-8859-1", s.getChannel().call(new DetectCharset()));
         FilePath dockerWS = s.getWorkspaceRoot();
-        dockerWS.child("latin").write("¡Ole!", "ISO-8859-1");
-        dockerWS.child("eastern").write("Čau!", "ISO-8859-2");
-        dockerWS.child("mixed").write("¡Čau → there!", "UTF-8");
+        dockerWS.child("latin").write("¡Ole!\n", "ISO-8859-1");
+        dockerWS.child("eastern").write("Čau!\n", "ISO-8859-2");
+        dockerWS.child("mixed").write("¡Čau → there!\n", "UTF-8");
         Launcher dockerLauncher = s.createLauncher(listener);
         assertEncoding("control: no transcoding", "latin", null, "¡Ole!", "ISO-8859-1", false, dockerWS, dockerLauncher);
         assertEncoding("test: specify particular charset (UTF-8)", "mixed", "UTF-8", "¡Čau → there!", "UTF-8", dockerWS, dockerLauncher);
@@ -323,7 +325,8 @@ public class BourneShellScriptTest {
         assertEncoding(description, file, charset, expected, expectedEncoding, true, watch, dockerWS, dockerLauncher);
     }
     private void assertEncoding(String description, String file, String charset, String expected, String expectedEncoding, boolean output, boolean watch, FilePath dockerWS, Launcher dockerLauncher) throws Exception {
-        BourneShellScript dt = new BourneShellScript("cat " + file);
+        BourneShellScript dt = new BourneShellScript("set +x; cat " + file + "; sleep 1; tr '[a-z]' '[A-Z]' < " + file);
+        System.err.println(description + " (output=" + output + ", watch=" + watch + ")"); // TODO maybe this should just be moved into a new class and @RunWith(Parameterized.class) for clarity
         if (charset != null) {
             if (charset.isEmpty()) {
                 dt.defaultCharset();
@@ -335,32 +338,35 @@ public class BourneShellScriptTest {
             dt.captureOutput();
         }
         Controller c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        String expectedUC = expected.toUpperCase(Locale.ENGLISH);
+        String fullExpected = expected + "\n" + expectedUC + "\n";
         if (watch) {
             BlockingQueue<Integer> status = new LinkedBlockingQueue<>();
             BlockingQueue<String> stdout = new LinkedBlockingQueue<>();
             BlockingQueue<String> lines = new LinkedBlockingQueue<>();
             c.watch(dockerWS, new MockHandler(dockerWS.getChannel(), status, stdout, lines), listener);
-            assertEquals(description, "+ cat " + file, lines.take());
+            assertEquals(description, "+ set +x", lines.take());
             assertEquals(description, 0, status.take().intValue());
             if (output) {
-                assertEquals(description, expected, stdout.take());
+                assertEquals(description, fullExpected, stdout.take());
                 assertEquals(description, "[]", lines.toString());
             } else {
                 assertEquals(description, "<no output>", stdout.take());
-                assertEquals(description, "[" + expected + "]", lines.toString());
+                assertEquals(description, "[" + expected + ", " + expectedUC + "]", lines.toString());
             }
         } else {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            OutputStream tee = new TeeOutputStream(baos, System.err);
             while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+                c.writeLog(dockerWS, tee);
                 Thread.sleep(100);
             }
+            c.writeLog(dockerWS, tee);
             assertEquals(description, 0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
             if (output) {
-                c.writeLog(dockerWS, System.err);
-                assertEquals(description, expected, new String(c.getOutput(dockerWS, launcher), expectedEncoding));
+                assertEquals(description, fullExpected, new String(c.getOutput(dockerWS, launcher), expectedEncoding));
             } else {
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                c.writeLog(dockerWS, baos);
-                assertThat(description, baos.toString(expectedEncoding), containsString(expected));
+                assertThat(description, baos.toString(expectedEncoding), containsString(fullExpected));
             }
         }
         c.cleanup(dockerWS);
