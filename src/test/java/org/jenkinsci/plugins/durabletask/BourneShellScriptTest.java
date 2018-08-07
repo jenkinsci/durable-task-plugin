@@ -64,6 +64,8 @@ public class BourneShellScriptTest {
 
     @Rule public DockerRule<CentOSFixture> dockerCentOS = new DockerRule<>(CentOSFixture.class);
 
+    @Rule public DockerRule<AlpineFixture> dockerAlpine = new DockerRule<>(AlpineFixture.class);
+
     @BeforeClass public static void unixAndDocker() throws Exception {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -207,12 +209,22 @@ public class BourneShellScriptTest {
         runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
     }
 
+    @Test public void runOnAlpineDocker() throws Exception {
+        AlpineFixture container = dockerAlpine.get();
+        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
+    }
+
     private void runOnDocker(DumbSlave s) throws Exception {
+        runOnDocker(s, 10);
+    }
+
+    private void runOnDocker(DumbSlave s, int sleepSeconds) throws Exception {
         j.jenkins.addNode(s);
         j.waitOnline(s);
         FilePath dockerWS = s.getWorkspaceRoot();
         Launcher dockerLauncher = s.createLauncher(listener);
-        Controller c = new BourneShellScript("echo hello world; sleep 10").launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        String script = String.format("echo hello world; sleep %s", sleepSeconds);
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), dockerWS, dockerLauncher, listener);
         while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
             Thread.sleep(100);
         }
@@ -224,7 +236,7 @@ public class BourneShellScriptTest {
         do {
             Thread.sleep(1000);
             baos = new ByteArrayOutputStream();
-            assertEquals(0, dockerLauncher.launch().cmds("ps", "-e", "-o", "pid,stat,command").stdout(new TeeOutputStream(baos, System.out)).join());
+            assertEquals(0, dockerLauncher.launch().cmds("ps", "-e", "-o", "pid,stat,comm").stdout(new TeeOutputStream(baos, System.out)).join());
         } while (baos.toString().contains(" sleep "));
         assertThat("no zombies running", baos.toString(), not(containsString(" Z ")));
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
