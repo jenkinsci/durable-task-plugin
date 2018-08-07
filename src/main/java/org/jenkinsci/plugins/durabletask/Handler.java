@@ -37,7 +37,7 @@ import javax.annotation.Nullable;
  * If it needs to communicate with the master, you may use {@link VirtualChannel#export}.
  * @see Controller#watch
  */
-public abstract class Handler implements Serializable {
+public abstract class Handler implements Serializable { // TODO 2.107+ SerializableOnlyOverRemoting
 
     /**
      * Notification that new process output is available.

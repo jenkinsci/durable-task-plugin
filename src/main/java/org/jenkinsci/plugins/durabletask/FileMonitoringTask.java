@@ -142,7 +142,7 @@ public abstract class FileMonitoringTask extends DurableTask {
      * Tails a log file and watches for an exit status file.
      * Must be remotable so that {@link #watch} can transfer the implementation.
      */
-    protected static class FileMonitoringController extends Controller {
+    protected static class FileMonitoringController extends Controller { // TODO implements Remotable when available (*not* SerializableOnlyOverRemoting)
 
         /** Absolute path of {@link #controlDir(FilePath)}. */
         String controlDir;
