@@ -50,7 +50,6 @@ import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
@@ -213,12 +212,13 @@ public class BourneShellScriptTest {
         runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
     }
 
+    @Issue("JENKINS-52847")
     @Test public void runOnAlpineDocker() throws Exception {
         AlpineFixture container = dockerAlpine.get();
         runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
     }
 
-    @Ignore("TODO sh: 1: ps: not found")
+    @Issue("JENKINS-52881")
     @Test public void runOnSlimDocker() throws Exception {
         SlimFixture container = dockerSlim.get();
         runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
