@@ -36,6 +36,7 @@ import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -68,6 +69,8 @@ public class BourneShellScriptTest {
     @Rule public DockerRule<CentOSFixture> dockerCentOS = new DockerRule<>(CentOSFixture.class);
 
     @Rule public DockerRule<AlpineFixture> dockerAlpine = new DockerRule<>(AlpineFixture.class);
+
+    @Rule public DockerRule<SlimFixture> dockerSlim = new DockerRule<>(SlimFixture.class);
 
     @BeforeClass public static void unixAndDocker() throws Exception {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
@@ -257,8 +260,15 @@ public class BourneShellScriptTest {
         runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
     }
 
+    @Issue("JENKINS-52847")
     @Test public void runOnAlpineDocker() throws Exception {
         AlpineFixture container = dockerAlpine.get();
+        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
+    }
+
+    @Issue("JENKINS-52881")
+    @Test public void runOnSlimDocker() throws Exception {
+        SlimFixture container = dockerSlim.get();
         runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
     }
 
@@ -284,7 +294,12 @@ public class BourneShellScriptTest {
         do {
             Thread.sleep(1000);
             baos = new ByteArrayOutputStream();
-            assertEquals(0, dockerLauncher.launch().cmds("ps", "-e", "-o", "pid,stat,comm").stdout(new TeeOutputStream(baos, System.out)).join());
+            try {
+                assertEquals(0, dockerLauncher.launch().cmds("ps", "-e", "-o", "pid,stat,comm").stdout(new TeeOutputStream(baos, System.out)).join());
+            } catch (IOException x) { // no ps? forget this check
+                System.err.println(x);
+                break;
+            }
         } while (baos.toString().contains(" sleep "));
         assertThat("no zombies running", baos.toString(), not(containsString(" Z ")));
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
