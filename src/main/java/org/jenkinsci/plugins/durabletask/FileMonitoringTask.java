@@ -69,7 +69,6 @@ import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.input.CountingInputStream;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.commons.io.output.WriterOutputStream;
@@ -474,12 +473,11 @@ public abstract class FileMonitoringTask extends DurableTask {
                     assert !logFile.isRemote();
                     try (FileChannel ch = FileChannel.open(Paths.get(logFile.getRemote()), StandardOpenOption.READ)) {
                         InputStream locallyEncodedStream = Channels.newInputStream(ch.position(lastLocation));
-                        CountingInputStream cis = new CountingInputStream(locallyEncodedStream);
-                        InputStream utf8EncodedStream = cs == null ? cis : new ReaderInputStream(new InputStreamReader(cis, cs), StandardCharsets.UTF_8);
+                        InputStream utf8EncodedStream = cs == null ? locallyEncodedStream : new ReaderInputStream(new InputStreamReader(locallyEncodedStream, cs), StandardCharsets.UTF_8);
                         try {
                             handler.output(utf8EncodedStream);
                         } finally {
-                            lastLocationFile.write(Long.toString(lastLocation + cis.getByteCount()), null);
+                            lastLocationFile.write(Long.toString(ch.position()), null);
                         }
                     }
                 }
