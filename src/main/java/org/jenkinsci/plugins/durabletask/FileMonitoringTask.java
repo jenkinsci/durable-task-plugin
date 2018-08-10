@@ -474,11 +474,8 @@ public abstract class FileMonitoringTask extends DurableTask {
                     try (FileChannel ch = FileChannel.open(Paths.get(logFile.getRemote()), StandardOpenOption.READ)) {
                         InputStream locallyEncodedStream = Channels.newInputStream(ch.position(lastLocation));
                         InputStream utf8EncodedStream = cs == null ? locallyEncodedStream : new ReaderInputStream(new InputStreamReader(locallyEncodedStream, cs), StandardCharsets.UTF_8);
-                        try {
-                            handler.output(utf8EncodedStream);
-                        } finally {
-                            lastLocationFile.write(Long.toString(ch.position()), null);
-                        }
+                        handler.output(utf8EncodedStream);
+                        lastLocationFile.write(Long.toString(ch.position()), null);
                     }
                 }
                 if (exitStatus != null) {
