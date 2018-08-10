@@ -499,6 +499,21 @@ public abstract class FileMonitoringTask extends DurableTask {
             } catch (Exception x) {
                 // note that LOGGER here is going to the agent log, not master log
                 LOGGER.log(Level.WARNING, "giving up on watching " + controller.controlDir, x);
+                // Typically this will have been inside Handler.output, e.g.:
+                // hudson.remoting.ChannelClosedException: channel is already closed
+                //         at hudson.remoting.Channel.send(Channel.java:667)
+                //         at hudson.remoting.ProxyOutputStream.write(ProxyOutputStream.java:143)
+                //         at hudson.remoting.RemoteOutputStream.write(RemoteOutputStream.java:110)
+                //         at org.apache.commons.io.IOUtils.copyLarge(IOUtils.java:1793)
+                //         at org.apache.commons.io.IOUtils.copyLarge(IOUtils.java:1769)
+                //         at org.apache.commons.io.IOUtils.copy(IOUtils.java:1744)
+                //         at org.jenkinsci.plugins.workflow.steps.durable_task.DurableTaskStep$HandlerImpl.output(DurableTaskStep.java:503)
+                //         at org.jenkinsci.plugins.durabletask.FileMonitoringTask$Watcher.run(FileMonitoringTask.java:477)
+                // Thus we assume the log sink is hopeless and the Watcher task dies.
+                // If and when the agent is reconnected, a new watch call will be made and we will resume streaming.
+                // last-location.txt will record the last successfully written block of output;
+                // we cannot know reliably how much of the problematic block was actually received by the sink,
+                // so we err on the side of possibly duplicating text rather than losing text.
             }
         }
 
