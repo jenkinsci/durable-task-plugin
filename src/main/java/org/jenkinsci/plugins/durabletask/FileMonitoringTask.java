@@ -232,7 +232,8 @@ public abstract class FileMonitoringTask extends DurableTask {
             public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 if (f.exists() && f.length() > 0) {
                     try {
-                        String fileString = Files.readFirstLine(f, transcodingCharset(charset));
+                        Charset cs = transcodingCharset(charset);
+                        String fileString = Files.readFirstLine(f, cs == null ? Charset.defaultCharset() : cs );
                         if (fileString == null || fileString.isEmpty()) {
                             return null;
                         } else {
