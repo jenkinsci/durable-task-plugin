@@ -34,6 +34,7 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -46,7 +47,6 @@ import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import org.kohsuke.stapler.DataBoundConstructor;
-
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
  */
@@ -54,7 +54,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
-    private static enum OsType {DARWIN, UNIX, WINDOWS}
+    private static enum OsType {DARWIN, UNIX, WINDOWS, ZOS}
 
     /** Number of times we will show launch diagnostics in a newly encountered workspace before going mute to save resources. */
     @SuppressWarnings("FieldMayBeFinal")
@@ -107,7 +107,10 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
-
+        OsType os = ws.act(new getOsType());
+    
+        String encoding = os == OsType.ZOS ? "IBM1047" : null;
+        if(encoding != null) charset(Charset.forName(encoding));
         ShellController c = new ShellController(ws);
 
         FilePath shf = c.getScriptFile(ws);
@@ -118,13 +121,11 @@ public final class BourneShellScript extends FileMonitoringTask {
             String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
             s = "#!"+defaultShell+" -xe\n" + s;
         }
-        shf.write(s, "UTF-8");
+        shf.write(s, encoding==null ? "UTF-8" : encoding);
         shf.chmod(0755);
 
         scriptPath = shf.getRemote();
         List<String> args = new ArrayList<>();
-
-        OsType os = ws.act(new getOsType());
 
         if (os != OsType.DARWIN) { // JENKINS-25848
             args.add("nohup");
@@ -195,9 +196,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         private transient long checkedTimestamp;
 
         private ShellController(FilePath ws) throws IOException, InterruptedException {
-            super(ws);
-        }
-
+                super(ws);
+                }
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("script.sh");
         }
@@ -264,11 +264,13 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final class getOsType extends MasterToSlaveCallable<OsType,RuntimeException> {
         @Override public OsType call() throws RuntimeException {
             if (Platform.isDarwin()) {
-              return OsType.DARWIN;
+                return OsType.DARWIN;
             } else if (Platform.current() == Platform.WINDOWS) {
-              return OsType.WINDOWS;
+                return OsType.WINDOWS;
+            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
+                return OsType.ZOS;  
             } else {
-              return OsType.UNIX; // Default Value
+                return OsType.UNIX; // Default Value
             }
         }
         private static final long serialVersionUID = 1L;

@@ -35,6 +35,7 @@ import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import hudson.util.StreamTaskListener;
+import hudson.Platform;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -180,6 +181,7 @@ public abstract class FileMonitoringTask extends DurableTask {
             CountingOutputStream cos = new CountingOutputStream(transcodedSink);
             try {
                 log.act(new WriteLog(lastLocation, new RemoteOutputStream(cos)));
+                sink.flush();
                 return cos.getByteCount() > 0;
             } finally { // even if RemoteOutputStream write was interrupted, record what we actually received
                 transcodedSink.flush(); // writeImmediately flag does not seem to work
@@ -223,13 +225,14 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         /** Avoids excess round-tripping when reading status file. */
-        static class StatusCheck extends MasterToSlaveFileCallable<Integer> {
+        /* replaced static class STATUS_CHECK with anonymous to capture charset */
+        final MasterToSlaveFileCallable<Integer> STATUS_CHECK_INSTANCE = new MasterToSlaveFileCallable<Integer>() {
             @Override
             @CheckForNull
             public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 if (f.exists() && f.length() > 0) {
                     try {
-                        String fileString = Files.readFirstLine(f, Charset.defaultCharset());
+                        String fileString = Files.readFirstLine(f, transcodingCharset(charset));
                         if (fileString == null || fileString.isEmpty()) {
                             return null;
                         } else {
@@ -246,9 +249,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                 }
                 return null;
             }
-        }
-
-        static final StatusCheck STATUS_CHECK_INSTANCE = new StatusCheck();
+        };
 
         @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
