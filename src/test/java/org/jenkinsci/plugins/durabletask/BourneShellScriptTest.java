@@ -122,6 +122,9 @@ public class BourneShellScriptTest {
     }
 
     @Test public void reboot() throws Exception {
+        int orig = BourneShellScript.HEARTBEAT_CHECK_INTERVAL;
+        BourneShellScript.HEARTBEAT_CHECK_INTERVAL = 15;
+        try {
         FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
         Thread.sleep(1000);
         launcher.kill(Collections.singletonMap("killemall", "true"));
@@ -136,6 +139,9 @@ public class BourneShellScriptTest {
         assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher, listener));
         assertTrue(log.contains("sleep 999"));
         c.cleanup(ws);
+        } finally {
+            BourneShellScript.HEARTBEAT_CHECK_INTERVAL = orig;
+        }
     }
 
     @Test public void justSlow() throws Exception {
