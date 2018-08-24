@@ -225,36 +225,33 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         /** Avoids excess round-tripping when reading status file. */
-        /* replaced static class STATUS_CHECK with anonymous to capture charset */
-        final MasterToSlaveFileCallable<Integer> STATUS_CHECK_INSTANCE = new MasterToSlaveFileCallable<Integer>() {
-            @Override
-            @CheckForNull
-            public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
-                if (f.exists() && f.length() > 0) {
-                    try {
-                        Charset cs = transcodingCharset(charset);
-                        String fileString = Files.readFirstLine(f, cs == null ? Charset.defaultCharset() : cs );
-                        if (fileString == null || fileString.isEmpty()) {
-                            return null;
-                        } else {
-                            fileString = fileString.trim();
-                            if (fileString.isEmpty()) {
-                                return null;
-                            } else {
-                                return Integer.parseInt(fileString);
-                            }
-                        }
-                    } catch (NumberFormatException x) {
-                        throw new IOException("corrupted content in " + f + ": " + x, x);
-                    }
-                }
-                return null;
-            }
-        };
-
         @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
-            return status.act(STATUS_CHECK_INSTANCE);
+            return status.act(new MasterToSlaveFileCallable<Integer>() {
+                @Override
+                @CheckForNull
+                public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+                    if (f.exists() && f.length() > 0) {
+                        try {
+                            Charset cs = transcodingCharset(charset);
+                            String fileString = Files.readFirstLine(f, cs == null ? Charset.defaultCharset() : cs );
+                            if (fileString == null || fileString.isEmpty()) {
+                                return null;
+                            } else {
+                                fileString = fileString.trim();
+                                if (fileString.isEmpty()) {
+                                    return null;
+                                } else {
+                                    return Integer.parseInt(fileString);
+                                }
+                            }
+                        } catch (NumberFormatException x) {
+                            throw new IOException("corrupted content in " + f + ": " + x, x);
+                        }
+                    }
+                    return null;
+                }
+            });
         }
 
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {

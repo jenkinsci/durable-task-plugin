@@ -196,8 +196,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         private transient long checkedTimestamp;
 
         private ShellController(FilePath ws) throws IOException, InterruptedException {
-                super(ws);
-                }
+            super(ws);
+        }
+        
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("script.sh");
         }
