@@ -102,6 +102,10 @@ public abstract class FileMonitoringTask extends DurableTask {
         charset = SYSTEM_DEFAULT_CHARSET;
     }
 
+    public final String getCharset()
+    {
+        return charset;
+    }
     /**
      * Should start a process which sends output to {@linkplain FileMonitoringController#getLogFile(FilePath) log file}
      * in the workspace and finally writes its exit code to {@linkplain FileMonitoringController#getResultFile(FilePath) result file}.
