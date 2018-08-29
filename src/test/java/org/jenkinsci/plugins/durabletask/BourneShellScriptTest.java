@@ -286,6 +286,35 @@ public class BourneShellScriptTest {
         assertEncoding("test: inappropriate charset, some replacement characters", "mixed", "US-ASCII", "����au ��� there!", "UTF-8", dockerWS, dockerLauncher);
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
     }
+
+    @Test public void encodingZOS() throws Exception {
+        // trying to emulate z/OS behavior but can't use -Dfile.encoding
+        // set to IBM1047 page, so we will use ISO8859-1 and set system
+        // property of os.name to let script.sh and jenkins-result.txt
+        // to be transcoded to ISO8859-1 codepage
+        JavaContainer container = dockerUbuntu.get();
+        DumbSlave s = new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "-Dfile.encoding=ISO8859-1"));
+        j.jenkins.addNode(s);
+        j.waitOnline(s);
+        s.getChannel().call(new setOS());
+        assertEquals("z/OS", s.getChannel().call(new DetectOS()));
+        FilePath dockerWS = s.getWorkspaceRoot();
+        dockerWS.child("ebcdic").write("z/OS test\n", "ISO8859-1");
+        Launcher dockerLauncher = s.createLauncher(listener);
+        assertEncoding("test: z/OS", "ebcdic", "ISO8859-1", "z/OS test", "ISO8859-1", dockerWS, dockerLauncher);
+        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+    }
+
+    private static class setOS extends MasterToSlaveCallable<String,RuntimeException> {
+        @Override public String call() throws RuntimeException {
+            return System.setProperty("os.name","z/OS");
+        }
+    }
+    private static class DetectOS extends MasterToSlaveCallable<String,RuntimeException> {
+        @Override public String call() throws RuntimeException {
+            return System.getProperty("os.name");
+        }
+    }
     private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
         @Override public String call() throws RuntimeException {
             return Charset.defaultCharset().name();
