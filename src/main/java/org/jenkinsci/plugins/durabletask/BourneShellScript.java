@@ -65,8 +65,7 @@ public final class BourneShellScript extends FileMonitoringTask {
      * Seconds between heartbeat checks, where we check to see if
      * {@code jenkins-log.txt} is still being modified.
      */
-    @SuppressWarnings("FieldMayBeFinal")
-    private static int HEARTBEAT_CHECK_INTERVAL = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_CHECK_INTERVAL", 15);
+    static int HEARTBEAT_CHECK_INTERVAL = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_CHECK_INTERVAL", 300);
 
     /**
      * Minimum timestamp difference on {@code jenkins-log.txt} that is
@@ -204,9 +203,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             return controlDir(ws).child("pid");
         }
 
-        // TODO run as one big MasterToSlaveCallable<Integer> to avoid extra network roundtrips
-        @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-            Integer status = super.exitStatus(workspace, launcher, listener);
+        @Override protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
+            Integer status = super.exitStatus(workspace, listener);
             if (status != null) {
                 LOGGER.log(Level.FINE, "found exit code {0} in {1}", new Object[] {status, controlDir});
                 return status;
@@ -230,7 +228,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                             listener.getLogger().println("still have " + pidFile + " so heartbeat checks unreliable; process may or may not be alive");
                         } else {
                             listener.getLogger().println("wrapper script does not seem to be touching the log file in " + controlDir);
-                            listener.getLogger().println("(JENKINS-48300: if on a laggy filesystem, consider -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=300)");
+                            listener.getLogger().println("(JENKINS-48300: if on an extremely laggy filesystem, consider -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=86400)");
                             return recordExitStatus(workspace, -1);
                         }
                     }
