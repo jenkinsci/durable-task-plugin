@@ -193,7 +193,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         private ShellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
         }
-        
+
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("script.sh");
         }
@@ -259,13 +259,13 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final class getOsType extends MasterToSlaveCallable<OsType,RuntimeException> {
         @Override public OsType call() throws RuntimeException {
             if (Platform.isDarwin()) {
-                return OsType.DARWIN;
+              return OsType.DARWIN;
             } else if (Platform.current() == Platform.WINDOWS) {
-                return OsType.WINDOWS;
+              return OsType.WINDOWS;
             } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
-                return OsType.ZOS;  
+              return OsType.ZOS;  
             } else {
-                return OsType.UNIX; // Default Value
+              return OsType.UNIX; // Default Value
             }
         }
         private static final long serialVersionUID = 1L;
