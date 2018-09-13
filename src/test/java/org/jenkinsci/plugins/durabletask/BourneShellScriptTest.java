@@ -27,7 +27,9 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
+import hudson.remoting.VirtualChannel;
 import hudson.slaves.DumbSlave;
 import hudson.slaves.OfflineCause;
 import hudson.util.StreamTaskListener;
@@ -35,12 +37,13 @@ import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.charset.Charset;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
-import java.util.Locale;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
-import jenkins.security.MasterToSlaveCallable;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
 import org.jenkinsci.test.acceptance.docker.Docker;
@@ -183,6 +186,51 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
+    @Issue("JENKINS-38381")
+    @Test public void watch() throws Exception {
+        Slave s = j.createOnlineSlave();
+        ws = s.getWorkspaceRoot();
+        launcher = s.createLauncher(listener);
+        DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        BlockingQueue<Integer> status = new LinkedBlockingQueue<>();
+        BlockingQueue<String> output = new LinkedBlockingQueue<>();
+        BlockingQueue<String> lines = new LinkedBlockingQueue<>();
+        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals("+ set +x", lines.take());
+        assertEquals(0, status.take().intValue());
+        assertEquals("<no output>", output.take());
+        assertEquals("[1, 2, 3, 4, 5]", lines.toString());
+        task = new BourneShellScript("echo result");
+        task.captureOutput();
+        c = task.launch(new EnvVars(), ws, launcher, listener);
+        status = new LinkedBlockingQueue<>();
+        output = new LinkedBlockingQueue<>();
+        lines = new LinkedBlockingQueue<>();
+        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals(0, status.take().intValue());
+        assertEquals("result\n", output.take());
+        assertEquals("[+ echo result]", lines.toString());
+    }
+    static class MockHandler extends Handler {
+        final BlockingQueue<Integer> status;
+        final BlockingQueue<String> output;
+        final BlockingQueue<String> lines;
+        @SuppressWarnings("unchecked")
+        MockHandler(VirtualChannel channel, BlockingQueue<Integer> status, BlockingQueue<String> output, BlockingQueue<String> lines) {
+            this.status = channel.export(BlockingQueue.class, status);
+            this.output = channel.export(BlockingQueue.class, output);
+            this.lines = channel.export(BlockingQueue.class, lines);
+        }
+        @Override public void output(InputStream stream) throws Exception {
+            lines.addAll(IOUtils.readLines(stream, StandardCharsets.UTF_8));
+        }
+        @Override public void exited(int code, byte[] data) throws Exception {
+            status.add(code);
+            output.add(data != null ? new String(data, StandardCharsets.UTF_8) : "<no output>");
+        }
+    }
+
     @Issue("JENKINS-40734")
     @Test public void envWithShellChar() throws Exception {
         Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
@@ -271,66 +319,6 @@ public class BourneShellScriptTest {
     @Test public void runWithTiniCommandLauncher() throws Exception {
         assumeTrue("Docker required for this test", new Docker().isAvailable());
         runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
-    }
-
-    @Issue("JENKINS-31096")
-    @Test public void encoding() throws Exception {
-        JavaContainer container = dockerUbuntu.get();
-        DumbSlave s = new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "-Dfile.encoding=ISO-8859-1"));
-        j.jenkins.addNode(s);
-        j.waitOnline(s);
-        assertEquals("ISO-8859-1", s.getChannel().call(new DetectCharset()));
-        FilePath dockerWS = s.getWorkspaceRoot();
-        dockerWS.child("latin").write("¡Ole!\n", "ISO-8859-1");
-        dockerWS.child("eastern").write("Čau!\n", "ISO-8859-2");
-        dockerWS.child("mixed").write("¡Čau → there!\n", "UTF-8");
-        Launcher dockerLauncher = s.createLauncher(listener);
-        assertEncoding("control: no transcoding", "latin", null, "¡Ole!", "ISO-8859-1", dockerWS, dockerLauncher);
-        assertEncoding("test: specify particular charset (UTF-8)", "mixed", "UTF-8", "¡Čau → there!", "UTF-8", dockerWS, dockerLauncher);
-        assertEncoding("test: specify particular charset (unrelated)", "eastern", "ISO-8859-2", "Čau!", "UTF-8", dockerWS, dockerLauncher);
-        assertEncoding("test: specify agent default charset", "latin", "", "¡Ole!", "UTF-8", dockerWS, dockerLauncher);
-        assertEncoding("test: inappropriate charset, some replacement characters", "mixed", "US-ASCII", "����au ��� there!", "UTF-8", dockerWS, dockerLauncher);
-        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
-    }
-    private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
-        @Override public String call() throws RuntimeException {
-            return Charset.defaultCharset().name();
-        }
-    }
-    private void assertEncoding(String description, String file, String charset, String expected, String expectedEncoding, FilePath dockerWS, Launcher dockerLauncher) throws Exception {
-        assertEncoding(description, file, charset, expected, expectedEncoding, false, dockerWS, dockerLauncher);
-        assertEncoding(description, file, charset, expected, expectedEncoding, true, dockerWS, dockerLauncher);
-    }
-    private void assertEncoding(String description, String file, String charset, String expected, String expectedEncoding, boolean output, FilePath dockerWS, Launcher dockerLauncher) throws Exception {
-        System.err.println(description + " (output=" + output + ")"); // TODO maybe this should just be moved into a new class and @RunWith(Parameterized.class) for clarity
-        BourneShellScript dt = new BourneShellScript("set +x; cat " + file + "; sleep 1; tr '[a-z]' '[A-Z]' < " + file);
-        if (charset != null) {
-            if (charset.isEmpty()) {
-                dt.defaultCharset();
-            } else {
-                dt.charset(Charset.forName(charset));
-            }
-        }
-        if (output) {
-            dt.captureOutput();
-        }
-        Controller c = dt.launch(new EnvVars(), dockerWS, dockerLauncher, listener);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        OutputStream tee = new TeeOutputStream(baos, System.err);
-        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
-            c.writeLog(dockerWS, tee);
-            Thread.sleep(100);
-        }
-        c.writeLog(dockerWS, tee);
-        assertEquals(description, 0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
-        String fullExpected = expected + "\n" + expected.toUpperCase(Locale.ENGLISH) + "\n";
-        if (output) {
-            assertEquals(description, fullExpected, new String(c.getOutput(dockerWS, launcher), expectedEncoding));
-        } else {
-            assertThat(description, baos.toString(expectedEncoding), containsString(fullExpected));
-        }
-        c.cleanup(dockerWS);
-        
     }
 
 }

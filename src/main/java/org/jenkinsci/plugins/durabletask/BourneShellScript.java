@@ -206,9 +206,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             return controlDir(ws).child("pid");
         }
 
-        // TODO run as one big MasterToSlaveCallable<Integer> to avoid extra network roundtrips
-        @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-            Integer status = super.exitStatus(workspace, launcher, listener);
+        @Override protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
+            Integer status = super.exitStatus(workspace, listener);
             if (status != null) {
                 LOGGER.log(Level.FINE, "found exit code {0} in {1}", new Object[] {status, controlDir});
                 return status;
