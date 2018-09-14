@@ -107,6 +107,17 @@ public final class BourneShellScript extends FileMonitoringTask {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
         OsType os = ws.act(new getOsType());
+        String scriptEncodingCharset = "UTF-8";
+        if(os == OsType.ZOS ) {
+            if(getCharset().equals("SYSTEM_DEFAULT")) {
+            // Setting default charset to IBM1047 on z/OS if no encoding specified on sh step
+            charset(Charset.forName("IBM1047"));
+            scriptEncodingCharset = "IBM1047";
+            } else {
+                scriptEncodingCharset = getCharset();
+            }
+        }
+
         ShellController c = new ShellController(ws);
         FilePath shf = c.getScriptFile(ws);
 
@@ -116,7 +127,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
             s = "#!"+defaultShell+" -xe\n" + s;
         }
-        shf.write(s, os == OsType.ZOS  ? getCharset() :"UTF-8" );
+
+        shf.write(s, scriptEncodingCharset);
         shf.chmod(0755);
 
         scriptPath = shf.getRemote();
