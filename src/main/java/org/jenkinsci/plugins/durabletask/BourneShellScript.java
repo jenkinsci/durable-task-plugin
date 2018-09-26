@@ -109,13 +109,11 @@ public final class BourneShellScript extends FileMonitoringTask {
         OsType os = ws.act(new getOsType());
         String ibmEncoding = ws.act(new getIBMOsEncoding());
         String scriptEncodingCharset = "UTF-8";
-        if(os == OsType.ZOS ) {
+        if(os == OsType.ZOS && ibmEncoding!=null) {
             if(getCharset().equals("SYSTEM_DEFAULT")) {
             // Setting default charset to IBM1047 on z/OS if no encoding specified on sh step
-            if(ibmEncoding!=null) {
             charset(Charset.forName(ibmEncoding));
             scriptEncodingCharset = getCharset();
-            }
             } else {
                 scriptEncodingCharset = getCharset();
             }
