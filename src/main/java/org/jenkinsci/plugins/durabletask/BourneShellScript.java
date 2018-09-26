@@ -107,12 +107,15 @@ public final class BourneShellScript extends FileMonitoringTask {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
         OsType os = ws.act(new getOsType());
+        String ibmEncoding = ws.act(new getIBMOsEncoding());
         String scriptEncodingCharset = "UTF-8";
         if(os == OsType.ZOS ) {
             if(getCharset().equals("SYSTEM_DEFAULT")) {
             // Setting default charset to IBM1047 on z/OS if no encoding specified on sh step
-            charset(Charset.forName("IBM1047"));
-            scriptEncodingCharset = "IBM1047";
+            if(ibmEncoding!=null) {
+            charset(Charset.forName(ibmEncoding));
+            scriptEncodingCharset = getCharset();
+            }
             } else {
                 scriptEncodingCharset = getCharset();
             }
@@ -279,6 +282,13 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else {
               return OsType.UNIX; // Default Value
             }
+        }
+        private static final long serialVersionUID = 1L;
+    }
+
+    private static final class getIBMOsEncoding extends MasterToSlaveCallable<String,RuntimeException> {
+        @Override public String call() throws RuntimeException {
+            return System.getProperty("ibm.system.encoding");
         }
         private static final long serialVersionUID = 1L;
     }
