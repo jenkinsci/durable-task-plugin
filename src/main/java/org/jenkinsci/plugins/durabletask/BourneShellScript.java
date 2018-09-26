@@ -113,10 +113,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             if(getCharset().equals("SYSTEM_DEFAULT")) {
             // Setting default charset to IBM1047 on z/OS if no encoding specified on sh step
             charset(Charset.forName(ibmEncoding));
-            scriptEncodingCharset = getCharset();
-            } else {
-                scriptEncodingCharset = getCharset();
             }
+            scriptEncodingCharset = getCharset();
         }
 
         ShellController c = new ShellController(ws);
