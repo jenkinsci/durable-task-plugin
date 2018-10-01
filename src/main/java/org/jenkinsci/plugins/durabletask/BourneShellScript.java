@@ -111,16 +111,16 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         FilePath shf = c.getScriptFile(ws);
 
-        String s = script, scriptPath;
-        final Jenkins jenkins = Jenkins.getInstance();
-        if (!s.startsWith("#!") && jenkins != null) {
-            String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
-            s = "#!"+defaultShell+" -xe\n" + s;
-        }
-        shf.write(s, "UTF-8");
+        shf.write(script, "UTF-8");
         shf.chmod(0755);
 
-        scriptPath = shf.getRemote();
+        final Jenkins jenkins = Jenkins.getInstance();
+        String interpreter = !script.startsWith("#!") && jenkins != null
+                ? "'" + jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel()) + "' -xe "
+                : ""
+        ;
+
+        String scriptPath = shf.getRemote();
         List<String> args = new ArrayList<>();
 
         OsType os = ws.act(new getOsType());
@@ -139,23 +139,25 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
                 cookieValue,
                 cookieVariable,
+                interpreter,
                 scriptPath,
                 c.getOutputFile(ws),
                 logFile,
                 resultFile, resultFile, resultFile);
         } else {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
                 cookieValue,
                 cookieVariable,
+                interpreter,
                 scriptPath,
                 logFile,
                 resultFile, resultFile, resultFile);
