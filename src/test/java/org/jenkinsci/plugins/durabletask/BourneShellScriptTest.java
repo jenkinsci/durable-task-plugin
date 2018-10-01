@@ -32,6 +32,7 @@ import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.DumbSlave;
 import hudson.slaves.OfflineCause;
+import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
@@ -94,9 +95,7 @@ public class BourneShellScriptTest {
     @Test
     public void smokeTest() throws Exception {
         Controller c = new BourneShellScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -111,9 +110,7 @@ public class BourneShellScriptTest {
         Controller c = new BourneShellScript("trap 'echo got SIGCHLD' CHLD; trap 'echo got SIGTERM' TERM; trap 'echo exiting; exit 99' EXIT; sleep 999").launch(new EnvVars(), ws, launcher, listener);
         Thread.sleep(1000);
         c.stop(ws, launcher);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         String log = baos.toString();
@@ -132,9 +129,7 @@ public class BourneShellScriptTest {
         Thread.sleep(1000);
         launcher.kill(Collections.singletonMap("killemall", "true"));
         c.getResultFile(ws).delete();
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         String log = baos.toString();
@@ -149,9 +144,7 @@ public class BourneShellScriptTest {
 
     @Test public void justSlow() throws Exception {
         Controller c = new BourneShellScript("sleep 60").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         c.writeLog(ws, System.out);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
@@ -160,9 +153,7 @@ public class BourneShellScriptTest {
     @Issue("JENKINS-27152")
     @Test public void cleanWorkspace() throws Exception {
         Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -175,9 +166,7 @@ public class BourneShellScriptTest {
         DurableTask task = new BourneShellScript("echo 42");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -234,9 +223,7 @@ public class BourneShellScriptTest {
     @Issue("JENKINS-40734")
     @Test public void envWithShellChar() throws Exception {
         Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -245,15 +232,48 @@ public class BourneShellScriptTest {
     }
 
     @Test public void shebang() throws Exception {
+        setGlobalInterpreter("/bin/false"); // Should be overridden
         Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, new TeeOutputStream(baos, System.out));
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("Hello, world!"));
         c.cleanup(ws);
+    }
+
+    @Test
+    public void configuredInterpreter() throws Exception {
+        setGlobalInterpreter("/bin/bash");
+        Controller c = new BourneShellScript("echo $SHELL").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("echo"));
+        assertThat(baos.toString(), containsString("/bash"));
+        c.cleanup(ws);
+
+        // Find it in the PATH
+        setGlobalInterpreter("bash");
+        c = new BourneShellScript("echo $SHELL").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("echo"));
+        assertThat(baos.toString(), containsString("/bash"));
+        c.cleanup(ws);
+    }
+
+    private void setGlobalInterpreter(String interpreter) {
+        j.jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).setShell(interpreter);
+    }
+
+    private void awaitCompletion(Controller c) throws IOException, InterruptedException {
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
     }
 
     @Test public void runOnUbuntuDocker() throws Exception {
