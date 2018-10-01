@@ -264,6 +264,15 @@ public class BourneShellScriptTest {
         assertThat(baos.toString(), containsString("echo"));
         assertThat(baos.toString(), containsString("/bash"));
         c.cleanup(ws);
+
+        setGlobalInterpreter("no_such_shell");
+        c = new BourneShellScript("echo $SHELL").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertNotEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("no_such_shell"));
+        c.cleanup(ws);
     }
 
     private void setGlobalInterpreter(String interpreter) {
