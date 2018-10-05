@@ -27,11 +27,13 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.model.Computer;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.DumbSlave;
 import hudson.slaves.OfflineCause;
+import hudson.slaves.SlaveComputer;
 import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
@@ -48,6 +50,7 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
 import org.jenkinsci.test.acceptance.docker.Docker;
+import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import static org.junit.Assert.*;
@@ -242,31 +245,38 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
-    @Test
-    public void configuredInterpreter() throws Exception {
+    @Issue("JENKINS-50902")
+    @Test public void configuredInterpreter() throws Exception {
+        // Run script inside the container as this is system dependent
+        DumbSlave node = createDockerSlave(dockerSlim.get());
+        j.jenkins.addNode(node);
+        node.toComputer().waitUntilOnline();
+        launcher = node.createLauncher(listener);
+        ws = node.getWorkspaceRoot().child("configuredInterpreter");
+        ws.mkdirs();
+
         setGlobalInterpreter("/bin/bash");
-        Controller c = new BourneShellScript("echo $SHELL").launch(new EnvVars(), ws, launcher, listener);
+        String script = "if [ ! -z \"$BASH_VERSION\" ]; then echo 'this is bash'; else echo 'this is not'; fi";
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, new TeeOutputStream(baos, System.out));
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("echo"));
-        assertThat(baos.toString(), containsString("/bash"));
+        assertThat(baos.toString(), containsString("this is bash"));
         c.cleanup(ws);
 
         // Find it in the PATH
         setGlobalInterpreter("bash");
-        c = new BourneShellScript("echo $SHELL").launch(new EnvVars(), ws, launcher, listener);
+        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         baos = new ByteArrayOutputStream();
         c.writeLog(ws, new TeeOutputStream(baos, System.out));
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("echo"));
-        assertThat(baos.toString(), containsString("/bash"));
+        assertThat(baos.toString(), containsString("this is bash"));
         c.cleanup(ws);
 
         setGlobalInterpreter("no_such_shell");
-        c = new BourneShellScript("echo $SHELL").launch(new EnvVars(), ws, launcher, listener);
+        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         baos = new ByteArrayOutputStream();
         c.writeLog(ws, new TeeOutputStream(baos, System.out));
@@ -287,24 +297,28 @@ public class BourneShellScriptTest {
 
     @Test public void runOnUbuntuDocker() throws Exception {
         JavaContainer container = dockerUbuntu.get();
-        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
+        runOnDocker(createDockerSlave(container));
     }
 
     @Test public void runOnCentOSDocker() throws Exception {
         CentOSFixture container = dockerCentOS.get();
-        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
+        runOnDocker(createDockerSlave(container));
     }
 
     @Issue("JENKINS-52847")
     @Test public void runOnAlpineDocker() throws Exception {
         AlpineFixture container = dockerAlpine.get();
-        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
+        runOnDocker(createDockerSlave(container), 45);
     }
 
     @Issue("JENKINS-52881")
     @Test public void runOnSlimDocker() throws Exception {
         SlimFixture container = dockerSlim.get();
-        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
+        runOnDocker(createDockerSlave(container), 45);
+    }
+
+    private DumbSlave createDockerSlave(DockerContainer container) throws hudson.model.Descriptor.FormException, IOException {
+        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", ""));
     }
 
     private void runOnDocker(DumbSlave s) throws Exception {
