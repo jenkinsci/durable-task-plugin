@@ -76,7 +76,6 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         c.getBatchFile2(ws).write(script, "UTF-8");
 
         Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(escape(envVars)).pwd(ws).quiet(true);
-        listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+\\\\", "") + "] Running batch script"); // details printed by cmd
         /* Too noisy, and consumes a thread:
         ps.stdout(listener);
         */
