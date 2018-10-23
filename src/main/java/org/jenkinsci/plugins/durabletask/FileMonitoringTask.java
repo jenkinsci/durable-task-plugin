@@ -37,7 +37,6 @@ import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import hudson.util.StreamTaskListener;
-import hudson.Platform;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
