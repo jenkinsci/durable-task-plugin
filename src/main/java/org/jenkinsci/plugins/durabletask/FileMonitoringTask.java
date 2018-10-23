@@ -114,7 +114,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         charset = SYSTEM_DEFAULT_CHARSET;
     }
 
-    public final String getCharset()
+    @CheckForNull public final String getCharset()
     {
         return charset;
     }
@@ -202,7 +202,6 @@ public abstract class FileMonitoringTask extends DurableTask {
             CountingOutputStream cos = new CountingOutputStream(transcodedSink);
             try {
                 log.act(new WriteLog(lastLocation, new RemoteOutputStream(cos)));
-                sink.flush();
                 return cos.getByteCount() > 0;
             } finally { // even if RemoteOutputStream write was interrupted, record what we actually received
                 transcodedSink.flush(); // writeImmediately flag does not seem to work

@@ -56,6 +56,8 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private static enum OsType {DARWIN, UNIX, WINDOWS, ZOS}
 
+    private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
+
     /** Number of times we will show launch diagnostics in a newly encountered workspace before going mute to save resources. */
     @SuppressWarnings("FieldMayBeFinal")
     // TODO use SystemProperties if and when unrestricted
@@ -107,14 +109,14 @@ public final class BourneShellScript extends FileMonitoringTask {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
         OsType os = ws.act(new getOsType());
-        String ibmEncoding = ws.act(new getIBMOsEncoding());
         String scriptEncodingCharset = "UTF-8";
-        if(os == OsType.ZOS && ibmEncoding!=null) {
-            if(getCharset().equals("SYSTEM_DEFAULT")) {
+        if(os == OsType.ZOS) {
+            String ibmEncoding = ws.act(new getIBMzOsEncoding());
+            if(SYSTEM_DEFAULT_CHARSET.equals(getCharset())) {
             // Setting default charset to IBM1047 on z/OS if no encoding specified on sh step
             charset(Charset.forName(ibmEncoding));
             }
-            scriptEncodingCharset = getCharset();
+            scriptEncodingCharset = getCharset() != null ? getCharset() : scriptEncodingCharset;
         }
 
         ShellController c = new ShellController(ws);
@@ -281,8 +283,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final long serialVersionUID = 1L;
     }
 
-    private static final class getIBMOsEncoding extends MasterToSlaveCallable<String,RuntimeException> {
+    private static final class getIBMzOsEncoding extends MasterToSlaveCallable<String,RuntimeException> {
         @Override public String call() throws RuntimeException {
+            // Not null on z/OS systems
             return System.getProperty("ibm.system.encoding");
         }
         private static final long serialVersionUID = 1L;
