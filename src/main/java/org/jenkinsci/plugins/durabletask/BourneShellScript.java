@@ -173,7 +173,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         args.addAll(Arrays.asList("sh", "-c", cmd));
         LOGGER.log(Level.FINE, "launching {0}", args);
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
-        listener.getLogger().println("[" + ws.getRemote().replaceFirst("^.+/", "") + "] Running shell script"); // -x will give details
         boolean novel;
         synchronized (encounteredPaths) {
             Integer cnt = encounteredPaths.get(ws);
