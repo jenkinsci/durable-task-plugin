@@ -29,6 +29,7 @@ import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
+import hudson.init.Terminator;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
 import hudson.remoting.DaemonThreadFactory;
@@ -420,6 +421,12 @@ public abstract class FileMonitoringTask extends DurableTask {
             watchService = new /*ErrorLogging*/ScheduledThreadPoolExecutor(5, new NamingThreadFactory(new DaemonThreadFactory(), "FileMonitoringTask watcher"));
         }
         return watchService;
+    }
+    @Terminator public static synchronized void shutDownWatchService() {
+        if (watchService != null) {
+            watchService.shutdownNow();
+            watchService = null;
+        }
     }
 
     private static class StartWatching extends MasterToSlaveFileCallable<Void> {
