@@ -250,7 +250,7 @@ public class BourneShellScriptTest {
         // Run script inside the container as this is system dependent
         DumbSlave node = createDockerSlave(dockerSlim.get());
         j.jenkins.addNode(node);
-        node.toComputer().waitUntilOnline();
+        j.waitOnline(node);
         launcher = node.createLauncher(listener);
         ws = node.getWorkspaceRoot().child("configuredInterpreter");
         ws.mkdirs();
