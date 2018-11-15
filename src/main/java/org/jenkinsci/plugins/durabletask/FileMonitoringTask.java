@@ -118,6 +118,7 @@ public abstract class FileMonitoringTask extends DurableTask {
     {
         return charset;
     }
+
     /**
      * Should start a process which sends output to {@linkplain FileMonitoringController#getLogFile(FilePath) log file}
      * in the workspace and finally writes its exit code to {@linkplain FileMonitoringController#getResultFile(FilePath) result file}.
@@ -164,6 +165,10 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         /** @see FileMonitoringTask#charset */
         private @CheckForNull String charset;
+
+        protected String getCharset() {
+            return charset;
+        }
 
         /**
          * {@link #transcodingCharset} on the remote side when using {@link #writeLog}.
@@ -246,17 +251,12 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         /** Avoids excess round-tripping when reading status file. */
         static class StatusCheck extends MasterToSlaveFileCallable<Integer> {
-            private final String charset;
-            StatusCheck(String charset) {
-                this.charset = charset;
-            }
             @Override
             @CheckForNull
             public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 if (f.exists() && f.length() > 0) {
                     try {
-                        Charset cs = transcodingCharset(charset);
-                        String fileString = Files.readFirstLine(f, cs != null ? cs : Charset.defaultCharset());
+                        String fileString = Files.readFirstLine(f, Charset.defaultCharset());
                         if (fileString == null || fileString.isEmpty()) {
                             return null;
                         } else {
@@ -275,6 +275,8 @@ public abstract class FileMonitoringTask extends DurableTask {
             }
         }
 
+        static final StatusCheck STATUS_CHECK_INSTANCE = new StatusCheck();
+
         @Override public Integer exitStatus(FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
             return exitStatus(workspace, listener);
         }
@@ -284,37 +286,30 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         protected @CheckForNull Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
             FilePath status = getResultFile(workspace);
-            return status.act(new StatusCheck(charset));
+            return status.act(STATUS_CHECK_INSTANCE);
         }
 
         @Override public byte[] getOutput(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             return getOutput(workspace);
         }
 
-        /* Avoid (de)serialize messages in the log for anonymous class (de)serialization */
-        static class GetOutputBytes extends MasterToSlaveFileCallable<byte[]> {
-            private final String charset;
-            GetOutputBytes(String charset) {
-                this.charset = charset;
-            }
-            @Override public byte[] invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
-                byte[] buf = FileUtils.readFileToByteArray(f);
-                ByteBuffer transcoded = maybeTranscode(buf, charset);
-                if (transcoded == null) {
-                    return buf;
-                } else {
-                    byte[] buf2 = new byte[transcoded.remaining()];
-                    transcoded.get(buf2);
-                    return buf2;
-                }
-            }
-        }
-        
         /**
          * Like {@link #getOutput(FilePath, Launcher)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
          */
         protected byte[] getOutput(FilePath workspace) throws IOException, InterruptedException {
-            return getOutputFile(workspace).act(new GetOutputBytes(charset));
+            return getOutputFile(workspace).act(new MasterToSlaveFileCallable<byte[]>() {
+                @Override public byte[] invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+                    byte[] buf = FileUtils.readFileToByteArray(f);
+                    ByteBuffer transcoded = maybeTranscode(buf, charset);
+                    if (transcoded == null) {
+                        return buf;
+                    } else {
+                        byte[] buf2 = new byte[transcoded.remaining()];
+                        transcoded.get(buf2);
+                        return buf2;
+                    }
+                }
+            });
         }
 
         /**

@@ -43,10 +43,19 @@ import java.util.WeakHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.io.File;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
+import hudson.remoting.VirtualChannel;
 import org.kohsuke.stapler.DataBoundConstructor;
+import javax.annotation.CheckForNull;
+import jenkins.MasterToSlaveFileCallable;
+import org.apache.commons.io.FileUtils;
+import com.google.common.io.Files;
+
+
+
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
  */
@@ -111,11 +120,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         OsType os = ws.act(new getOsType());
         String scriptEncodingCharset = "UTF-8";
         if(os == OsType.ZOS) {
+            Charset zOSSystemEncodingCharset = Charset.forName(ws.act(new getIBMzOsEncoding()));
             if(SYSTEM_DEFAULT_CHARSET.equals(getCharset())) {
             // Setting default charset to IBM z/OS default EBCDIC charset on z/OS if no encoding specified on sh step
-            charset(Charset.forName(ws.act(new getIBMzOsEncoding())));
+            charset(zOSSystemEncodingCharset);
             }
-            scriptEncodingCharset = getCharset() != null ? getCharset() : scriptEncodingCharset;
+            scriptEncodingCharset = zOSSystemEncodingCharset != null ? zOSSystemEncodingCharset.name() : scriptEncodingCharset;
         }
 
         ShellController c = new ShellController(ws);
@@ -218,7 +228,16 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
 
         @Override protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
-            Integer status = super.exitStatus(workspace, listener);
+            Integer status = null;
+            OsType os = workspace.act(new getOsType());
+            if(os == OsType.ZOS) {
+                // We need to transcode status file from EBCDIC only on z/OS platform
+                FilePath statusFile = getResultFile(workspace);
+                status = statusFile.act(new StatusCheckWithEncoding(getCharset()));
+            }
+            else {
+                status = super.exitStatus(workspace, listener);
+            }
             if (status != null) {
                 LOGGER.log(Level.FINE, "found exit code {0} in {1}", new Object[] {status, controlDir});
                 return status;
@@ -291,5 +310,35 @@ public final class BourneShellScript extends FileMonitoringTask {
             return System.getProperty("ibm.system.encoding");
         }
         private static final long serialVersionUID = 1L;
+    }
+
+    /* Local copy of StatusCheck to run on z/OS   */
+    static class StatusCheckWithEncoding extends MasterToSlaveFileCallable<Integer> {
+        private final String charset;
+        StatusCheckWithEncoding(String charset) {
+            this.charset = charset;
+        }
+        @Override
+        @CheckForNull
+        public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+            if (f.exists() && f.length() > 0) {
+                try {
+                    String fileString = Files.readFirstLine(f, Charset.forName(charset) != null ? Charset.forName(charset) : Charset.defaultCharset());
+                    if (fileString == null || fileString.isEmpty()) {
+                        return null;
+                    } else {
+                        fileString = fileString.trim();
+                        if (fileString.isEmpty()) {
+                            return null;
+                        } else {
+                            return Integer.parseInt(fileString);
+                        }
+                    }
+                } catch (NumberFormatException x) {
+                    throw new IOException("corrupted content in " + f + ": " + x, x);
+                }
+            }
+            return null;
+        }
     }
 }
