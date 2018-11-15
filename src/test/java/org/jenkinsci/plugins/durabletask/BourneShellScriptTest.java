@@ -27,11 +27,14 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.model.Computer;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.DumbSlave;
 import hudson.slaves.OfflineCause;
+import hudson.slaves.SlaveComputer;
+import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
@@ -47,6 +50,7 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
 import org.jenkinsci.test.acceptance.docker.Docker;
+import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import static org.junit.Assert.*;
@@ -94,9 +98,7 @@ public class BourneShellScriptTest {
     @Test
     public void smokeTest() throws Exception {
         Controller c = new BourneShellScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -111,9 +113,7 @@ public class BourneShellScriptTest {
         Controller c = new BourneShellScript("trap 'echo got SIGCHLD' CHLD; trap 'echo got SIGTERM' TERM; trap 'echo exiting; exit 99' EXIT; sleep 999").launch(new EnvVars(), ws, launcher, listener);
         Thread.sleep(1000);
         c.stop(ws, launcher);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         String log = baos.toString();
@@ -132,9 +132,7 @@ public class BourneShellScriptTest {
         Thread.sleep(1000);
         launcher.kill(Collections.singletonMap("killemall", "true"));
         c.getResultFile(ws).delete();
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         String log = baos.toString();
@@ -149,9 +147,7 @@ public class BourneShellScriptTest {
 
     @Test public void justSlow() throws Exception {
         Controller c = new BourneShellScript("sleep 60").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         c.writeLog(ws, System.out);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
@@ -160,9 +156,7 @@ public class BourneShellScriptTest {
     @Issue("JENKINS-27152")
     @Test public void cleanWorkspace() throws Exception {
         Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -175,9 +169,7 @@ public class BourneShellScriptTest {
         DurableTask task = new BourneShellScript("echo 42");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -234,9 +226,7 @@ public class BourneShellScriptTest {
     @Issue("JENKINS-40734")
     @Test public void envWithShellChar() throws Exception {
         Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -245,10 +235,9 @@ public class BourneShellScriptTest {
     }
 
     @Test public void shebang() throws Exception {
+        setGlobalInterpreter("/bin/false"); // Should be overridden
         Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, new TeeOutputStream(baos, System.out));
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -256,26 +245,80 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
+    @Issue("JENKINS-50902")
+    @Test public void configuredInterpreter() throws Exception {
+        // Run script inside the container as this is system dependent
+        DumbSlave node = createDockerSlave(dockerSlim.get());
+        j.jenkins.addNode(node);
+        j.waitOnline(node);
+        launcher = node.createLauncher(listener);
+        ws = node.getWorkspaceRoot().child("configuredInterpreter");
+        ws.mkdirs();
+
+        setGlobalInterpreter("/bin/bash");
+        String script = "if [ ! -z \"$BASH_VERSION\" ]; then echo 'this is bash'; else echo 'this is not'; fi";
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("this is bash"));
+        c.cleanup(ws);
+
+        // Find it in the PATH
+        setGlobalInterpreter("bash");
+        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("this is bash"));
+        c.cleanup(ws);
+
+        setGlobalInterpreter("no_such_shell");
+        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertNotEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("no_such_shell"));
+        c.cleanup(ws);
+    }
+
+    private void setGlobalInterpreter(String interpreter) {
+        j.jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).setShell(interpreter);
+    }
+
+    private void awaitCompletion(Controller c) throws IOException, InterruptedException {
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+    }
+
     @Test public void runOnUbuntuDocker() throws Exception {
         JavaContainer container = dockerUbuntu.get();
-        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
+        runOnDocker(createDockerSlave(container));
     }
 
     @Test public void runOnCentOSDocker() throws Exception {
         CentOSFixture container = dockerCentOS.get();
-        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")));
+        runOnDocker(createDockerSlave(container));
     }
 
     @Issue("JENKINS-52847")
     @Test public void runOnAlpineDocker() throws Exception {
         AlpineFixture container = dockerAlpine.get();
-        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
+        runOnDocker(createDockerSlave(container), 45);
     }
 
     @Issue("JENKINS-52881")
     @Test public void runOnSlimDocker() throws Exception {
         SlimFixture container = dockerSlim.get();
-        runOnDocker(new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "")), 45);
+        runOnDocker(createDockerSlave(container), 45);
+    }
+
+    private DumbSlave createDockerSlave(DockerContainer container) throws hudson.model.Descriptor.FormException, IOException {
+        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", ""));
     }
 
     private void runOnDocker(DumbSlave s) throws Exception {
