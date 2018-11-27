@@ -83,8 +83,7 @@ public final class PowershellScript extends FileMonitoringTask {
                 quote(c.getResultFile(ws)));
         }
       
-        // Note: PowerShell core is now named pwsh. Workaround this issue on *nix systems by creating a symlink that maps 'powershell' to 'pwsh'.
-        String powershellBinary = "powershell";
+        String powershellBinary = findPowershellBinary(launcher);
         String powershellArgs;
         if (launcher.isUnix()) {
             powershellArgs = "-NoProfile -NonInteractive";
@@ -139,6 +138,22 @@ public final class PowershellScript extends FileMonitoringTask {
         out.write(contents.getBytes(Charset.forName("UTF-8")));
         out.flush();
         out.close();
+    }
+
+    private static String findPowershellBinary(Launcher launcher) throws IOException, InterruptedException {
+        String locator = launcher.isUnix() ? "which" : "where.exe";
+
+        Launcher.ProcStarter ps = launcher.launch().cmds(locator, "pwsh").quiet(true);
+        if (ps.start().join() == 0) {
+            return "pwsh";
+        }
+
+        ps = launcher.launch().cmds(locator, "powershell").quiet(true);
+        if (ps.start().join() == 0) {
+            return "powershell";
+        }
+
+        throw new java.io.FileNotFoundException("No powershell executable found on the system");
     }
 
     private static final class PowershellController extends FileMonitoringController {
