@@ -73,7 +73,15 @@ public final class WindowsBatchScript extends FileMonitoringTask {
                 quote(c.getResultFile(ws)));
         }
         c.getBatchFile1(ws).write(cmd, "UTF-8");
-        c.getBatchFile2(ws).write(script, "UTF-8");
+
+        FilePath scriptFile = new FilePath(ws, script);
+
+        if (scriptFile.exists()) {
+            listener.getLogger().println("Info: running workspace script " + script);
+            scriptFile.copyTo(c.getBatchFile2(ws));
+        } else {
+            c.getBatchFile2(ws).write(script, "UTF-8");
+        }
 
         Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(escape(envVars)).pwd(ws).quiet(true);
         /* Too noisy, and consumes a thread:

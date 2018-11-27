@@ -82,7 +82,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     @DataBoundConstructor public BourneShellScript(String script) {
         this.script = Util.fixNull(script);
     }
-    
+
     public String getScript() {
         return script;
     }
@@ -103,19 +103,27 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final Map<FilePath,Integer> encounteredPaths = new WeakHashMap<FilePath,Integer>();
 
     @Override protected FileMonitoringController launchWithCookie(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
+        ShellController c = new ShellController(ws);
+        FilePath shf = c.getScriptFile(ws);
+        String scr;
+        FilePath scriptFile = new FilePath(ws, script);
+
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
-
-        ShellController c = new ShellController(ws);
-
-        FilePath shf = c.getScriptFile(ws);
-
-        shf.write(script, "UTF-8");
+        
+        if (scriptFile.exists()) { 
+            listener.getLogger().println("Info: running workspace script " + script);
+            scriptFile.copyTo(shf);
+            scr = shf.readToString();
+        } else {
+            scr = script;    
+            shf.write(scr, "UTF-8");
+        }
 
         final Jenkins jenkins = Jenkins.getInstance();
         String interpreter = "";
-        if (!script.startsWith("#!")) {
+        if (!scr.startsWith("#!")) {
             String shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
             interpreter = "'" + shell + "' -xe ";
         } else {

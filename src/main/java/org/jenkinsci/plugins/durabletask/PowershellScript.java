@@ -100,8 +100,16 @@ public final class PowershellScript extends FileMonitoringTask {
                                              "& %s %s -Command \"& '%s'\";\r\n" +
                                              "exit $LASTEXITCODE;", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
         
+        String scriptWithExit;
+        FilePath scriptFile = new FilePath(ws, script);
+        if (scriptFile.exists()) {
+            listener.getLogger().println("Info: running workspace script " + script);
+            scriptWithExit = scriptFile.readToString();
+        } else {
+            scriptWithExit = script;
+        }
         // Add an explicit exit to the end of the script so that exit codes are propagated
-        String scriptWithExit = script + "\r\nexit $LASTEXITCODE;";
+        scriptWithExit = scriptWithExit + "\r\nexit $LASTEXITCODE;";
         
         // Copy the helper script from the resources directory into the workspace
         c.getPowerShellHelperFile(ws).copyFrom(getClass().getResource("powershellHelper.ps1"));
