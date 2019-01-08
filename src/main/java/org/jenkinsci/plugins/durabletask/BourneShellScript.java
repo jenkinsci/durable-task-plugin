@@ -119,7 +119,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             String shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
             interpreter = "'" + shell + "' -xe ";
         } else {
-            shf.chmod(0755);
+            interpreter = script.split("[\\r\\n]")[0].replaceAll("#!", '');
         }
 
         String scriptPath = shf.getRemote();
