@@ -125,7 +125,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 // Setting default charset to IBM z/OS default EBCDIC charset on z/OS if no encoding specified on sh step
                 charset(zOSSystemEncodingCharset);
             }
-            scriptEncodingCharset = zOSSystemEncodingCharset != null ? zOSSystemEncodingCharset.name() : scriptEncodingCharset;
+            scriptEncodingCharset = zOSSystemEncodingCharset.name();
         }
         
         ShellController c = new ShellController(ws);
