@@ -114,7 +114,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         charset = SYSTEM_DEFAULT_CHARSET;
     }
 
-    @CheckForNull public final String getCharset()
+    @CheckForNull final String getCharset()
     {
         return charset;
     }
@@ -166,7 +166,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         /** @see FileMonitoringTask#charset */
         private @CheckForNull String charset;
 
-        protected String getCharset() {
+        String getCharset() {
             return charset;
         }
 

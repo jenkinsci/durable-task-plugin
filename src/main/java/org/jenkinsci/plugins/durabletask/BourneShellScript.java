@@ -122,13 +122,14 @@ public final class BourneShellScript extends FileMonitoringTask {
         if(os == OsType.ZOS) {
             Charset zOSSystemEncodingCharset = Charset.forName(ws.act(new getIBMzOsEncoding()));
             if(SYSTEM_DEFAULT_CHARSET.equals(getCharset())) {
-            // Setting default charset to IBM z/OS default EBCDIC charset on z/OS if no encoding specified on sh step
-            charset(zOSSystemEncodingCharset);
+                // Setting default charset to IBM z/OS default EBCDIC charset on z/OS if no encoding specified on sh step
+                charset(zOSSystemEncodingCharset);
             }
             scriptEncodingCharset = zOSSystemEncodingCharset != null ? zOSSystemEncodingCharset.name() : scriptEncodingCharset;
         }
-
+        
         ShellController c = new ShellController(ws);
+        c.isZos = (os == OsType.ZOS);
         FilePath shf = c.getScriptFile(ws);
 
         shf.write(script, scriptEncodingCharset);
@@ -214,6 +215,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         /** Last-observed modification time of {@link getLogFile} on remote computer, in milliseconds. */
         private transient long checkedTimestamp;
 
+        /** Caching zOS flag to avoid round trip calls in exitStatus()         */
+        private boolean isZos;
+
         private ShellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
         }
@@ -228,9 +232,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
 
         @Override protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
-            Integer status = null;
-            OsType os = workspace.act(new getOsType());
-            if(os == OsType.ZOS) {
+            Integer status;
+            if(isZos) {
                 // We need to transcode status file from EBCDIC only on z/OS platform
                 FilePath statusFile = getResultFile(workspace);
                 status = statusFile.act(new StatusCheckWithEncoding(getCharset()));
