@@ -326,7 +326,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
             if (f.exists() && f.length() > 0) {
                 try {
-                    String fileString = Files.readFirstLine(f, Charset.forName(charset) != null ? Charset.forName(charset) : Charset.defaultCharset());
+                    String fileString = Files.readFirstLine(f, Charset.forName(charset));
                     if (fileString == null || fileString.isEmpty()) {
                         return null;
                     } else {
