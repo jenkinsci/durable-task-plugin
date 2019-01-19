@@ -217,10 +217,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */
         private final boolean isZos;
         
-        private ShellController(FilePath ws) throws IOException, InterruptedException {
-            super(ws);
-            this.isZos = false;
-        }
         private ShellController(FilePath ws, boolean zOsFlag) throws IOException, InterruptedException {
             super(ws);
             this.isZos = zOsFlag;
