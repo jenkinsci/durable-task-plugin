@@ -97,9 +97,9 @@ public final class PowershellScript extends FileMonitoringTask {
         
         String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
                                              "param()\r\n" +
-                                             "& %s %s -Command \"& '%s'\";\r\n" +
+                                             "& %s %s -Command '& ''%s''; exit $LASTEXITCODE;';\r\n" +
                                              "exit $LASTEXITCODE;", powershellBinary, powershellArgs, quote(c.getPowerShellScriptFile(ws)));
-        
+     
         // Add an explicit exit to the end of the script so that exit codes are propagated
         String scriptWithExit = script + "\r\nexit $LASTEXITCODE;";
         
