@@ -257,4 +257,13 @@ public class PowershellScriptTest {
         assertTrue(log, log.contains("Helló, Wõrld ®"));
         c.cleanup(ws);
     }
+
+    @Test public void correctExitCode() throws Exception {
+        Controller c = new PowershellScript("exit 5;").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        assertEquals(Integer.valueOf(5), c.exitStatus(ws, launcher));
+        c.cleanup(ws);
+    }
 }

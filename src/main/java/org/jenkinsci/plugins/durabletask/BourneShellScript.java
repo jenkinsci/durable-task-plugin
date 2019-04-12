@@ -34,6 +34,7 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -42,10 +43,18 @@ import java.util.WeakHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.io.File;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
+import hudson.remoting.VirtualChannel;
 import org.kohsuke.stapler.DataBoundConstructor;
+import javax.annotation.CheckForNull;
+import jenkins.MasterToSlaveFileCallable;
+import org.apache.commons.io.FileUtils;
+import com.google.common.io.Files;
+
+
 
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
@@ -54,7 +63,9 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
-    private static enum OsType {DARWIN, UNIX, WINDOWS}
+    private static enum OsType {DARWIN, UNIX, WINDOWS, ZOS}
+
+    private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
 
     /** Number of times we will show launch diagnostics in a newly encountered workspace before going mute to save resources. */
     @SuppressWarnings("FieldMayBeFinal")
@@ -106,24 +117,33 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
-
-        ShellController c = new ShellController(ws);
-
+        OsType os = ws.act(new getOsType());
+        String scriptEncodingCharset = "UTF-8";
+        if(os == OsType.ZOS) {
+            Charset zOSSystemEncodingCharset = Charset.forName(ws.act(new getIBMzOsEncoding()));
+            if(SYSTEM_DEFAULT_CHARSET.equals(getCharset())) {
+                // Setting default charset to IBM z/OS default EBCDIC charset on z/OS if no encoding specified on sh step
+                charset(zOSSystemEncodingCharset);
+            }
+            scriptEncodingCharset = zOSSystemEncodingCharset.name();
+        }
+        
+        ShellController c = new ShellController(ws,(os == OsType.ZOS));
         FilePath shf = c.getScriptFile(ws);
 
-        String s = script, scriptPath;
+        shf.write(script, scriptEncodingCharset);
+
         final Jenkins jenkins = Jenkins.getInstance();
-        if (!s.startsWith("#!") && jenkins != null) {
-            String defaultShell = jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
-            s = "#!"+defaultShell+" -xe\n" + s;
+        String interpreter = "";
+        if (!script.startsWith("#!")) {
+            String shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
+            interpreter = "'" + shell + "' -xe ";
+        } else {
+            shf.chmod(0755);
         }
-        shf.write(s, "UTF-8");
-        shf.chmod(0755);
 
-        scriptPath = shf.getRemote();
+        String scriptPath = shf.getRemote();
         List<String> args = new ArrayList<>();
-
-        OsType os = ws.act(new getOsType());
 
         if (os != OsType.DARWIN) { // JENKINS-25848
             args.add("nohup");
@@ -139,23 +159,25 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
                 cookieValue,
                 cookieVariable,
+                interpreter,
                 scriptPath,
                 c.getOutputFile(ws),
                 logFile,
                 resultFile, resultFile, resultFile);
         } else {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
                 resultFile,
                 logFile,
                 cookieValue,
                 cookieVariable,
+                interpreter,
                 scriptPath,
                 logFile,
                 resultFile, resultFile, resultFile);
@@ -192,8 +214,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         /** Last-observed modification time of {@link getLogFile} on remote computer, in milliseconds. */
         private transient long checkedTimestamp;
 
-        private ShellController(FilePath ws) throws IOException, InterruptedException {
+        /** Caching zOS flag to avoid round trip calls in exitStatus()         */
+        private final boolean isZos;
+        
+        private ShellController(FilePath ws, boolean zOsFlag) throws IOException, InterruptedException {
             super(ws);
+            this.isZos = zOsFlag;
         }
 
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
@@ -206,7 +232,15 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
 
         @Override protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
-            Integer status = super.exitStatus(workspace, listener);
+            Integer status;
+            if(isZos) {
+                // We need to transcode status file from EBCDIC only on z/OS platform
+                FilePath statusFile = getResultFile(workspace);
+                status = statusFile.act(new StatusCheckWithEncoding(getCharset()));
+            }
+            else {
+                status = super.exitStatus(workspace, listener);
+            }
             if (status != null) {
                 LOGGER.log(Level.FINE, "found exit code {0} in {1}", new Object[] {status, controlDir});
                 return status;
@@ -264,10 +298,50 @@ public final class BourneShellScript extends FileMonitoringTask {
               return OsType.DARWIN;
             } else if (Platform.current() == Platform.WINDOWS) {
               return OsType.WINDOWS;
+            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
+              return OsType.ZOS;  
             } else {
               return OsType.UNIX; // Default Value
             }
         }
         private static final long serialVersionUID = 1L;
+    }
+
+    private static final class getIBMzOsEncoding extends MasterToSlaveCallable<String,RuntimeException> {
+        @Override public String call() throws RuntimeException {
+            // Not null on z/OS systems
+            return System.getProperty("ibm.system.encoding");
+        }
+        private static final long serialVersionUID = 1L;
+    }
+
+    /* Local copy of StatusCheck to run on z/OS   */
+    static class StatusCheckWithEncoding extends MasterToSlaveFileCallable<Integer> {
+        private final String charset;
+        StatusCheckWithEncoding(String charset) {
+            this.charset = charset;
+        }
+        @Override
+        @CheckForNull
+        public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
+            if (f.exists() && f.length() > 0) {
+                try {
+                    String fileString = Files.readFirstLine(f, Charset.forName(charset));
+                    if (fileString == null || fileString.isEmpty()) {
+                        return null;
+                    } else {
+                        fileString = fileString.trim();
+                        if (fileString.isEmpty()) {
+                            return null;
+                        } else {
+                            return Integer.parseInt(fileString);
+                        }
+                    }
+                } catch (NumberFormatException x) {
+                    throw new IOException("corrupted content in " + f + ": " + x, x);
+                }
+            }
+            return null;
+        }
     }
 }
