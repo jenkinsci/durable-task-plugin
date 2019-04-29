@@ -34,6 +34,7 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
 import java.io.IOException;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,7 +52,6 @@ import hudson.remoting.VirtualChannel;
 import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.CheckForNull;
 import jenkins.MasterToSlaveFileCallable;
-import org.apache.commons.io.FileUtils;
 import com.google.common.io.Files;
 
 
@@ -127,8 +127,9 @@ public final class BourneShellScript extends FileMonitoringTask {
             }
             scriptEncodingCharset = zOSSystemEncodingCharset.name();
         }
-        
+
         ShellController c = new ShellController(ws,(os == OsType.ZOS));
+        ///*
         FilePath shf = c.getScriptFile(ws);
 
         shf.write(script, scriptEncodingCharset);
@@ -144,49 +145,25 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         String scriptPath = shf.getRemote();
         List<String> args = new ArrayList<>();
-
-        if (os != OsType.DARWIN) { // JENKINS-25848
-            args.add("nohup");
-        }
+//        if (os != OsType.DARWIN) { // JENKINS-25848
+//            args.add("nohup");
+//        }
         if (os == OsType.WINDOWS) { // JENKINS-40255
             scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
         }
 
-        envVars.put(cookieVariable, "please-do-not-kill-me");
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
-        String cmd;
-        FilePath logFile = c.getLogFile(ws);
-        FilePath resultFile = c.getResultFile(ws);
-        FilePath controlDir = c.controlDir(ws);
-        if (capturingOutput) {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                controlDir,
-                resultFile,
-                logFile,
-                cookieValue,
-                cookieVariable,
-                interpreter,
-                scriptPath,
-                c.getOutputFile(ws),
-                logFile,
-                resultFile, resultFile, resultFile);
-        } else {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                controlDir,
-                resultFile,
-                logFile,
-                cookieValue,
-                cookieVariable,
-                interpreter,
-                scriptPath,
-                logFile,
-                resultFile, resultFile, resultFile);
-        }
-        cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+        envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        args.addAll(Arrays.asList("sh", "-c", cmd));
+        String launcherCmd = generateLaunchCmd(c, ws, interpreter, scriptPath, cookieValue, cookieVariable);
+//        cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+        launcherCmd = launcherCmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+
+        args.addAll(Arrays.asList("sh", "-c", launcherCmd));
         LOGGER.log(Level.FINE, "launching {0}", args);
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
+//        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
+//        Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
         boolean novel;
         synchronized (encounteredPaths) {
             Integer cnt = encounteredPaths.get(ws);
@@ -205,6 +182,46 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         ps.start();
         return c;
+    }
+
+    private String generateLaunchCmd(ShellController c, FilePath ws, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+        FilePath logFile = c.getLogFile(ws);
+        FilePath resultFile = c.getResultFile(ws);
+        FilePath controlDir = c.controlDir(ws);
+
+        // Copy launcher binary from resource to master filesystem
+        // TODO: move to constants
+        final String LAUNCHER_BINARY = "heartbeat-launcher";
+//        ClassLoader classLoader = this.getClass().getClassLoader();
+//        File launcherResource = new File(classLoader.getResource(LAUNCHER_BINARY).getFile());
+        File launcherResource = new File(this.getClass().getResource(LAUNCHER_BINARY).getFile());
+//        File launcherLocal = new File(jenkins.getRootDir(), LAUNCHER_BINARY);
+//        Files.copy(launcherResource, launcherLocal);
+        // move to agent controldir
+        // TODO: skip if running on master?
+//        if (ws.isRemote()) {
+        FilePath launcherMaster = new FilePath(launcherResource);
+        FilePath launcherAgent = controlDir.child(LAUNCHER_BINARY);
+        launcherMaster.copyTo(launcherAgent);
+//        }
+
+        String args = String.format("%s %s %s %s %s",
+                        controlDir,
+                        resultFile,
+                        logFile,
+                        interpreter,
+                        scriptPath);
+        String cmd = String.format("\"jsc=%s; %s=$jsc `%s %s` 2>%s; ",
+                        cookieValue,
+                        cookieVariable,
+                        launcherAgent.getRemote(),
+                        args,
+                        capturingOutput ? logFile : "&1");
+
+        String cleanup = String.format("echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                            resultFile, resultFile, resultFile);
+
+        return cmd + cleanup;
     }
 
     /*package*/ static final class ShellController extends FileMonitoringController {
