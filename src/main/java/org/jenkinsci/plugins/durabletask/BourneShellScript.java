@@ -210,14 +210,13 @@ public final class BourneShellScript extends FileMonitoringTask {
                         controlDir,
                         resultFile,
                         logFile,
-                        interpreter,
-                        scriptPath);
-        // TODO: This is not correct, needs to be changed so that the output logging and redirection should go to the script itself
-        String cmd = String.format("jsc=%s; %s=$jsc %s %s; ",
+                        interpreter, scriptPath);
+        String cmd = String.format("jsc=%s; %s=$jsc %s %s %s; ",
                         cookieValue,
                         cookieVariable,
                         launcherAgent.getRemote(),
-                        args);
+                        args,
+                        capturingOutput);
 //                        capturingOutput ? logFile : "&1");
 
 //        String cleanup = String.format("echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
