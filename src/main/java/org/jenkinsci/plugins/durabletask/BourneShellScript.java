@@ -203,25 +203,27 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath launcherMaster = new FilePath(launcherResource);
         FilePath launcherAgent = controlDir.child(LAUNCHER_BINARY);
         launcherMaster.copyTo(launcherAgent);
+        launcherAgent.chmod(0755);
 //        }
 
-        String args = String.format("%s %s %s %s %s",
+        String args = String.format("%s %s %s '%s %s'",
                         controlDir,
                         resultFile,
                         logFile,
                         interpreter,
                         scriptPath);
-        String cmd = String.format("\"jsc=%s; %s=$jsc `%s %s` 2>%s; ",
+        // TODO: This is not correct, needs to be changed so that the output logging and redirection should go to the script itself
+        String cmd = String.format("jsc=%s; %s=$jsc %s %s; ",
                         cookieValue,
                         cookieVariable,
                         launcherAgent.getRemote(),
-                        args,
-                        capturingOutput ? logFile : "&1");
+                        args);
+//                        capturingOutput ? logFile : "&1");
 
-        String cleanup = String.format("echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                            resultFile, resultFile, resultFile);
+//        String cleanup = String.format("echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+//                            resultFile, resultFile, resultFile);
 
-        return cmd + cleanup;
+        return cmd;// + cleanup;
     }
 
     /*package*/ static final class ShellController extends FileMonitoringController {
