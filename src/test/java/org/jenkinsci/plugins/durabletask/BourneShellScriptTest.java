@@ -25,6 +25,7 @@
 package org.jenkinsci.plugins.durabletask;
 
 import hudson.EnvVars;
+import hudson.ExtensionList;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.Computer;
@@ -55,10 +56,8 @@ import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
+
+import org.junit.*;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.LoggerRule;
@@ -286,7 +285,7 @@ public class BourneShellScriptTest {
     }
 
     private void setGlobalInterpreter(String interpreter) {
-        j.jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).setShell(interpreter);
+        ExtensionList.lookup(Shell.DescriptorImpl.class).get(0).setShell(interpreter);
     }
 
     private void awaitCompletion(Controller c) throws IOException, InterruptedException {
