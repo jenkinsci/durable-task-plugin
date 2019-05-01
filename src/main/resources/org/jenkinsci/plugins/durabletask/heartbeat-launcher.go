@@ -9,22 +9,30 @@ import (
 	"time"
 )
 
-func launcher(scriptPath string, logPath string, resultPath string, capture bool, pidChan chan int) {
+func launcher(pidChan chan int, scriptPath string, logPath string, resultPath string, outputPath string) {
 	scrptCmd := exec.Command("/bin/sh", "-c", scriptPath)
 	// scrptCmd.Stdout, err = os.OpenFile(logFile, os.O_WRONLY, 0644) //os.Stdout
 	logFile, err := os.Create(logPath)
 	if err != nil {
 		os.Stderr.WriteString(err.Error())
-		return
 	}
-	scrptCmd.Stdout = logFile //os.Stdout
-	// TODO: error is here. If capture ouput is enabled, then can pass configuredInterpreter unit test
-	// scrptCmd.Stderr = logFile
-	if capture {
-		scrptCmd.Stderr = logFile
+	if outputPath != "" {
+		// capturing output
+		outputFile, err := os.Create(outputPath)
+		if err != nil {
+			os.Stderr.WriteString(err.Error())
+		}
+		scrptCmd.Stdout = outputFile
 	} else {
-		scrptCmd.Stderr = os.Stdout //os.Stderr
+		scrptCmd.Stdout = logFile
 	}
+	scrptCmd.Stderr = logFile
+	// if outputPath != "" {
+	// 	// capturing output
+	// 	scrptCmd.Stderr = logFile
+	// } else {
+	// 	scrptCmd.Stderr = os.Stdout
+	// }
 	scrptCmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	for i := 0; i < len(scrptCmd.Args); i++ {
 		fmt.Printf("launcher args %v: %v\n", i, scrptCmd.Args[i])
@@ -54,23 +62,23 @@ func main() {
 	for i := 0; i < len(os.Args); i++ {
 		fmt.Printf("arg %v: %v\n", i, os.Args[i])
 	}
-	if len(os.Args) != 6 {
+	argLen := len(os.Args)
+	if argLen < 5 || argLen > 6 {
 		// invalid number of args
-		os.Stderr.WriteString("Input error: expected number of args is 5 (controlDir, resultFile, logFile, scriptPath, capturingOutput)")
+		os.Stderr.WriteString("Input error: expected number of args is 5 or 6 (controlDir, resultPath, logPath, scriptPath, outputPath[opt])")
 		return
 	}
 	controlDir := os.Args[1]
-	resultFile := os.Args[2]
-	logFile := os.Args[3]
-	scriptFile := os.Args[4]
-	capturingOutput := os.Args[5]
-	capture, err := strconv.ParseBool(capturingOutput)
-	if err != nil {
-		os.Stderr.WriteString(err.Error())
+	resultPath := os.Args[2]
+	logPath := os.Args[3]
+	scriptPath := os.Args[4]
+	outputPath := ""
+	if argLen == 6 {
+		outputPath = os.Args[5]
 	}
 
 	pidChan := make(chan int)
-	go launcher(scriptFile, logFile, resultFile, capture, pidChan)
+	go launcher(pidChan, scriptPath, logPath, resultPath, outputPath)
 	scriptPid := <-pidChan
 
 	for {
@@ -84,12 +92,12 @@ func main() {
 		if os.IsNotExist(err) {
 			break
 		}
-		_, err = os.Stat(resultFile)
+		_, err = os.Stat(resultPath)
 		if !os.IsNotExist(err) {
 			break
 		}
 		// heartbeat
-		err = os.Chtimes(logFile, time.Now(), time.Now())
+		err = os.Chtimes(logPath, time.Now(), time.Now())
 		if err != nil {
 			fmt.Printf("Chtimes error: %d", err)
 		}

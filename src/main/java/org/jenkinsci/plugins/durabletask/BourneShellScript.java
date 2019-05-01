@@ -34,6 +34,7 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -71,6 +72,8 @@ public final class BourneShellScript extends FileMonitoringTask {
     @SuppressWarnings("FieldMayBeFinal")
     // TODO use SystemProperties if and when unrestricted
     private static int NOVEL_WORKSPACE_DIAGNOSTICS_COUNT = Integer.getInteger(BourneShellScript.class.getName() + ".NOVEL_WORKSPACE_DIAGNOSTICS_COUNT", 10);
+
+    private final String LAUNCHER_PREFIX = "heartbeat-launcher-";
 
     /**
      * Seconds between heartbeat checks, where we check to see if
@@ -129,7 +132,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
 
         ShellController c = new ShellController(ws,(os == OsType.ZOS));
-        ///*
         FilePath shf = c.getScriptFile(ws);
 
         shf.write(script, scriptEncodingCharset);
@@ -145,9 +147,6 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         String scriptPath = shf.getRemote();
         List<String> args = new ArrayList<>();
-//        if (os != OsType.DARWIN) { // JENKINS-25848
-//            args.add("nohup");
-//        }
         if (os == OsType.WINDOWS) { // JENKINS-40255
             scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
         }
@@ -155,15 +154,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        String launcherCmd = generateLaunchCmd(c, ws, interpreter, scriptPath, cookieValue, cookieVariable);
-//        cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+        String launcherCmd = generateLaunchCmd(c, ws, os, interpreter, scriptPath, cookieValue, cookieVariable);
         launcherCmd = launcherCmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
         args.addAll(Arrays.asList("sh", "-c", launcherCmd));
         LOGGER.log(Level.FINE, "launching {0}", args);
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
-//        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
-//        Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
         boolean novel;
         synchronized (encounteredPaths) {
             Integer cnt = encounteredPaths.get(ws);
@@ -184,45 +180,52 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
-    private String generateLaunchCmd(ShellController c, FilePath ws, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
-        FilePath logFile = c.getLogFile(ws);
-        FilePath resultFile = c.getResultFile(ws);
+    private String generateLaunchCmd(ShellController c, FilePath ws, OsType os, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+        String logFile = c.getLogFile(ws).toURI().getRawPath();
+        String resultFile = c.getResultFile(ws).toURI().getRawPath();
+//        String controlDir = c.controlDir(ws).toURI().getRawPath();
+//        FilePath logFile = c.getLogFile(ws);
+//        FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
+//        FilePath outputFile = null;
+//        String outputFile = "";
+//        if (capturingOutput) {
+//            outputFile = c.getOutputFile(ws);
+//            outputFile = c.getOutputFile(ws).toURI().getRawPath();
+//        }
+        String outputFile = c.getOutputFile(ws).toURI().getRawPath();
 
-        // Copy launcher binary from resource to master filesystem
         // TODO: move to constants
-        final String LAUNCHER_BINARY = "heartbeat-launcher";
-//        ClassLoader classLoader = this.getClass().getClassLoader();
-//        File launcherResource = new File(classLoader.getResource(LAUNCHER_BINARY).getFile());
-        File launcherResource = new File(this.getClass().getResource(LAUNCHER_BINARY).getFile());
-//        File launcherLocal = new File(jenkins.getRootDir(), LAUNCHER_BINARY);
-//        Files.copy(launcherResource, launcherLocal);
+        String launcher_binary = LAUNCHER_PREFIX + os.toString();
+        File launcherResource = new File(this.getClass().getResource(launcher_binary).getFile());
         // move to agent controldir
-        // TODO: skip if running on master?
-//        if (ws.isRemote()) {
         FilePath launcherMaster = new FilePath(launcherResource);
-        FilePath launcherAgent = controlDir.child(LAUNCHER_BINARY);
+        FilePath launcherAgent = controlDir.child(launcher_binary);
+        // TODO: skip if running on master?
         launcherMaster.copyTo(launcherAgent);
         launcherAgent.chmod(0755);
-//        }
 
+//        // TODO: build args with stringbuilder, use format to make whole command
+//        StringBuilder argBuilder = new StringBuilder();
+//        argBuilder.append(controlDir.toURI().getRawPath())
+//                  .append(resultFile)
+//                  .append(logFile)
+//                  .append()
         String args = String.format("%s %s %s '%s %s'",
-                        controlDir,
+                        controlDir.toURI().getRawPath(),
                         resultFile,
                         logFile,
                         interpreter, scriptPath);
-        String cmd = String.format("jsc=%s; %s=$jsc %s %s %s; ",
+        if (capturingOutput) {
+            args = args + " " + outputFile;
+        }
+        String cmd = String.format("jsc=%s; %s=$jsc %s %s; ",
                         cookieValue,
                         cookieVariable,
                         launcherAgent.getRemote(),
-                        args,
-                        capturingOutput);
-//                        capturingOutput ? logFile : "&1");
+                        args);
 
-//        String cleanup = String.format("echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-//                            resultFile, resultFile, resultFile);
-
-        return cmd;// + cleanup;
+        return cmd;
     }
 
     /*package*/ static final class ShellController extends FileMonitoringController {
