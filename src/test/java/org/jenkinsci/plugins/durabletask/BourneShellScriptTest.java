@@ -24,8 +24,6 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import com.google.common.base.Charsets;
-import com.google.common.io.Files;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
@@ -278,10 +276,7 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
 
         setGlobalInterpreter("no_such_shell");
-        BourneShellScript bsc = new BourneShellScript(script);
-        // need stderr to redirect to logfile to get error
-        bsc.captureOutput();
-        c = bsc.launch(new EnvVars(), ws, launcher, listener);
+        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         baos = new ByteArrayOutputStream();
         c.writeLog(ws, new TeeOutputStream(baos, System.out));
