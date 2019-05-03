@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -39,8 +41,7 @@ func launcher(wg *sync.WaitGroup, pidChan chan int,
 	scriptPath string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
-	cmdString := scriptPath + "; echo $? > " + resultPath + "; wait"
-	scrptCmd := exec.Command("/bin/sh", "-c", cmdString)
+	scrptCmd := exec.Command("/bin/sh", "-c", scriptPath)
 	logFile, err := os.Create(logPath)
 	checkLauncherErr(err)
 	defer logFile.Close()
@@ -73,27 +74,22 @@ func launcher(wg *sync.WaitGroup, pidChan chan int,
 	pidChan <- scrptCmd.Process.Pid
 	// Note: If we do not call wait, the forked process will be zombied until the main program exits
 	// This will cause the heartbeat goroutine to think that the process has not died
-	// err = scrptCmd.Wait()
-	// checkLauncherErr(err)
-	// resultVal := scrptCmd.ProcessState.ExitCode()
-	// fmt.Printf("launcher script exit code: %v\n", resultVal)
-	// fmt.Println("launcher writing result")
-	// resultFile, err := os.Create(resultPath)
-	// checkLauncherErr(err)
-	// defer resultFile.Close()
-	// resultFile.WriteString(strconv.Itoa(resultVal))
-	// checkLauncherErr(err)
-	// fmt.Println("about to close result file")
-	// err = resultFile.Close()
-	// checkLauncherErr(err)
+	err = scrptCmd.Wait()
+	checkLauncherErr(err)
+	resultVal := scrptCmd.ProcessState.ExitCode()
+	fmt.Printf("launcher script exit code: %v\n", resultVal)
+	fmt.Println("launcher writing result")
+	resultFile, err := os.Create(resultPath)
+	checkLauncherErr(err)
+	defer resultFile.Close()
+	resultFile.WriteString(strconv.Itoa(resultVal))
+	checkLauncherErr(err)
+	fmt.Println("about to close result file")
+	err = resultFile.Close()
+	checkLauncherErr(err)
 	fmt.Println("launcher: done")
 }
 
-// The reason this simpler variant fails is because the heartbeat go routine must be a
-// a completely separate thread. However, using golang for this process checker seems to be
-// more platform-independent way to check if a process is running
-// Another option would be to break up heartbeat and launcher into separate go files so that they
-// can be set free of the main.
 func heartbeat(wg *sync.WaitGroup, pidChan chan int,
 	controlDir string, resultPath string, logPath string) {
 
@@ -141,9 +137,9 @@ func main() {
 		outputPath = os.Args[5]
 	}
 
-	// sigChan := make(chan os.Signal, 1)
-	// signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
-	// go signalCatcher(sigChan)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+	go signalCatcher(sigChan)
 	// signal.Ignore here will do too good of a job. This will block the stop unit test from being able to
 	// terminate the launched script - because mac is killing with SIGINT apparently??
 	// signal.Ignore(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
@@ -154,7 +150,7 @@ func main() {
 	go launcher(&wg, pidChan, scriptPath, logPath, resultPath, outputPath)
 	go heartbeat(&wg, pidChan, controlDir, resultPath, logPath)
 	wg.Wait()
-	// signal.Stop(sigChan)
-	// close(sigChan)
+	signal.Stop(sigChan)
+	close(sigChan)
 	fmt.Println("main: done.")
 }
