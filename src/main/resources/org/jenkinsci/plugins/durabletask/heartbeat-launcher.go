@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"sync"
 	"syscall"
@@ -13,22 +14,29 @@ import (
 func checkHeartbeatErr(err error) {
 	checkErr("heartbeat", err)
 }
+
 func checkLauncherErr(err error) {
 	checkErr("launcher", err)
 }
+
 func checkErr(process string, err error) {
 	if err != nil {
 		errString := fmt.Sprintf("(%v) %v\n", process, err.Error())
 		os.Stderr.WriteString(errString)
 	}
 }
-func launcher(wg *sync.WaitGroup, pidChan chan int, scriptPath string, logPath string, resultPath string, outputPath string) {
+func signalCatcher(sigChan chan os.Signal) {
+	for sig := range sigChan {
+		// launcher or heartbeat will signal done by closing this channel
+		fmt.Printf("(sig catcher) caught: %v\n", sig)
+	}
+
+}
+
+func launcher(wg *sync.WaitGroup, pidChan chan int,
+	scriptPath string, logPath string, resultPath string, outputPath string) {
+
 	defer wg.Done()
-	// Note: Writing the script exit code is handled in the process command because setsid
-	// applies only to the launched process and not the launcher. It is possible for the launcher
-	// to get killed before it is able to write the exit code.
-	// cmdString := scriptPath + "; echo $? > " + resultPath // + "; wait"
-	// cmdString := scriptPath + "; wait"
 	scrptCmd := exec.Command("/bin/sh", "-c", scriptPath)
 	logFile, err := os.Create(logPath)
 	checkLauncherErr(err)
@@ -84,7 +92,9 @@ func launcher(wg *sync.WaitGroup, pidChan chan int, scriptPath string, logPath s
 	fmt.Println("launcher: done")
 }
 
-func heartbeat(wg *sync.WaitGroup, pidChan chan int, controlDir string, resultPath string, logPath string) {
+func heartbeat(wg *sync.WaitGroup, pidChan chan int,
+	controlDir string, resultPath string, logPath string) {
+
 	defer wg.Done()
 	scriptPid := <-pidChan
 	for {
@@ -129,11 +139,16 @@ func main() {
 		outputPath = os.Args[5]
 	}
 
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
+	go signalCatcher(sigChan)
+
 	var wg sync.WaitGroup
 	pidChan := make(chan int)
 	wg.Add(2)
 	go launcher(&wg, pidChan, scriptPath, logPath, resultPath, outputPath)
 	go heartbeat(&wg, pidChan, controlDir, resultPath, logPath)
+	// close(sigChan)
 	// scriptPid := <-pidChan
 	/*
 		for {
