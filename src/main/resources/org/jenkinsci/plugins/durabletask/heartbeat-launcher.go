@@ -21,8 +21,7 @@ func checkLauncherErr(err error) {
 
 func checkErr(process string, err error) {
 	if err != nil {
-		errString := fmt.Sprintf("(%v) %v\n", process, err.Error())
-		os.Stderr.WriteString(errString)
+		fmt.Fprintf(os.Stderr, "(%v) %v\n", process, err.Error())
 	}
 }
 
@@ -32,12 +31,11 @@ func checkErr(process string, err error) {
 // the script, and thus not record the exit code to the result file
 func signalCatcher(sigChan chan os.Signal) {
 	for sig := range sigChan {
-		// launcher or heartbeat will signal done by closing this channel
 		fmt.Printf("(sig catcher) caught: %v\n", sig)
 	}
 }
 
-func launcher(wg *sync.WaitGroup, pidChan chan int,
+func launcher(wg *sync.WaitGroup, doneChan chan bool,
 	scriptPath string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
@@ -62,7 +60,7 @@ func launcher(wg *sync.WaitGroup, pidChan chan int,
 		// Note: pointing to os.Stdout will not capture all err logs and fail unit tests
 		scrptCmd.Stderr = scrptCmd.Stdout
 	}
-	// Prevents script from being terminated if Jenkins gets terminated
+	// Prevents script from being terminated if program gets terminated
 	scrptCmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	// Allows child processes of the script to be killed if kill signal sent to script's process group id
 	scrptCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -71,7 +69,6 @@ func launcher(wg *sync.WaitGroup, pidChan chan int,
 	}
 	scrptCmd.Start()
 	fmt.Printf("launcher: my pid (%v), launcher pid (%v)\n", os.Getpid(), scrptCmd.Process.Pid)
-	pidChan <- scrptCmd.Process.Pid
 	// Note: If we do not call wait, the forked process will be zombied until the main program exits
 	// This will cause the heartbeat goroutine to think that the process has not died
 	err = scrptCmd.Wait()
@@ -88,32 +85,34 @@ func launcher(wg *sync.WaitGroup, pidChan chan int,
 	err = resultFile.Close()
 	checkLauncherErr(err)
 	fmt.Println("launcher: done")
+	doneChan <- true
 }
 
-func heartbeat(wg *sync.WaitGroup, pidChan chan int,
+func heartbeat(wg *sync.WaitGroup, doneChan chan bool,
 	controlDir string, resultPath string, logPath string) {
 
 	defer wg.Done()
-	scriptPid := <-pidChan
+	_, err := os.Stat(controlDir)
+	if os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "%v\n", err.Error())
+		return
+	}
+	_, err = os.Stat(resultPath)
+	if !os.IsNotExist(err) {
+		fmt.Printf("Result file already exists, stopping heartbeat.\n%v\n", resultPath)
+		return
+	}
 	for {
-		// send signal 0 because FindProcess will always return true for Unix
-		err := syscall.Kill(scriptPid, syscall.Signal(0))
-		fmt.Printf("heartbeat: process.Signal on pid %d returned: %v\n", scriptPid, err)
-		if err != nil {
-			break
+		select {
+		case <-doneChan:
+			fmt.Println("heartbeat: received script finished, exiting")
+			return
+		default:
+			// heartbeat
+			err = os.Chtimes(logPath, time.Now(), time.Now())
+			checkHeartbeatErr(err)
+			time.Sleep(time.Second * 3)
 		}
-		_, err = os.Stat(controlDir)
-		if os.IsNotExist(err) {
-			break
-		}
-		_, err = os.Stat(resultPath)
-		if !os.IsNotExist(err) {
-			break
-		}
-		// heartbeat
-		err = os.Chtimes(logPath, time.Now(), time.Now())
-		checkHeartbeatErr(err)
-		time.Sleep(time.Second * 3)
 	}
 }
 
@@ -138,17 +137,19 @@ func main() {
 	}
 
 	sigChan := make(chan os.Signal, 1)
+	// Note: If signal.Ignore is used, this will be inherited by the script and it will be unable
+	// to terminate in the STOP unit test of the BourneShellScriptTest suite. This is beause (under mac)
+	// the script is terminated with SIGTERM instead of SIGKILL
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 	go signalCatcher(sigChan)
-	// signal.Ignore here will do too good of a job. This will block the stop unit test from being able to
-	// terminate the launched script - because mac is killing with SIGINT apparently??
-	// signal.Ignore(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 
+	doneChan := make(chan bool)
 	var wg sync.WaitGroup
-	pidChan := make(chan int)
 	wg.Add(2)
-	go launcher(&wg, pidChan, scriptPath, logPath, resultPath, outputPath)
-	go heartbeat(&wg, pidChan, controlDir, resultPath, logPath)
+	fmt.Println("go launcher")
+	go launcher(&wg, doneChan, scriptPath, logPath, resultPath, outputPath)
+	fmt.Println("go heartbeat")
+	go heartbeat(&wg, doneChan, controlDir, resultPath, logPath)
 	wg.Wait()
 	signal.Stop(sigChan)
 	close(sigChan)
