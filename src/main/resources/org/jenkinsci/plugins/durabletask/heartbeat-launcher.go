@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -39,7 +38,9 @@ func launcher(wg *sync.WaitGroup, doneChan chan bool,
 	scriptPath string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
-	scrptCmd := exec.Command("/bin/sh", "-c", scriptPath)
+	recordExit := fmt.Sprintf("; echo $? > %v.tmp; mv %v.tmp %v; wait", resultPath, resultPath, resultPath)
+	scriptWithExit := scriptPath + recordExit
+	scriptCmd := exec.Command("/bin/sh", "-c", scriptWithExit)
 	logFile, err := os.Create(logPath)
 	checkLauncherErr(err)
 	defer logFile.Close()
@@ -49,40 +50,32 @@ func launcher(wg *sync.WaitGroup, doneChan chan bool,
 		outputFile, err := os.Create(outputPath)
 		checkLauncherErr(err)
 		defer outputFile.Close()
-		scrptCmd.Stdout = outputFile
+		scriptCmd.Stdout = outputFile
 	} else {
-		scrptCmd.Stdout = logFile
+		scriptCmd.Stdout = logFile
 	}
 	if outputPath != "" {
 		// capturing output
-		scrptCmd.Stderr = logFile
+		scriptCmd.Stderr = logFile
 	} else {
 		// Note: pointing to os.Stdout will not capture all err logs and fail unit tests
-		scrptCmd.Stderr = scrptCmd.Stdout
+		scriptCmd.Stderr = scriptCmd.Stdout
 	}
 	// Prevents script from being terminated if program gets terminated
-	scrptCmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	scriptCmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	// Allows child processes of the script to be killed if kill signal sent to script's process group id
-	scrptCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	for i := 0; i < len(scrptCmd.Args); i++ {
-		fmt.Printf("(launcher) args %v: %v\n", i, scrptCmd.Args[i])
+	scriptCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	for i := 0; i < len(scriptCmd.Args); i++ {
+		fmt.Printf("(launcher) args %v: %v\n", i, scriptCmd.Args[i])
 	}
-	scrptCmd.Start()
-	fmt.Printf("(launcher) my pid (%v), launcher pid (%v)\n", os.Getpid(), scrptCmd.Process.Pid)
+	scriptCmd.Start()
+	fmt.Printf("(launcher) my pid (%v), launcher pid (%v)\n", os.Getpid(), scriptCmd.Process.Pid)
 	// Note: If we do not call wait, the forked process will be zombied until the main program exits
-	// This will cause the heartbeat goroutine to think that the process has not died
-	err = scrptCmd.Wait()
+	// ignoring SIGCHLD is not as portable as calling Wait()
+	err = scriptCmd.Wait()
 	checkLauncherErr(err)
-	resultVal := scrptCmd.ProcessState.ExitCode()
+	resultVal := scriptCmd.ProcessState.ExitCode()
 	fmt.Printf("(launcher) script exit code: %v\n", resultVal)
-	resultFile, err := os.Create(resultPath)
-	checkLauncherErr(err)
-	defer resultFile.Close()
-	resultFile.WriteString(strconv.Itoa(resultVal))
-	checkLauncherErr(err)
-	err = resultFile.Close()
-	checkLauncherErr(err)
-	fmt.Println("(launcher) done")
 	doneChan <- true
 }
 
