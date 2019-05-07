@@ -97,31 +97,40 @@ public class BourneShellScriptTest {
 
     @Test
     public void smokeTest() throws Exception {
-        Controller c = new BourneShellScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        smokeTest(ws, launcher, 0);
+    }
+
+    public void smokeTest(FilePath testWs, Launcher testLauncher, int sleepSeconds) throws Exception {
+        String script = String.format("echo hello world; sleep %s", sleepSeconds);
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), testWs, testLauncher, listener);
+        awaitCompletion(c, testWs, testLauncher);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws,baos);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        c.writeLog(testWs,baos);
+        assertEquals(0, c.exitStatus(testWs, testLauncher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
-        c.cleanup(ws);
+        c.cleanup(testWs);
     }
 
     @Test public void stop() throws Exception {
+            stop(ws, launcher);
+    }
+
+    public void stop(FilePath testWs, Launcher testLauncher) throws Exception {
         // Have observed both SIGTERM and SIGCHLD, perhaps depending on which process (the written sh, or sleep) gets the signal first.
         // TODO without the `trap … EXIT` the other handlers do not seem to get run, and we get exit code 143 (~ uncaught SIGTERM). Why?
         // Also on jenkins.ci neither signal trap is encountered, only EXIT.
-        Controller c = new BourneShellScript("trap 'echo got SIGCHLD' CHLD; trap 'echo got SIGTERM' TERM; trap 'echo exiting; exit 99' EXIT; sleep 999").launch(new EnvVars(), ws, launcher, listener);
+        Controller c = new BourneShellScript("trap 'echo got SIGCHLD' CHLD; trap 'echo got SIGTERM' TERM; trap 'echo exiting; exit 99' EXIT; sleep 999").launch(new EnvVars(), testWs, testLauncher, listener);
         Thread.sleep(1000);
-        c.stop(ws, launcher);
-        awaitCompletion(c);
+        c.stop(testWs, testLauncher);
+        awaitCompletion(c, testWs, testLauncher);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
+        c.writeLog(testWs, baos);
         String log = baos.toString();
         System.out.println(log);
-        assertEquals(99, c.exitStatus(ws, launcher, listener).intValue());
+        assertEquals(99, c.exitStatus(testWs, testLauncher, listener).intValue());
         assertTrue(log.contains("sleep 999"));
         assertTrue(log.contains("got SIG"));
-        c.cleanup(ws);
+        c.cleanup(testWs);
     }
 
     @Test public void reboot() throws Exception {
@@ -155,32 +164,44 @@ public class BourneShellScriptTest {
 
     @Issue("JENKINS-27152")
     @Test public void cleanWorkspace() throws Exception {
-        Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        cleanWorkspace(ws, launcher);
+    }
+
+    public void cleanWorkspace(FilePath testWs, Launcher testLauncher) throws Exception {
+        Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), testWs, testLauncher, listener);
+        awaitCompletion(c, testWs, testLauncher);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        c.writeLog(testWs, baos);
+        assertEquals(0, c.exitStatus(testWs, testLauncher, listener).intValue());
         assertThat(baos.toString(), containsString("---. .. stuff---"));
-        c.cleanup(ws);
+        c.cleanup(testWs);
     }
 
     @Issue("JENKINS-26133")
     @Test public void output() throws Exception {
+        output(ws, launcher);
+    }
+
+    public void output(FilePath testWs, Launcher testLauncher) throws Exception {
         DurableTask task = new BourneShellScript("echo 42");
         task.captureOutput();
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        Controller c = task.launch(new EnvVars(), testWs, testLauncher, listener);
+        awaitCompletion(c, testWs, testLauncher);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        c.writeLog(testWs, baos);
+        assertEquals(0, c.exitStatus(testWs, testLauncher, listener).intValue());
         assertThat(baos.toString(), containsString("+ echo 42"));
-        assertEquals("42\n", new String(c.getOutput(ws, launcher)));
-        c.cleanup(ws);
+        assertEquals("42\n", new String(c.getOutput(testWs, testLauncher)));
+        c.cleanup(testWs);
     }
 
     @Issue("JENKINS-38381")
     @Test public void watch() throws Exception {
         Slave s = j.createOnlineSlave();
+        watch(s);
+    }
+
+    public void watch(Slave s) throws Exception {
         ws = s.getWorkspaceRoot();
         launcher = s.createLauncher(listener);
         DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");
@@ -290,7 +311,11 @@ public class BourneShellScriptTest {
     }
 
     private void awaitCompletion(Controller c) throws IOException, InterruptedException {
-        while (c.exitStatus(ws, launcher, listener) == null) {
+        awaitCompletion(c, ws, launcher);
+    }
+
+    private void awaitCompletion(Controller c, FilePath testWs, Launcher testLauncher) throws IOException, InterruptedException {
+        while (c.exitStatus(testWs, testLauncher, listener) == null) {
             Thread.sleep(100);
         }
     }
@@ -328,18 +353,21 @@ public class BourneShellScriptTest {
     private void runOnDocker(DumbSlave s, int sleepSeconds) throws Exception {
         j.jenkins.addNode(s);
         j.waitOnline(s);
-        FilePath dockerWS = s.getWorkspaceRoot();
+        FilePath dockerWs = s.getWorkspaceRoot();
         Launcher dockerLauncher = s.createLauncher(listener);
-        String script = String.format("echo hello world; sleep %s", sleepSeconds);
-        Controller c = new BourneShellScript(script).launch(new EnvVars(), dockerWS, dockerLauncher, listener);
-        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
-            Thread.sleep(100);
-        }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(dockerWS, baos);
-        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
-        assertTrue(baos.toString().contains("hello world"));
-        c.cleanup(dockerWS);
+
+        System.out.println("\n--smoke 10--");
+        smokeTest(dockerWs, dockerLauncher, sleepSeconds);
+        System.out.println("\n--stop--");
+        stop(dockerWs, dockerLauncher);
+        System.out.println("\n--output--");
+        output(dockerWs, dockerLauncher);
+        System.out.println("\n--clean workspace--");
+        cleanWorkspace(dockerWs, dockerLauncher);
+        System.out.println("\n--watch--");
+        watch(s);
+
+        ByteArrayOutputStream baos;
         do {
             Thread.sleep(1000);
             baos = new ByteArrayOutputStream();
