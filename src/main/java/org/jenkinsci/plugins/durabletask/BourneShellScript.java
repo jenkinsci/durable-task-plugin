@@ -34,6 +34,7 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -154,7 +155,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        String launcherCmd = generateLaunchCmd(c, ws, os, interpreter, scriptPath, cookieValue, cookieVariable);
+        String launcherCmd = generateLaunchCmd(jenkins, c, ws, os, interpreter, scriptPath, cookieValue, cookieVariable);
         launcherCmd = launcherCmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
         args.addAll(Arrays.asList("sh", "-c", launcherCmd));
@@ -180,37 +181,19 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
-    private String generateLaunchCmd(ShellController c, FilePath ws, OsType os, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+    private String generateLaunchCmd(Jenkins jenkins, ShellController c, FilePath ws, OsType os, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).toURI().getRawPath();
         String resultFile = c.getResultFile(ws).toURI().getRawPath();
-//        String controlDir = c.controlDir(ws).toURI().getRawPath();
-//        FilePath logFile = c.getLogFile(ws);
-//        FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
-//        FilePath outputFile = null;
-//        String outputFile = "";
-//        if (capturingOutput) {
-//            outputFile = c.getOutputFile(ws);
-//            outputFile = c.getOutputFile(ws).toURI().getRawPath();
-//        }
         String outputFile = c.getOutputFile(ws).toURI().getRawPath();
 
-        // TODO: move to constants
         String launcher_binary = LAUNCHER_PREFIX + os.toString();
-        File launcherResource = new File(this.getClass().getResource(launcher_binary).getFile());
-        // move to agent controldir
-        FilePath launcherMaster = new FilePath(launcherResource);
+
+        InputStream launcherStream = this.getClass().getResourceAsStream(launcher_binary);
         FilePath launcherAgent = controlDir.child(launcher_binary);
-        // TODO: skip if running on master?
-        launcherMaster.copyTo(launcherAgent);
+        launcherAgent.copyFrom(launcherStream);
         launcherAgent.chmod(0755);
 
-//        // TODO: build args with stringbuilder, use format to make whole command
-//        StringBuilder argBuilder = new StringBuilder();
-//        argBuilder.append(controlDir.toURI().getRawPath())
-//                  .append(resultFile)
-//                  .append(logFile)
-//                  .append()
         String args = String.format("%s %s %s '%s %s'",
                         controlDir.toURI().getRawPath(),
                         resultFile,
