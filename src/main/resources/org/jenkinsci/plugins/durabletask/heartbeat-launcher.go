@@ -65,26 +65,24 @@ func launcher(wg *sync.WaitGroup, doneChan chan bool,
 	// Allows child processes of the script to be killed if kill signal sent to script's process group id
 	scrptCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	for i := 0; i < len(scrptCmd.Args); i++ {
-		fmt.Printf("launcher args %v: %v\n", i, scrptCmd.Args[i])
+		fmt.Printf("(launcher) args %v: %v\n", i, scrptCmd.Args[i])
 	}
 	scrptCmd.Start()
-	fmt.Printf("launcher: my pid (%v), launcher pid (%v)\n", os.Getpid(), scrptCmd.Process.Pid)
+	fmt.Printf("(launcher) my pid (%v), launcher pid (%v)\n", os.Getpid(), scrptCmd.Process.Pid)
 	// Note: If we do not call wait, the forked process will be zombied until the main program exits
 	// This will cause the heartbeat goroutine to think that the process has not died
 	err = scrptCmd.Wait()
 	checkLauncherErr(err)
 	resultVal := scrptCmd.ProcessState.ExitCode()
-	fmt.Printf("launcher script exit code: %v\n", resultVal)
-	fmt.Println("launcher writing result")
+	fmt.Printf("(launcher) script exit code: %v\n", resultVal)
 	resultFile, err := os.Create(resultPath)
 	checkLauncherErr(err)
 	defer resultFile.Close()
 	resultFile.WriteString(strconv.Itoa(resultVal))
 	checkLauncherErr(err)
-	fmt.Println("about to close result file")
 	err = resultFile.Close()
 	checkLauncherErr(err)
-	fmt.Println("launcher: done")
+	fmt.Println("(launcher) done")
 	doneChan <- true
 }
 
@@ -105,10 +103,11 @@ func heartbeat(wg *sync.WaitGroup, doneChan chan bool,
 	for {
 		select {
 		case <-doneChan:
-			fmt.Println("heartbeat: received script finished, exiting")
+			fmt.Println("(heartbeat) received script finished, exiting")
 			return
 		default:
 			// heartbeat
+			fmt.Println("(heartbeat) touch log")
 			err = os.Chtimes(logPath, time.Now(), time.Now())
 			checkHeartbeatErr(err)
 			time.Sleep(time.Second * 3)
@@ -146,12 +145,10 @@ func main() {
 	doneChan := make(chan bool)
 	var wg sync.WaitGroup
 	wg.Add(2)
-	fmt.Println("go launcher")
 	go launcher(&wg, doneChan, scriptPath, logPath, resultPath, outputPath)
-	fmt.Println("go heartbeat")
 	go heartbeat(&wg, doneChan, controlDir, resultPath, logPath)
 	wg.Wait()
 	signal.Stop(sigChan)
 	close(sigChan)
-	fmt.Println("main: done.")
+	fmt.Println("(main) done.")
 }
