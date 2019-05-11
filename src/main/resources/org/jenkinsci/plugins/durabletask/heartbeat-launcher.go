@@ -121,12 +121,13 @@ func heartbeat(wg *sync.WaitGroup, pgidChan chan int, launchedPid int,
 	// create the heartbeat script
 	heartbeat := fmt.Sprintf("pid=\"$$\"; while true ; do kill -0 %v; status=\"$?\"; if [[ \"($status)\" -ne 0 ]]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"",
 		launchedPid, launchedPid, logPath)
-	heartbeatScript, err := os.Create(HBSCRIPT)
+	heartbeatPath := controlDir + HBSCRIPT
+	heartbeatScript, err := os.Create(heartbeatPath)
 	checkHeartbeatErr(err)
 	heartbeatScript.WriteString(heartbeat)
 	heartbeatScript.Close()
 
-	heartbeatCmd := exec.Command("/bin/sh", HBSCRIPT)
+	heartbeatCmd := exec.Command("/bin/sh", heartbeatPath)
 	heartbeatCmd.Stdout = os.Stdout
 	heartbeatCmd.Stderr = os.Stderr
 	heartbeatCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
