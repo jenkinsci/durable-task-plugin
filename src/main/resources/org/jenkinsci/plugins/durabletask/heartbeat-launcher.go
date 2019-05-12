@@ -48,7 +48,8 @@ func launcher(wg *sync.WaitGroup, pidChan chan int, pgidChan chan int,
 	scriptString string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
-	recordExit := fmt.Sprintf("; echo $? > %v.tmp; mv %v.tmp %v; wait", resultPath, resultPath, resultPath)
+	recordExit := fmt.Sprintf("; status=\"$?\"; echo \"$status\" > %v.tmp; mv %v.tmp %v; wait",
+		resultPath, resultPath, resultPath)
 	scriptWithExit := scriptString + recordExit
 	scriptCmd := exec.Command("/bin/sh", "-c", scriptWithExit)
 	logFile, err := os.Create(logPath)
