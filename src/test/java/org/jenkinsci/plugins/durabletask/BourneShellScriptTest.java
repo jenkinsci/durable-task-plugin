@@ -104,242 +104,7 @@ public class BourneShellScriptTest {
         this.listener = StreamTaskListener.fromStdout();
     }
 
-    @Test public void smokeTest() throws Exception {
-        prepareAgentForPlatform();
-
-        boolean isNative = (platform == TestPlatform.NATIVE);
-        int sleepSeconds = 10;
-        if (isNative) {
-            sleepSeconds = 0;
-        }
-
-        String script = String.format("echo hello world; sleep %s", sleepSeconds);
-        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws,baos);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertTrue(baos.toString().contains("hello world"));
-        if (!isNative) {
-            do {
-                Thread.sleep(1000);
-                baos = new ByteArrayOutputStream();
-                try {
-                    assertEquals(0, launcher.launch().cmds("ps", "-e", "-o", "pid,ppid,stat,comm").stdout(new TeeOutputStream(baos, System.out)).join());
-                } catch (IOException x) { // no ps? forget this check
-                    System.err.println(x);
-                    break;
-                }
-            } while (baos.toString().contains(" sleep "));
-            assertThat("no zombies running", baos.toString(), not(containsString(" Z ")));
-        }
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-
-    @Test public void stop() throws Exception {
-        prepareAgentForPlatform();
-
-        // Have observed both SIGTERM and SIGCHLD, perhaps depending on which process (the written sh, or sleep) gets the signal first.
-        // TODO without the `trap … EXIT` the other handlers do not seem to get run, and we get exit code 143 (~ uncaught SIGTERM). Why?
-        // Also on jenkins.ci neither signal trap is encountered, only EXIT.
-        Controller c = new BourneShellScript("trap 'echo got SIGCHLD' CHLD; trap 'echo got SIGTERM' TERM; trap 'echo exiting; exit 99' EXIT; sleep 999").launch(new EnvVars(), ws, launcher, listener);
-        Thread.sleep(1000);
-        c.stop(ws, launcher);
-        awaitCompletion(c);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        String log = baos.toString();
-        System.out.println(log);
-        assertEquals(99, c.exitStatus(ws, launcher, listener).intValue());
-        assertTrue(log.contains("sleep 999"));
-        assertTrue(log.contains("got SIG"));
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-
-    @Test public void reboot() throws Exception {
-        prepareAgentForPlatform();
-
-        int orig = BourneShellScript.HEARTBEAT_CHECK_INTERVAL;
-        BourneShellScript.HEARTBEAT_CHECK_INTERVAL = 15;
-        try {
-            FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
-            Thread.sleep(1000);
-            launcher.kill(Collections.singletonMap("killemall", "true"));
-            c.getResultFile(ws).delete();
-            awaitCompletion(c);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            c.writeLog(ws, baos);
-            String log = baos.toString();
-            System.out.println(log);
-            assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher, listener));
-            assertTrue(log.contains("sleep 999"));
-            c.cleanup(ws);
-            slaveCleanup(c);
-        } finally {
-            BourneShellScript.HEARTBEAT_CHECK_INTERVAL = orig;
-        }
-    }
-
-    @Test public void justSlow() throws Exception {
-        prepareAgentForPlatform();
-
-        Controller c = new BourneShellScript("sleep 60").launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
-        c.writeLog(ws, System.out);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-
-    @Issue("JENKINS-27152")
-    @Test public void cleanWorkspace() throws Exception {
-        prepareAgentForPlatform();
-
-        Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("---. .. stuff---"));
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-
-    @Issue("JENKINS-26133")
-    @Test public void output() throws Exception {
-        prepareAgentForPlatform();
-
-
-        DurableTask task = new BourneShellScript("echo 42");
-        task.captureOutput();
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("+ echo 42"));
-        assertEquals("42\n", new String(c.getOutput(ws, launcher)));
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-
-    @Issue("JENKINS-38381")
-    @Test public void watch() throws Exception {
-        prepareAgentForPlatform();
-
-        DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        BlockingQueue<Integer> status = new LinkedBlockingQueue<>();
-        BlockingQueue<String> output = new LinkedBlockingQueue<>();
-        BlockingQueue<String> lines = new LinkedBlockingQueue<>();
-        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines), listener);
-        assertEquals("+ set +x", lines.take());
-        assertEquals(0, status.take().intValue());
-        assertEquals("<no output>", output.take());
-        assertEquals("[1, 2, 3, 4, 5]", lines.toString());
-        task = new BourneShellScript("echo result");
-        task.captureOutput();
-        c = task.launch(new EnvVars(), ws, launcher, listener);
-        status = new LinkedBlockingQueue<>();
-        output = new LinkedBlockingQueue<>();
-        lines = new LinkedBlockingQueue<>();
-        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines), listener);
-        assertEquals(0, status.take().intValue());
-        assertEquals("result\n", output.take());
-        assertEquals("[+ echo result]", lines.toString());
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-    static class MockHandler extends Handler {
-        final BlockingQueue<Integer> status;
-        final BlockingQueue<String> output;
-        final BlockingQueue<String> lines;
-        @SuppressWarnings("unchecked")
-        MockHandler(VirtualChannel channel, BlockingQueue<Integer> status, BlockingQueue<String> output, BlockingQueue<String> lines) {
-            this.status = channel.export(BlockingQueue.class, status);
-            this.output = channel.export(BlockingQueue.class, output);
-            this.lines = channel.export(BlockingQueue.class, lines);
-        }
-        @Override public void output(InputStream stream) throws Exception {
-            lines.addAll(IOUtils.readLines(stream, StandardCharsets.UTF_8));
-        }
-        @Override public void exited(int code, byte[] data) throws Exception {
-            status.add(code);
-            output.add(data != null ? new String(data, StandardCharsets.UTF_8) : "<no output>");
-        }
-    }
-
-    @Issue("JENKINS-40734")
-    @Test public void envWithShellChar() throws Exception {
-        prepareAgentForPlatform();
-
-        Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
-        awaitCompletion(c);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws,baos);
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("value=foo$$bar"));
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-
-    @Test public void shebang() throws Exception {
-        prepareAgentForPlatform();
-
-        setGlobalInterpreter("/bin/false"); // Should be overridden
-        Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, new TeeOutputStream(baos, System.out));
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("Hello, world!"));
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-
-    @Issue("JENKINS-50902")
-    @Test public void configuredInterpreter() throws Exception {
-        prepareAgentForPlatform();
-
-        setGlobalInterpreter("/bin/bash");
-        String script = "if [ ! -z \"$BASH_VERSION\" ]; then echo 'this is bash'; else echo 'this is not'; fi";
-        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, new TeeOutputStream(baos, System.out));
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("this is bash"));
-        c.cleanup(ws);
-
-        // Find it in the PATH
-        setGlobalInterpreter("bash");
-        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
-        baos = new ByteArrayOutputStream();
-        c.writeLog(ws, new TeeOutputStream(baos, System.out));
-        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("this is bash"));
-        c.cleanup(ws);
-
-        setGlobalInterpreter("no_such_shell");
-        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
-        baos = new ByteArrayOutputStream();
-        c.writeLog(ws, new TeeOutputStream(baos, System.out));
-        assertNotEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), containsString("no_such_shell"));
-        c.cleanup(ws);
-        slaveCleanup(c);
-    }
-
-    /**
-     * MUST BE CALLED BEFORE EACH TEST
-     *
-     * @throws Exception
-     */
-    private void prepareAgentForPlatform() throws Exception {
+    @Before public void prepareAgentForPlatform() throws Exception {
         System.out.println("prepare platform: " + platform);
         switch (platform) {
             case NATIVE:
@@ -412,20 +177,217 @@ public class BourneShellScriptTest {
         return agentSlave;
     }
 
-    /**
-     *
-     * @param container
-     * @return
-     * @throws hudson.model.Descriptor.FormException
-     * @throws IOException
-     */
-    private DumbSlave createDockerSlave(DockerContainer container) throws hudson.model.Descriptor.FormException, IOException {
-        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", ""));
-    }
-
-    private void slaveCleanup(Controller c) throws IOException, InterruptedException {
+    @After public void slaveCleanup() throws IOException, InterruptedException {
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
         j.jenkins.removeNode(s);
+    }
+
+    @Test public void smokeTest() throws Exception {
+        boolean isNative = (platform == TestPlatform.NATIVE);
+        int sleepSeconds = 10;
+        if (isNative) {
+            sleepSeconds = 0;
+        }
+
+        String script = String.format("echo hello world; sleep %s", sleepSeconds);
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws,baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertTrue(baos.toString().contains("hello world"));
+        c.cleanup(ws);
+        if (!isNative) {
+            assertTrue("no zombies running", noZombies());
+        }
+    }
+
+    @Test public void stop() throws Exception {
+        // Have observed both SIGTERM and SIGCHLD, perhaps depending on which process (the written sh, or sleep) gets the signal first.
+        // TODO without the `trap … EXIT` the other handlers do not seem to get run, and we get exit code 143 (~ uncaught SIGTERM). Why?
+        // Also on jenkins.ci neither signal trap is encountered, only EXIT.
+        Controller c = new BourneShellScript("trap 'echo got SIGCHLD' CHLD; trap 'echo got SIGTERM' TERM; trap 'echo exiting; exit 99' EXIT; sleep 999").launch(new EnvVars(), ws, launcher, listener);
+        Thread.sleep(1000);
+        c.stop(ws, launcher);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        String log = baos.toString();
+        System.out.println(log);
+        assertEquals(99, c.exitStatus(ws, launcher, listener).intValue());
+        assertTrue(log.contains("sleep 999"));
+        assertTrue(log.contains("got SIG"));
+        c.cleanup(ws);
+    }
+
+    @Test public void reboot() throws Exception {
+        int orig = BourneShellScript.HEARTBEAT_CHECK_INTERVAL;
+        BourneShellScript.HEARTBEAT_CHECK_INTERVAL = 15;
+        try {
+            FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
+            Thread.sleep(1000);
+            launcher.kill(Collections.singletonMap("killemall", "true"));
+            c.getResultFile(ws).delete();
+            awaitCompletion(c);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            c.writeLog(ws, baos);
+            String log = baos.toString();
+            System.out.println(log);
+            assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher, listener));
+            assertTrue(log.contains("sleep 999"));
+            c.cleanup(ws);
+        } finally {
+            BourneShellScript.HEARTBEAT_CHECK_INTERVAL = orig;
+        }
+    }
+
+    @Test public void justSlow() throws Exception {
+        Controller c = new BourneShellScript("sleep 60").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        c.writeLog(ws, System.out);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-27152")
+    @Test public void cleanWorkspace() throws Exception {
+        Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("---. .. stuff---"));
+        c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-26133")
+    @Test public void output() throws Exception {
+        DurableTask task = new BourneShellScript("echo 42");
+        task.captureOutput();
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("+ echo 42"));
+        assertEquals("42\n", new String(c.getOutput(ws, launcher)));
+        c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-38381")
+    @Test public void watch() throws Exception {
+        DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        BlockingQueue<Integer> status = new LinkedBlockingQueue<>();
+        BlockingQueue<String> output = new LinkedBlockingQueue<>();
+        BlockingQueue<String> lines = new LinkedBlockingQueue<>();
+        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals("+ set +x", lines.take());
+        assertEquals(0, status.take().intValue());
+        assertEquals("<no output>", output.take());
+        assertEquals("[1, 2, 3, 4, 5]", lines.toString());
+        task = new BourneShellScript("echo result");
+        task.captureOutput();
+        c = task.launch(new EnvVars(), ws, launcher, listener);
+        status = new LinkedBlockingQueue<>();
+        output = new LinkedBlockingQueue<>();
+        lines = new LinkedBlockingQueue<>();
+        c.watch(ws, new MockHandler(s.getChannel(), status, output, lines), listener);
+        assertEquals(0, status.take().intValue());
+        assertEquals("result\n", output.take());
+        assertEquals("[+ echo result]", lines.toString());
+        c.cleanup(ws);
+    }
+    static class MockHandler extends Handler {
+        final BlockingQueue<Integer> status;
+        final BlockingQueue<String> output;
+        final BlockingQueue<String> lines;
+        @SuppressWarnings("unchecked")
+        MockHandler(VirtualChannel channel, BlockingQueue<Integer> status, BlockingQueue<String> output, BlockingQueue<String> lines) {
+            this.status = channel.export(BlockingQueue.class, status);
+            this.output = channel.export(BlockingQueue.class, output);
+            this.lines = channel.export(BlockingQueue.class, lines);
+        }
+        @Override public void output(InputStream stream) throws Exception {
+            lines.addAll(IOUtils.readLines(stream, StandardCharsets.UTF_8));
+        }
+        @Override public void exited(int code, byte[] data) throws Exception {
+            status.add(code);
+            output.add(data != null ? new String(data, StandardCharsets.UTF_8) : "<no output>");
+        }
+    }
+
+    @Issue("JENKINS-40734")
+    @Test public void envWithShellChar() throws Exception {
+        Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws,baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("value=foo$$bar"));
+        c.cleanup(ws);
+    }
+
+    @Test public void shebang() throws Exception {
+        setGlobalInterpreter("/bin/false"); // Should be overridden
+        Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("Hello, world!"));
+        c.cleanup(ws);
+    }
+
+    @Issue("JENKINS-50902")
+    @Test public void configuredInterpreter() throws Exception {
+        setGlobalInterpreter("/bin/bash");
+        String script = "if [ ! -z \"$BASH_VERSION\" ]; then echo 'this is bash'; else echo 'this is not'; fi";
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("this is bash"));
+        c.cleanup(ws);
+
+        // Find it in the PATH
+        setGlobalInterpreter("bash");
+        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("this is bash"));
+        c.cleanup(ws);
+
+        setGlobalInterpreter("no_such_shell");
+        c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        baos = new ByteArrayOutputStream();
+        c.writeLog(ws, new TeeOutputStream(baos, System.out));
+        assertNotEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), containsString("no_such_shell"));
+        c.cleanup(ws);
+    }
+
+    private boolean noZombies() throws InterruptedException {
+        ByteArrayOutputStream baos = null;
+        do {
+            Thread.sleep(1000);
+            baos = new ByteArrayOutputStream();
+            try {
+                assertEquals(0, launcher.launch().cmds("ps", "-e", "-o", "pid,ppid,stat,comm").stdout(new TeeOutputStream(baos, System.out)).join());
+            } catch (IOException x) { // no ps? forget this check
+                System.err.println(x);
+                break;
+            }
+        } while (baos.toString().contains(" sleep "));
+        return !baos.toString().contains(" Z ");
+    }
+
+    private DumbSlave createDockerSlave(DockerContainer container) throws hudson.model.Descriptor.FormException, IOException {
+        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", ""));
     }
 
     private void awaitCompletion(Controller c) throws IOException, InterruptedException {
