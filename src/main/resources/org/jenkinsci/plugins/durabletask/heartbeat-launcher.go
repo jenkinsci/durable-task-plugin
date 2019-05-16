@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"sync"
 
 	"golang.org/x/sys/unix"
 )
+
+// Note: EXIT signal is needed as some shell variants require an EXIT trap after catching a signal
+const trapSig = "trap ':' INT TERM EXIT"
 
 func checkHeartbeatErr(err error) {
 	checkErr("heartbeat", err)
@@ -23,14 +27,19 @@ func checkErr(process string, err error) {
 	}
 }
 
+// Catch a termination signal to allow for a graceful exit (i.e. no zombies)
+func signalCatcher(sigChan chan os.Signal) {
+	for sig := range sigChan {
+		fmt.Printf("(sig catcher) caught: %v\n", sig)
+	}
+}
+
 func launcher(wg *sync.WaitGroup, pidChan chan int,
 	scriptString string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
 	recordExit := fmt.Sprintf("status=\"$?\"; echo \"$status\" > %v.tmp; mv %v.tmp %v; wait; exit \"$status\"",
 		resultPath, resultPath, resultPath)
-	// Note: EXIT signal is needed as some shell variants require an EXIT trap after catching a signal
-	trapSig := fmt.Sprintf("trap ':' INT TERM EXIT")
 	scriptWithExit := trapSig + "; " + scriptString + "; " + recordExit
 	scriptCmd := exec.Command("/bin/sh", "-c", scriptWithExit)
 	logFile, err := os.Create(logPath)
@@ -85,14 +94,18 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 		return
 	}
 	// create the heartbeat script
-	heartbeat := fmt.Sprintf("pid=\"$$\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
-		launchedPid, launchedPid, logPath)
+	heartbeat := fmt.Sprintf("#! /bin/sh\n%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
+		trapSig, launchedPid, launchedPid, logPath)
 	heartbeatPath := controlDir + HBSCRIPT
 	heartbeatScript, err := os.Create(heartbeatPath)
+	checkHeartbeatErr(err)
+	err = os.Chmod(heartbeatPath, 0755)
 	checkHeartbeatErr(err)
 	heartbeatScript.WriteString(heartbeat)
 	heartbeatScript.Close()
 
+	// launching with `sh` allows script to survive jenkins termination as well as
+	// gracefully exit (i.e. reaping of the spawned processes (specifically `sleep`))
 	heartbeatCmd := exec.Command("/bin/sh", heartbeatPath)
 	heartbeatCmd.Stdout = os.Stdout
 	heartbeatCmd.Stderr = os.Stderr
@@ -102,7 +115,7 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 	fmt.Printf("(heartbeat) my pid (%v), heartbeat pid (%v)\n", os.Getpid(), pid)
 	err = heartbeatCmd.Wait()
 	checkHeartbeatErr(err)
-	fmt.Printf("(heartbeat)(%v) exit", pid)
+	fmt.Printf("(heartbeat)(%v) exit\n", pid)
 }
 
 func main() {
@@ -116,6 +129,8 @@ func main() {
 		os.Stderr.WriteString("Input error: expected number of args is 5 or 6 (controlDir, resultPath, logPath, scriptString, outputPath[opt])")
 		return
 	}
+	ppid := os.Getppid()
+	fmt.Printf("Parent pid is: %v\n", ppid)
 	controlDir := os.Args[1]
 	resultPath := os.Args[2]
 	logPath := os.Args[3]
@@ -125,13 +140,18 @@ func main() {
 		outputPath = os.Args[5]
 	}
 
-	pidChan := make(chan int)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, unix.SIGINT, unix.SIGTERM)
+	go signalCatcher(sigChan)
 
+	pidChan := make(chan int)
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go launcher(&wg, pidChan, scriptString, logPath, resultPath, outputPath)
 	launchedPid := <-pidChan
 	go heartbeat(&wg, launchedPid, controlDir, resultPath, logPath)
 	wg.Wait()
+	signal.Stop(sigChan)
+	close(sigChan)
 	fmt.Println("(main) done.")
 }
