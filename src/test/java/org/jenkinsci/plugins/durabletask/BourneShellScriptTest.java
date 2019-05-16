@@ -218,6 +218,9 @@ public class BourneShellScriptTest {
         assertTrue(log.contains("sleep 999"));
         assertTrue(log.contains("got SIG"));
         c.cleanup(ws);
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
 
     @Test public void reboot() throws Exception {
@@ -226,7 +229,9 @@ public class BourneShellScriptTest {
         try {
             FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
             Thread.sleep(1000);
+            psOut();
             launcher.kill(Collections.singletonMap("killemall", "true"));
+            psOut();
             c.getResultFile(ws).delete();
             awaitCompletion(c);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -239,6 +244,9 @@ public class BourneShellScriptTest {
         } finally {
             BourneShellScript.HEARTBEAT_CHECK_INTERVAL = orig;
         }
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
 
     @Test public void justSlow() throws Exception {
@@ -247,6 +255,9 @@ public class BourneShellScriptTest {
         c.writeLog(ws, System.out);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
 
     @Issue("JENKINS-27152")
@@ -258,6 +269,9 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("---. .. stuff---"));
         c.cleanup(ws);
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
 
     @Issue("JENKINS-26133")
@@ -272,6 +286,9 @@ public class BourneShellScriptTest {
         assertThat(baos.toString(), containsString("+ echo 42"));
         assertEquals("42\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
 
     @Issue("JENKINS-38381")
@@ -297,6 +314,9 @@ public class BourneShellScriptTest {
         assertEquals("result\n", output.take());
         assertEquals("[+ echo result]", lines.toString());
         c.cleanup(ws);
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
     static class MockHandler extends Handler {
         final BlockingQueue<Integer> status;
@@ -326,6 +346,9 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
         c.cleanup(ws);
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
 
     @Test public void shebang() throws Exception {
@@ -337,6 +360,9 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("Hello, world!"));
         c.cleanup(ws);
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
 
     @Issue("JENKINS-50902")
@@ -369,6 +395,9 @@ public class BourneShellScriptTest {
         assertNotEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("no_such_shell"));
         c.cleanup(ws);
+        if (simpleOrTini()) {
+            assertTrue("no zombies running", noZombies());
+        }
     }
 
     private boolean noZombies() throws InterruptedException {
@@ -384,6 +413,25 @@ public class BourneShellScriptTest {
             }
         } while (baos.toString().contains(" sleep "));
         return !baos.toString().contains(" Z ");
+    }
+
+    // to assist with debugging
+    private String psOut() throws InterruptedException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            launcher.launch().cmds("ps", "-ef").stdout(new TeeOutputStream(baos, System.out)).join();
+        } catch (IOException x) { // no ps? skip
+            System.err.println(x);
+        }
+        return baos.toString();
+    }
+
+    private boolean simpleOrTini() {
+        if (platform == TestPlatform.SIMPLE || platform == TestPlatform.TINI) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     private DumbSlave createDockerSlave(DockerContainer container) throws hudson.model.Descriptor.FormException, IOException {
