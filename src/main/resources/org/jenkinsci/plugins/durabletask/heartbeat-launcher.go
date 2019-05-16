@@ -119,9 +119,13 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 	// heartbeatCmd := exec.Command("/bin/sh", "-c", binsh)
 	heartbeatString := fmt.Sprintf("%v; /bin/sh %v", heartOuterTrapSig, heartbeatPath)
 	heartbeatCmd := exec.Command("/bin/sh", "-c", heartbeatString)
-	// heartbeatCmd := exec.Command("/bin/sh", heartbeatPath)
-	heartbeatCmd.Stdout = logFile             //os.Stdout
-	heartbeatCmd.Stderr = heartbeatCmd.Stdout //os.Stderr
+	/************************************
+	// Warning: DO NOT set cmd.Stdout/StdErr is set to os.Stdout/Stderr
+	// If you do, the heartbeat thread will not survive jenkins termination
+	///////////// DO NOT DO THIS ///////////////
+	// heartbeatCmd.Stdout = os.Stdout
+	// heartbeatCmd.Stderr = os.Stderr
+	************************************************/
 	heartbeatCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
 	heartbeatCmd.Start()
 	pid := heartbeatCmd.Process.Pid
