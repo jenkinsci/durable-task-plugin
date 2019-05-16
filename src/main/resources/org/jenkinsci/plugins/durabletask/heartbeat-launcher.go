@@ -81,6 +81,9 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 	controlDir string, resultPath string, logPath string) {
 
 	defer wg.Done()
+	logFile, logErr := os.Create(controlDir + "heartbeat.log")
+	checkLauncherErr(logErr)
+	defer logFile.Close()
 	const HBSCRIPT string = "heartbeat.sh"
 	fmt.Printf("(heartbeat) checking if %v is alive\n", launchedPid)
 	_, err := os.Stat(controlDir)
@@ -94,8 +97,14 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 		return
 	}
 	// create the heartbeat script
-	heartbeat := fmt.Sprintf("#! /bin/sh\n%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
-		trapSig, launchedPid, launchedPid, logPath)
+	heartInnerTrapSig := "trap 'echo \"(HEARBEAT INNER TRAP)\"' INT TERM; trap 'echo \"(HEARTBEAT EXIT INNER TRAP)\"' EXIT"
+	heartOuterTrapSig := "trap 'echo \"(HEARBEAT OUTER TRAP)\"' INT TERM; trap 'echo \"(HEARTBEAT EXIT OUTER TRAP)\"' EXIT"
+	// heartbeat := fmt.Sprintf("#! /bin/sh\npid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
+	// 	launchedPid, launchedPid, logPath)
+	heartbeat := fmt.Sprintf("%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
+		heartInnerTrapSig, launchedPid, launchedPid, logPath)
+	// heartbeat := fmt.Sprintf("pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
+	// launchedPid, launchedPid, logPath)
 	heartbeatPath := controlDir + HBSCRIPT
 	heartbeatScript, err := os.Create(heartbeatPath)
 	checkHeartbeatErr(err)
@@ -106,9 +115,13 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 
 	// launching with `sh` allows script to survive jenkins termination as well as
 	// gracefully exit (i.e. reaping of the spawned processes (specifically `sleep`))
-	heartbeatCmd := exec.Command("/bin/sh", heartbeatPath)
-	heartbeatCmd.Stdout = os.Stdout
-	heartbeatCmd.Stderr = os.Stderr
+	// binsh := fmt.Sprintf("%v; /bin/sh %v", trapSig, heartbeatPath)
+	// heartbeatCmd := exec.Command("/bin/sh", "-c", binsh)
+	heartbeatString := fmt.Sprintf("%v; /bin/sh %v", heartOuterTrapSig, heartbeatPath)
+	heartbeatCmd := exec.Command("/bin/sh", "-c", heartbeatString)
+	// heartbeatCmd := exec.Command("/bin/sh", heartbeatPath)
+	heartbeatCmd.Stdout = logFile             //os.Stdout
+	heartbeatCmd.Stderr = heartbeatCmd.Stdout //os.Stderr
 	heartbeatCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
 	heartbeatCmd.Start()
 	pid := heartbeatCmd.Process.Pid
