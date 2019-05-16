@@ -158,7 +158,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         String launcherCmd = generateLaunchCmd(jenkins, c, ws, os, interpreter, scriptPath, cookieValue, cookieVariable);
         launcherCmd = launcherCmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
-        args.addAll(Arrays.asList("sh", "-c", launcherCmd));
+        // Catches signal termination in order to allow graceful exit (and no zombies)
+        String catchSig = "trap ':' INT TERM EXIT; ";
+        args.addAll(Arrays.asList("sh", "-c", catchSig + launcherCmd));
         LOGGER.log(Level.FINE, "launching {0}", args);
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         boolean novel;
