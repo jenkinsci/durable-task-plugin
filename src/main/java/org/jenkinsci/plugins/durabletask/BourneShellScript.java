@@ -155,12 +155,17 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        String launcherCmd = generateLaunchCmd(jenkins, c, ws, os, interpreter, scriptPath, cookieValue, cookieVariable);
+        String launcherCmd = null;
+        if ((os == OsType.DARWIN) || (os == OsType.UNIX)) {
+            String catchSig = "trap ':' INT TERM EXIT; ";
+            launcherCmd = catchSig + binaryLauncherCmd(c, ws, os, interpreter, scriptPath, cookieValue, cookieVariable);
+        } else {
+           launcherCmd = scriptLauncherCmd(c, ws, interpreter, scriptPath, cookieValue, cookieVariable);
+        }
         launcherCmd = launcherCmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
         // Catches signal termination in order to allow graceful exit (and no zombies)
-        String catchSig = "trap ':' INT TERM EXIT; ";
-        args.addAll(Arrays.asList("sh", "-c", catchSig + launcherCmd));
+        args.addAll(Arrays.asList("sh", "-c", launcherCmd));
         LOGGER.log(Level.FINE, "launching {0}", args);
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         boolean novel;
@@ -183,7 +188,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
-    private String generateLaunchCmd(Jenkins jenkins, ShellController c, FilePath ws, OsType os, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+    private String binaryLauncherCmd(ShellController c, FilePath ws, OsType os, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).toURI().getRawPath();
         String resultFile = c.getResultFile(ws).toURI().getRawPath();
         FilePath controlDir = c.controlDir(ws);
@@ -210,6 +215,38 @@ public final class BourneShellScript extends FileMonitoringTask {
                         launcherAgent.getRemote(),
                         args);
 
+        return cmd;
+    }
+
+    private String scriptLauncherCmd(ShellController c, FilePath ws, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+        String cmd;
+        FilePath logFile = c.getLogFile(ws);
+        FilePath resultFile = c.getResultFile(ws);
+        FilePath controlDir = c.controlDir(ws);
+        if (capturingOutput) {
+            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                    controlDir,
+                    resultFile,
+                    logFile,
+                    cookieValue,
+                    cookieVariable,
+                    interpreter,
+                    scriptPath,
+                    c.getOutputFile(ws),
+                    logFile,
+                    resultFile, resultFile, resultFile);
+        } else {
+            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                    controlDir,
+                    resultFile,
+                    logFile,
+                    cookieValue,
+                    cookieVariable,
+                    interpreter,
+                    scriptPath,
+                    logFile,
+                    resultFile, resultFile, resultFile);
+        }
         return cmd;
     }
 
