@@ -94,14 +94,8 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 		return
 	}
 	// create the heartbeat script
-	// heartInnerTrapSig := "trap 'echo \"(HEARBEAT INNER TRAP)\"' INT TERM; trap 'echo \"(HEARTBEAT EXIT INNER TRAP)\"' EXIT"
-	// heartOuterTrapSig := "trap 'echo \"(HEARBEAT OUTER TRAP)\"' INT TERM; trap 'echo \"(HEARTBEAT EXIT OUTER TRAP)\"' EXIT"
-	// heartbeat := fmt.Sprintf("#! /bin/sh\npid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
-	// 	launchedPid, launchedPid, logPath)
 	heartbeat := fmt.Sprintf("#! /bin/sh\n%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
 		trapSig, launchedPid, launchedPid, logPath)
-	// heartbeat := fmt.Sprintf("pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
-	// launchedPid, launchedPid, logPath)
 	heartbeatPath := controlDir + HBSCRIPT
 	heartbeatScript, err := os.Create(heartbeatPath)
 	checkHeartbeatErr(err)
@@ -110,12 +104,6 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 	heartbeatScript.WriteString(heartbeat)
 	heartbeatScript.Close()
 
-	// launching with `sh` allows script to survive jenkins termination as well as
-	// gracefully exit (i.e. reaping of the spawned processes (specifically `sleep`))
-	// binsh := fmt.Sprintf("%v; /bin/sh %v", trapSig, heartbeatPath)
-	// heartbeatCmd := exec.Command("/bin/sh", "-c", binsh)
-	// heartbeatString := fmt.Sprintf("%v; /bin/sh %v", heartOuterTrapSig, heartbeatPath)
-	// heartbeatCmd := exec.Command("/bin/sh", "-c", heartbeatString)
 	heartbeatCmd := exec.Command(heartbeatPath)
 	/************************************
 	// Warning: DO NOT set cmd.Stdout/StdErr is set to os.Stdout/Stderr
