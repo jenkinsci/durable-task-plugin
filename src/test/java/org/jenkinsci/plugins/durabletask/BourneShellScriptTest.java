@@ -155,23 +155,24 @@ public class BourneShellScriptTest {
     }
 
     private Slave prepareAgentCommandLauncher() throws Exception{
-        // counter used to prevent name smashing when a docker container from the previous
-        // test is still being shut down but the new test container is being spun up. Seems more ideal than adding a wait.
-        String agent = "agent-" + Integer.toString(counter++);
+        // counter used to prevent name smashing when a docker container from the previous test is
+        // still shutting down but the new test container is being spun up. Seems more ideal than adding a wait.
+        String name = "docker";
+        String agent = "agent-" + counter++;
         String remoteFs = "/home/jenkins/" + agent;
 
-        String dockerRunSimple = String.format("docker run -i --rm --name %s jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
-        String dockerRunTini = String.format("docker run -i --rm --name %s --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
         Slave agentSlave = null;
         switch (platform) {
             case SIMPLE:
-                agentSlave = new DumbSlave("docker", remoteFs, new SimpleCommandLauncher(dockerRunSimple));
+                String dockerRunSimple = String.format("docker run -i --rm --name %s jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
+                agentSlave = new DumbSlave(name, remoteFs, new SimpleCommandLauncher(dockerRunSimple));
                 break;
             case TINI:
-                agentSlave = new DumbSlave("docker", remoteFs, new SimpleCommandLauncher(dockerRunTini));
+                String dockerRunTini = String.format("docker run -i --rm --name %s --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
+                agentSlave = new DumbSlave(name, remoteFs, new SimpleCommandLauncher(dockerRunTini));
                 break;
             default:
-                // error
+                Assert.fail("Unknown enum value: " + platform);
                 break;
         }
         return agentSlave;
