@@ -94,8 +94,8 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 		return
 	}
 	// create the heartbeat script
-	heartbeat := fmt.Sprintf("#! /bin/sh\n%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"(heartbeat)(\"$pid\") found %v\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
-		trapSig, launchedPid, launchedPid, logPath)
+	heartbeat := fmt.Sprintf("#! /bin/sh\n%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"\"$pid\"\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
+		trapSig, launchedPid, logPath)
 	heartbeatPath := controlDir + HBSCRIPT
 	heartbeatScript, err := os.Create(heartbeatPath)
 	checkHeartbeatErr(err)
