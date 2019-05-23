@@ -70,11 +70,11 @@ func launcher(wg *sync.WaitGroup, pidChan chan int,
 	scriptCmd.Start()
 	pid := scriptCmd.Process.Pid
 	pidChan <- pid
-	fmt.Printf("(launcher) my pid (%v), launched pid (%v)\n", os.Getpid(), pid)
+	fmt.Printf("(launcher) launched %v\n", pid)
 	err = scriptCmd.Wait()
 	checkLauncherErr(err)
 	resultVal := scriptCmd.ProcessState.ExitCode()
-	fmt.Printf("(launcher)(%v) script exit code: %v\n", pid, resultVal)
+	fmt.Printf("(launcher) script exit code: %v\n", resultVal)
 }
 
 func heartbeat(wg *sync.WaitGroup, launchedPid int,
@@ -112,18 +112,18 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 	// heartbeatCmd.Stdout = os.Stdout
 	// heartbeatCmd.Stderr = os.Stderr
 	************************************************/
-	logFile, logErr := os.Create(controlDir + "heartbeat.log")
-	checkLauncherErr(logErr)
-	defer logFile.Close()
-	heartbeatCmd.Stdout = logFile
-	heartbeatCmd.Stderr = logFile
+	// logFile, logErr := os.Create(controlDir + "heartbeat.log")
+	// checkLauncherErr(logErr)
+	// defer logFile.Close()
+	// heartbeatCmd.Stdout = logFile
+	// heartbeatCmd.Stderr = logFile
 	heartbeatCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
 	heartbeatCmd.Start()
 	pid := heartbeatCmd.Process.Pid
-	fmt.Printf("(heartbeat) my pid (%v), heartbeat pid (%v)\n", os.Getpid(), pid)
+	fmt.Printf("(heartbeat) heartbeat pid (%v)\n", pid)
 	err = heartbeatCmd.Wait()
 	checkHeartbeatErr(err)
-	fmt.Printf("(heartbeat)(%v) exit\n", pid)
+	fmt.Printf("(heartbeat) exit\n")
 }
 
 func main() {
