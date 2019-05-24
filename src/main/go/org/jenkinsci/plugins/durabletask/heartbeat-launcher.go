@@ -2,10 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -13,7 +17,7 @@ import (
 // Note: EXIT signal is needed as some shell variants require an EXIT trap after catching a signal
 const trapSig = "trap ':' INT TERM EXIT"
 
-func checkHeartbeatErr(err error) {
+func checkHeartbeatErr(output io.Writer, err error) {
 	checkErr("heartbeat", err)
 }
 
@@ -23,7 +27,13 @@ func checkLauncherErr(err error) {
 
 func checkErr(process string, err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "(%v) check err: %v\n", process, err.Error())
+		fmt.Fprintf(os.Stderr, "(%v) check err: %v\n", strings.ToUpper(process), err.Error())
+	}
+}
+
+func logCheckErr(logger *log.Logger, err error) {
+	if err != nil {
+		logger.Printf("check err: %v\n", err.Error())
 	}
 }
 
@@ -34,7 +44,7 @@ func signalCatcher(sigChan chan os.Signal) {
 	}
 }
 
-func launcher(wg *sync.WaitGroup, pidChan chan int,
+func launcher(wg *sync.WaitGroup, exitChan chan bool,
 	scriptString string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
@@ -69,42 +79,51 @@ func launcher(wg *sync.WaitGroup, pidChan chan int,
 	}
 	scriptCmd.Start()
 	pid := scriptCmd.Process.Pid
-	pidChan <- pid
+	// pidChan <- pid
 	fmt.Printf("(launcher) launched %v\n", pid)
 	err = scriptCmd.Wait()
 	checkLauncherErr(err)
 	resultVal := scriptCmd.ProcessState.ExitCode()
 	fmt.Printf("(launcher) script exit code: %v\n", resultVal)
+	exitChan <- true
 }
 
-func heartbeat(wg *sync.WaitGroup, launchedPid int,
+func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 	controlDir string, resultPath string, logPath string) {
 
 	defer wg.Done()
-	const HBSCRIPT string = "heartbeat.sh"
-	fmt.Printf("(heartbeat) checking if %v is alive\n", launchedPid)
+	const HB string = "heartbeat"
+	logFile, logErr := os.Create(controlDir + HB + ".log")
+	checkErr(HB, logErr)
+	defer logFile.Close()
+
+	logger := log.New(logFile, strings.ToUpper(HB), log.Ltime|log.Lshortfile)
+
+	// const HBSCRIPT string = "heartbeat.sh"
+	// fmt.Printf("(heartbeat) checking if %v is alive\n", launchedPid)
 	_, err := os.Stat(controlDir)
 	if os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "%v\n", err.Error())
+		logger.Printf("%v\n", err.Error())
 		return
 	}
 	_, err = os.Stat(resultPath)
 	if !os.IsNotExist(err) {
-		fmt.Printf("Result file already exists, stopping heartbeat.\n%v\n", resultPath)
+		logger.Printf("Result file already exists, stopping heartbeat.\n%v\n", resultPath)
 		return
 	}
 	// create the heartbeat script
-	heartbeat := fmt.Sprintf("#! /bin/sh\n%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"\"$pid\"\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
-		trapSig, launchedPid, logPath)
-	heartbeatPath := controlDir + HBSCRIPT
-	heartbeatScript, err := os.Create(heartbeatPath)
-	checkHeartbeatErr(err)
-	err = os.Chmod(heartbeatPath, 0755)
-	checkHeartbeatErr(err)
-	heartbeatScript.WriteString(heartbeat)
-	heartbeatScript.Close()
+	// heartbeat := fmt.Sprintf("#! /bin/sh\n%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"\"$pid\"\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
+	// 	trapSig, launchedPid, logPath)
+	// heartbeatPath := controlDir + HBSCRIPT
+	// heartbeatScript, err := os.Create(heartbeatPath)
+	// checkHeartbeatErr(err)
+	// err = os.Chmod(heartbeatPath, 0755)
+	// checkHeartbeatErr(err)
+	// heartbeatScript.WriteString(heartbeat)
+	// heartbeatScript.Close()
 
-	heartbeatCmd := exec.Command(heartbeatPath)
+	// heartbeatCmd := exec.Command(heartbeatPath)
+
 	/************************************
 	// Warning: DO NOT set cmd.Stdout/StdErr is set to os.Stdout/Stderr
 	// If you do, the heartbeat thread will not survive jenkins termination
@@ -112,18 +131,29 @@ func heartbeat(wg *sync.WaitGroup, launchedPid int,
 	// heartbeatCmd.Stdout = os.Stdout
 	// heartbeatCmd.Stderr = os.Stderr
 	************************************************/
-	// logFile, logErr := os.Create(controlDir + "heartbeat.log")
-	// checkLauncherErr(logErr)
-	// defer logFile.Close()
 	// heartbeatCmd.Stdout = logFile
 	// heartbeatCmd.Stderr = logFile
-	heartbeatCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
-	heartbeatCmd.Start()
-	pid := heartbeatCmd.Process.Pid
-	fmt.Printf("(heartbeat) heartbeat pid (%v)\n", pid)
-	err = heartbeatCmd.Wait()
-	checkHeartbeatErr(err)
-	fmt.Printf("(heartbeat) exit\n")
+	// heartbeatCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
+	// heartbeatCmd.Start()
+	// pid := heartbeatCmd.Process.Pid
+	// fmt.Printf("(heartbeat) heartbeat pid (%v)\n", pid)
+	// err = heartbeatCmd.Wait()
+	// checkHeartbeatErr(err)
+
+	for {
+		select {
+		case <-exitChan:
+			logger.Println("(heartbeat) received script finished, exiting")
+			return
+		default:
+			// heartbeat
+			logger.Println("(heartbeat) touch log")
+			err = os.Chtimes(logPath, time.Now(), time.Now())
+			logCheckErr(logger, err)
+			time.Sleep(time.Second * 3)
+		}
+	}
+	// logger.Println("exit")
 }
 
 func main() {
@@ -152,12 +182,11 @@ func main() {
 	signal.Notify(sigChan, unix.SIGINT, unix.SIGTERM)
 	go signalCatcher(sigChan)
 
-	pidChan := make(chan int)
+	exitChan := make(chan bool)
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go launcher(&wg, pidChan, scriptString, logPath, resultPath, outputPath)
-	launchedPid := <-pidChan
-	go heartbeat(&wg, launchedPid, controlDir, resultPath, logPath)
+	go launcher(&wg, exitChan, scriptString, logPath, resultPath, outputPath)
+	go heartbeat(&wg, exitChan, controlDir, resultPath, logPath)
 	wg.Wait()
 	signal.Stop(sigChan)
 	close(sigChan)
