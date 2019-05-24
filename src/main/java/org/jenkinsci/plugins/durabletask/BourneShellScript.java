@@ -190,13 +190,13 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private String binaryLauncherCmd(ShellController c, FilePath ws, OsType os, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).toURI().getRawPath();
-        String resultFile = c.getResultFile(ws).toURI().getRawPath();
+        String resultFile = c.getResultFile(ws).getRemote();//toURI().getRawPath();
         FilePath controlDir = c.controlDir(ws);
-        String outputFile = c.getOutputFile(ws).toURI().getRawPath();
+        String outputFile = c.getOutputFile(ws).getRemote();//toURI().getRawPath();
 
         String launcher_binary = LAUNCHER_PREFIX + os.toString();
 
-        InputStream launcherStream = this.getClass().getResourceAsStream(launcher_binary);
+        InputStream launcherStream = BourneShellScript.class.getResourceAsStream(launcher_binary);
         FilePath launcherAgent = controlDir.child(launcher_binary);
         launcherAgent.copyFrom(launcherStream);
         launcherAgent.chmod(0755);
