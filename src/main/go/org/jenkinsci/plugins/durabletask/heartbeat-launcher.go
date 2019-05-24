@@ -198,7 +198,7 @@ func main() {
 	debugLogger.Printf("Parent pid is: %v\n", ppid)
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, unix.SIGINT, unix.SIGTERM)
+	signal.Notify(sigChan, unix.SIGINT, unix.SIGTERM, unix.SIGHUP, unix.SIGQUIT)
 	go signalCatcher(sigChan, debugLogger)
 
 	exitChan := make(chan bool)
