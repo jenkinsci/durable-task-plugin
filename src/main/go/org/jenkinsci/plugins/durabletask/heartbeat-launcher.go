@@ -16,6 +16,8 @@ import (
 
 // Note: EXIT signal is needed as some shell variants require an EXIT trap after catching a signal
 const trapSig = "trap ':' INT TERM EXIT"
+const base = "main"
+const hb = "heartbeat"
 
 func checkHeartbeatErr(output io.Writer, err error) {
 	checkErr("heartbeat", err)
@@ -92,12 +94,11 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 	controlDir string, resultPath string, logPath string) {
 
 	defer wg.Done()
-	const HB string = "heartbeat"
-	logFile, logErr := os.Create(controlDir + HB + ".log")
-	checkErr(HB, logErr)
-	defer logFile.Close()
-
-	logger := log.New(logFile, strings.ToUpper(HB), log.Ltime|log.Lshortfile)
+	debugFile, debugErr := os.Create(controlDir + hb + ".log")
+	checkErr(hb, debugErr)
+	defer debugFile.Close()
+	debugPrefix := strings.ToUpper(hb) + " "
+	logger := log.New(debugFile, debugPrefix, log.Ltime|log.Lshortfile)
 
 	// const HBSCRIPT string = "heartbeat.sh"
 	// fmt.Printf("(heartbeat) checking if %v is alive\n", launchedPid)
@@ -143,11 +144,11 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 	for {
 		select {
 		case <-exitChan:
-			logger.Println("(heartbeat) received script finished, exiting")
+			logger.Println("received script finished, exiting")
 			return
 		default:
 			// heartbeat
-			logger.Println("(heartbeat) touch log")
+			logger.Println("touch log")
 			err = os.Chtimes(logPath, time.Now(), time.Now())
 			logCheckErr(logger, err)
 			time.Sleep(time.Second * 3)
@@ -157,18 +158,12 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 }
 
 func main() {
-	fmt.Printf("number of args: %v\n", os.Args)
-	for i := 0; i < len(os.Args); i++ {
-		fmt.Printf("arg %v: %v\n", i, os.Args[i])
-	}
 	argLen := len(os.Args)
 	if argLen < 5 || argLen > 6 {
 		// invalid number of args
-		os.Stderr.WriteString("Input error: expected number of args is 5 or 6 (controlDir, resultPath, logPath, scriptString, outputPath[opt])")
+		// os.Stderr.WriteString("Input error: expected number of args is 5 or 6 (controlDir, resultPath, logPath, scriptString, outputPath[opt])")
 		return
 	}
-	ppid := os.Getppid()
-	fmt.Printf("Parent pid is: %v\n", ppid)
 	controlDir := os.Args[1]
 	resultPath := os.Args[2]
 	logPath := os.Args[3]
@@ -177,6 +172,20 @@ func main() {
 	if argLen == 6 {
 		outputPath = os.Args[5]
 	}
+
+	debugFile, debugErr := os.Create(controlDir + base + ".log")
+	checkErr(base, debugErr)
+	defer debugFile.Close()
+	debugPrefix := strings.ToUpper(base) + " "
+	debugLogger := log.New(debugFile, debugPrefix, log.Ltime|log.Lshortfile)
+
+	debugLogger.Printf("number of args: %v\n", os.Args)
+	for i := 0; i < len(os.Args); i++ {
+		debugLogger.Printf("arg %v: %v\n", i, os.Args[i])
+	}
+
+	ppid := os.Getppid()
+	debugLogger.Printf("Parent pid is: %v\n", ppid)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, unix.SIGINT, unix.SIGTERM)
@@ -190,5 +199,5 @@ func main() {
 	wg.Wait()
 	signal.Stop(sigChan)
 	close(sigChan)
-	fmt.Println("(main) done.")
+	debugLogger.Println("done.")
 }
