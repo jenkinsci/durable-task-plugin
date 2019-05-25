@@ -53,7 +53,7 @@ func signalCatcher(sigChan chan os.Signal, logger *log.Logger) {
 	}
 }
 
-func launcher(wg *sync.WaitGroup, exitChan chan bool,
+func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieVal string,
 	interpreter string, scriptPath string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
@@ -67,10 +67,14 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool,
 	} else {
 		scriptCmd = exec.Command(scriptPath)
 	}
+	jscString := fmt.Sprintf("jsc=%v", cookieVal)
+	cookieString := fmt.Sprintf("%v=%v", cookieName, cookieVal)
+	scriptCmd.Env = append(os.Environ(),
+		jscString,
+		cookieString)
 	logFile, err := os.Create(logPath)
 	logCheckErr(debugLogger, err)
 	defer logFile.Close()
-
 	if outputPath != "" {
 		// capturing output
 		outputFile, err := os.Create(outputPath)
@@ -199,16 +203,20 @@ func main() {
 	// if argLen == 6 {
 	// 	outputPath = os.Args[5]
 	// }
-	var controlDir, resultPath, logPath, scriptPath, interpreter, outputPath string
+	var controlDir, resultPath, logPath, cookieName, cookieVal, scriptPath, interpreter, outputPath string
 	const controlFlag = "controldir"
 	const resultFlag = "result"
 	const logFlag = "log"
+	const cookieNameFlag = "cookiename"
+	const cookieValFlag = "cookieval"
 	const scriptFlag = "script"
 	const shellFlag = "shell"
 	const outputFlag = "output"
 	flag.StringVar(&controlDir, controlFlag, "", "working directory")
 	flag.StringVar(&resultPath, resultFlag, "", "full path of the result file")
 	flag.StringVar(&logPath, logFlag, "", "full path of the log file")
+	flag.StringVar(&cookieName, cookieNameFlag, "", "name of the jenkins server cookie")
+	flag.StringVar(&cookieVal, cookieValFlag, "", "value of the jenkins server cookie")
 	flag.StringVar(&scriptPath, scriptFlag, "", "full path of the script to be launched")
 	flag.StringVar(&interpreter, shellFlag, "", "(optional) interpreter to use")
 	flag.StringVar(&outputPath, outputFlag, "", "(optional) if recording output, full path of the output file")
@@ -224,7 +232,7 @@ func main() {
 	debugLogger = log.New(debugFile, debugPrefix, log.Ltime|log.Lshortfile)
 
 	// Validate that the required flags were all command-line defined
-	required := []string{controlFlag, resultFlag, logFlag, scriptFlag}
+	required := []string{controlFlag, resultFlag, logFlag, cookieNameFlag, cookieValFlag, scriptFlag}
 	defined := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) {
 		debugLogger.Println(f.Name + ": " + f.Value.String())
@@ -253,7 +261,7 @@ func main() {
 	exitChan := make(chan bool)
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go launcher(&wg, exitChan, interpreter, scriptPath, logPath, resultPath, outputPath)
+	go launcher(&wg, exitChan, cookieName, cookieVal, interpreter, scriptPath, logPath, resultPath, outputPath)
 	go heartbeat(&wg, exitChan, controlDir, resultPath, logPath)
 	wg.Wait()
 	signal.Stop(sigChan)

@@ -210,6 +210,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         cmd.add("-controldir=" + controlDir.getRemote());
         cmd.add("-result=" + resultFile);
         cmd.add("-log=" + logFile);
+        cmd.add("-cookiename=" + cookieVariable);
+        cmd.add("-cookieval=" + cookieValue);
         cmd.add("-script=" + scriptPath);
         if (shell != "") {
             cmd.add("-shell=" + shell);
