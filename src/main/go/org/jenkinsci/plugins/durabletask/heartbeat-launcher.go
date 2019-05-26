@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -31,15 +32,25 @@ var debugLogger *log.Logger
 // 	checkErr("launcher", err)
 // }
 
-// func checkErr(process string, err error) {
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "(%v) check err: %v\n", strings.ToUpper(process), err.Error())
-// 	}
-// }
-
-func logCheckErr(logger *log.Logger, err error) bool {
+func checkIfErr(process string, err error) bool {
 	if err != nil {
-		logger.Printf("check err: %v\n", err.Error())
+		fmt.Fprintf(os.Stderr, "%v: %v\n", strings.ToUpper(process), err.Error())
+		return true
+	}
+	return false
+}
+
+func loggerIfErr(logger *log.Logger, err error) bool {
+	if err != nil {
+		logger.Println(err.Error())
+		return true
+	}
+	return false
+}
+
+func logIfErr(output io.Writer, err error) bool {
+	if err != nil {
+		fmt.Fprint(output, err.Error())
 		return true
 	}
 	return false
@@ -57,10 +68,14 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	interpreter string, scriptPath string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
-	// recordExit := fmt.Sprintf("status=\"$?\"; echo \"$status\" > %v.tmp; mv %v.tmp %v; wait; exit \"$status\"",
-	// resultPath, resultPath, resultPath)
-	// scriptWithExit := trapSig + "; " + scriptString + "; " + recordExit
-	// scriptCmd := exec.Command("/bin/sh", "-c", scriptWithExit)
+	defer signalFinished(exitChan)
+	logFile, err := os.Create(logPath)
+	if checkIfErr("launcher", err) {
+		exitLauncher(exitChan, -1, resultPath, logFile)
+		return
+	}
+	defer logFile.Close()
+
 	var scriptCmd *exec.Cmd
 	if interpreter != "" {
 		scriptCmd = exec.Command(interpreter, "-xe", scriptPath)
@@ -72,13 +87,11 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	scriptCmd.Env = append(os.Environ(),
 		// jscString,
 		cookieString)
-	logFile, err := os.Create(logPath)
-	logCheckErr(debugLogger, err)
-	defer logFile.Close()
+
 	if outputPath != "" {
 		// capturing output
 		outputFile, err := os.Create(outputPath)
-		logCheckErr(debugLogger, err)
+		logIfErr(logFile, err)
 		defer outputFile.Close()
 		scriptCmd.Stdout = outputFile
 	} else {
@@ -91,36 +104,57 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 		// Note: pointing to os.Stdout will not capture all err logs and fail unit tests
 		scriptCmd.Stderr = scriptCmd.Stdout
 	}
-	// Prevents script from being terminated if program gets terminated
+	// Create new session
 	scriptCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
 	for i := 0; i < len(scriptCmd.Args); i++ {
 		debugLogger.Printf("(launcher) args %v: %v\n", i, scriptCmd.Args[i])
 		// fmt.Fprintf(logFile, "(launcher) args %v: %v\n", i, scriptCmd.Args[i])
 	}
 	err = scriptCmd.Start()
-	if !logCheckErr(debugLogger, err) {
+	if !logIfErr(logFile, err) {
 		pid := scriptCmd.Process.Pid
 		debugLogger.Printf("(launcher) launched %v\n", pid)
-		// fmt.Fprintf(logFile, "(launcher) launched %v\n", pid)
-	} else {
-		fmt.Fprintf(logFile, "Failed to launch script: %v\n", err.Error())
 	}
 	err = scriptCmd.Wait()
-	logCheckErr(debugLogger, err)
+	logIfErr(logFile, err)
 	resultVal := scriptCmd.ProcessState.ExitCode()
 	debugLogger.Printf("(launcher) script exit code: %v\n", resultVal)
+	// fmt.Printf("(launcher) script exit code: %v\n", resultVal)
+
+	exitLauncher(exitChan, resultVal, resultPath, logFile)
+	///////NEW FUNCTION
+	// exitChan <- true
+	// debugLogger.Printf("(launcher) signaled script exit\n")
+	// // fmt.Fprintf(logFile, "(launcher) signaled script exit\n")
+	// resultFile, err := os.Create(resultPath)
+	// logCheckErr(debugLogger, err)
+	// defer resultFile.Close()
+	// resultFile.WriteString(strconv.Itoa(resultVal))
+	// logCheckErr(debugLogger, err)
+	// err = resultFile.Close()
+	// logCheckErr(debugLogger, err)
+	// fmt.Fprintln(logFile, "(launcher) done")
+	// debugLogger.Println("done")
+}
+
+func signalFinished(exitChan chan bool) {
+	exitChan <- true
+}
+
+func exitLauncher(exitChan chan bool, exitCode int, resultPath string, logFile io.Writer) {
+	// signal heartbeat we're done
 	exitChan <- true
 	debugLogger.Printf("(launcher) signaled script exit\n")
-	// fmt.Fprintf(logFile, "(launcher) signaled script exit\n")
 	resultFile, err := os.Create(resultPath)
-	logCheckErr(debugLogger, err)
+	if logIfErr(logFile, err) {
+		return
+	}
 	defer resultFile.Close()
-	resultFile.WriteString(strconv.Itoa(resultVal))
-	logCheckErr(debugLogger, err)
+	_, err = resultFile.WriteString(strconv.Itoa(exitCode))
+	logIfErr(logFile, err)
 	err = resultFile.Close()
-	logCheckErr(debugLogger, err)
-	// fmt.Fprintln(logFile, "(launcher) done")
-	debugLogger.Println("done")
+	logIfErr(logFile, err)
+	debugLogger.Println("(launcher) done")
 }
 
 func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
@@ -128,7 +162,7 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 
 	defer wg.Done()
 	hbDebug, hbErr := os.Create(controlDir + hb + ".log")
-	logCheckErr(debugLogger, hbErr)
+	loggerIfErr(debugLogger, hbErr)
 	defer hbDebug.Close()
 	debugPrefix := strings.ToUpper(hb) + " "
 	hbLogger := log.New(hbDebug, debugPrefix, log.Ltime|log.Lshortfile)
@@ -183,7 +217,7 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 			// heartbeat
 			hbLogger.Println("touch log")
 			err = os.Chtimes(logPath, time.Now(), time.Now())
-			logCheckErr(hbLogger, err)
+			loggerIfErr(hbLogger, err)
 			time.Sleep(time.Second * 3)
 		}
 	}
