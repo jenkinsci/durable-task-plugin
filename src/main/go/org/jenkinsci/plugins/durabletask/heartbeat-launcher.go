@@ -49,7 +49,7 @@ func logCheckErr(logger *log.Logger, err error) bool {
 func signalCatcher(sigChan chan os.Signal, logger *log.Logger) {
 	for sig := range sigChan {
 		logger.Printf("(sig catcher) caught: %v\n", sig)
-		fmt.Printf("(sig catcher) caught: %v\n", sig)
+		// fmt.Printf("(sig catcher) caught: %v\n", sig)
 	}
 }
 
@@ -67,10 +67,10 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	} else {
 		scriptCmd = exec.Command(scriptPath)
 	}
-	jscString := fmt.Sprintf("jsc=%v", cookieVal)
+	// jscString := fmt.Sprintf("jsc=%v", cookieVal)
 	cookieString := fmt.Sprintf("%v=%v", cookieName, cookieVal)
 	scriptCmd.Env = append(os.Environ(),
-		jscString,
+		// jscString,
 		cookieString)
 	logFile, err := os.Create(logPath)
 	logCheckErr(debugLogger, err)
@@ -94,23 +94,24 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	// Prevents script from being terminated if program gets terminated
 	scriptCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
 	for i := 0; i < len(scriptCmd.Args); i++ {
-		// debugLogger.Printf("(launcher) args %v: %v\n", i, scriptCmd.Args[i])
-		fmt.Fprintf(logFile, "(launcher) args %v: %v\n", i, scriptCmd.Args[i])
+		debugLogger.Printf("(launcher) args %v: %v\n", i, scriptCmd.Args[i])
+		// fmt.Fprintf(logFile, "(launcher) args %v: %v\n", i, scriptCmd.Args[i])
 	}
 	err = scriptCmd.Start()
 	if !logCheckErr(debugLogger, err) {
 		pid := scriptCmd.Process.Pid
-		// debugLogger.Printf("(launcher) launched %v\n", pid)
-		fmt.Fprintf(logFile, "(launcher) launched %v\n", pid)
+		debugLogger.Printf("(launcher) launched %v\n", pid)
+		// fmt.Fprintf(logFile, "(launcher) launched %v\n", pid)
+	} else {
+		fmt.Fprintf(logFile, "Failed to launch script: %v\n", err.Error())
 	}
 	err = scriptCmd.Wait()
 	logCheckErr(debugLogger, err)
 	resultVal := scriptCmd.ProcessState.ExitCode()
-	// debugLogger.Printf("(launcher) script exit code: %v\n", resultVal)
-	fmt.Fprintf(logFile, "(launcher) script exit code: %v\n", resultVal)
+	debugLogger.Printf("(launcher) script exit code: %v\n", resultVal)
 	exitChan <- true
-	// debugLogger.Printf("(launcher) signaled script exit\n")
-	fmt.Fprintf(logFile, "(launcher) signaled script exit\n")
+	debugLogger.Printf("(launcher) signaled script exit\n")
+	// fmt.Fprintf(logFile, "(launcher) signaled script exit\n")
 	resultFile, err := os.Create(resultPath)
 	logCheckErr(debugLogger, err)
 	defer resultFile.Close()
@@ -118,7 +119,8 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	logCheckErr(debugLogger, err)
 	err = resultFile.Close()
 	logCheckErr(debugLogger, err)
-	fmt.Fprintln(logFile, "(launcher) done")
+	// fmt.Fprintln(logFile, "(launcher) done")
+	debugLogger.Println("done")
 }
 
 func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
