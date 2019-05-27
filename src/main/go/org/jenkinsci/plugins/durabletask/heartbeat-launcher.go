@@ -137,7 +137,7 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	checkLaunchErr(err)
 	// logIfErr(logFile, err)
 	resultVal := scriptCmd.ProcessState.ExitCode()
-	launchLogger.Printf("(launcher) script exit code: %v\n", resultVal)
+	launchLogger.Printf("script exit code: %v\n", resultVal)
 	// fmt.Fprintf(logFile, "(launcher) script exit code: %v\n", resultVal)
 
 	exitLauncher(exitChan, resultVal, resultPath)
@@ -161,8 +161,6 @@ func signalFinished(exitChan chan bool) {
 }
 
 func exitLauncher(exitChan chan bool, exitCode int, resultPath string) {
-	// signal heartbeat we're done
-	exitChan <- true
 	launchLogger.Printf("signaled script exit\n")
 	// fmt.Fprintf(logFile, "(launcher) signaled script exit\n")
 	resultFile, err := os.Create(resultPath)
@@ -177,7 +175,7 @@ func exitLauncher(exitChan chan bool, exitCode int, resultPath string) {
 	err = resultFile.Close()
 	// logIfErr(logFile, err)
 	checkLaunchErr(err)
-	launchLogger.Println("(launcher) done")
+	launchLogger.Println("done")
 	// fmt.Fprintln(logFile, "(launcher) done")
 }
 
