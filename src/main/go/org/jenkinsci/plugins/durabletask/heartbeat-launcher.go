@@ -16,24 +16,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Note: EXIT signal is needed as some shell variants require an EXIT trap after catching a signal
-const trapSig = "trap ':' INT TERM EXIT"
 const base = "main"
 const hb = "heartbeat"
 const launch = "launcher"
 
-// var logFile io.Writer
 var mainLogger *log.Logger
 var launchLogger *log.Logger
 var hbLogger *log.Logger
-
-// func checkHeartbeatErr(output io.Writer, err error) {
-// 	checkErr("heartbeat", err)
-// }
-
-// func checkLauncherErr(err error) {
-// 	checkErr("launcher", err)
-// }
 
 func checkIfErr(process string, err error) bool {
 	if err != nil {
@@ -67,23 +56,14 @@ func logIfErr(output io.Writer, err error) bool {
 func signalCatcher(sigChan chan os.Signal) {
 	for sig := range sigChan {
 		mainLogger.Printf("(sig catcher) caught: %v\n", sig)
-		// fmt.Printf("(sig catcher) caught: %v\n", sig)
 	}
 }
 
 func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieVal string,
-	// interpreter string, scriptPath string, logFile io.Writer, resultPath string, outputPath string) {
 	interpreter string, scriptPath string, resultPath string, outputPath string) {
-	// interpreter string, scriptPath string, logPath string, resultPath string, outputPath string) {
 
 	defer wg.Done()
 	defer signalFinished(exitChan)
-	// logFile, err := os.Create(logPath)
-	// if checkIfErr("launcher", err) {
-	// 	exitLauncher(exitChan, -2, resultPath, logFile)
-	// 	return
-	// }
-	// defer logFile.Close()
 
 	var scriptCmd *exec.Cmd
 	if interpreter != "" {
@@ -91,10 +71,8 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	} else {
 		scriptCmd = exec.Command(scriptPath)
 	}
-	// jscString := fmt.Sprintf("jsc=%v", cookieVal)
 	cookieString := fmt.Sprintf("%v=%v", cookieName, cookieVal)
 	scriptCmd.Env = append(os.Environ(),
-		// jscString,
 		cookieString)
 
 	if outputPath != "" {
@@ -107,11 +85,11 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 		defer outputFile.Close()
 		scriptCmd.Stdout = outputFile
 	} else {
-		scriptCmd.Stdout = launchLogger.Writer() //logFile
+		scriptCmd.Stdout = launchLogger.Writer()
 	}
 	if outputPath != "" {
 		// capturing output
-		scriptCmd.Stderr = launchLogger.Writer() //logFile
+		scriptCmd.Stderr = launchLogger.Writer()
 	} else {
 		// Note: pointing to os.Stdout will not capture all err logs
 		scriptCmd.Stderr = scriptCmd.Stdout
@@ -120,7 +98,6 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	scriptCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
 	for i := 0; i < len(scriptCmd.Args); i++ {
 		launchLogger.Printf("args %v: %v\n", i, scriptCmd.Args[i])
-		// fmt.Fprintf(logFile, "(launcher) args %v: %v\n", i, scriptCmd.Args[i])
 	}
 	err := scriptCmd.Start()
 	if checkLaunchErr(err) {
@@ -129,31 +106,12 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	}
 	pid := scriptCmd.Process.Pid
 	launchLogger.Printf("launched %v\n", pid)
-	// if !logIfErr(logFile, err) {
-	// 	pid := scriptCmd.Process.Pid
-	// 	debugLogger.Printf("(launcher) launched %v\n", pid)
-	// }
 	err = scriptCmd.Wait()
 	checkLaunchErr(err)
-	// logIfErr(logFile, err)
 	resultVal := scriptCmd.ProcessState.ExitCode()
 	launchLogger.Printf("script exit code: %v\n", resultVal)
-	// fmt.Fprintf(logFile, "(launcher) script exit code: %v\n", resultVal)
 
 	exitLauncher(exitChan, resultVal, resultPath)
-	///////NEW FUNCTION
-	// exitChan <- true
-	// debugLogger.Printf("(launcher) signaled script exit\n")
-	// // fmt.Fprintf(logFile, "(launcher) signaled script exit\n")
-	// resultFile, err := os.Create(resultPath)
-	// logCheckErr(debugLogger, err)
-	// defer resultFile.Close()
-	// resultFile.WriteString(strconv.Itoa(resultVal))
-	// logCheckErr(debugLogger, err)
-	// err = resultFile.Close()
-	// logCheckErr(debugLogger, err)
-	// fmt.Fprintln(logFile, "(launcher) done")
-	// debugLogger.Println("done")
 }
 
 func signalFinished(exitChan chan bool) {
@@ -162,35 +120,23 @@ func signalFinished(exitChan chan bool) {
 
 func exitLauncher(exitChan chan bool, exitCode int, resultPath string) {
 	launchLogger.Printf("signaled script exit\n")
-	// fmt.Fprintf(logFile, "(launcher) signaled script exit\n")
 	resultFile, err := os.Create(resultPath)
-	// if logIfErr(logFile, err) {
 	if checkLaunchErr(err) {
 		return
 	}
 	defer resultFile.Close()
 	_, err = resultFile.WriteString(strconv.Itoa(exitCode))
-	// logIfErr(logFile, err)
 	checkLaunchErr(err)
 	err = resultFile.Close()
-	// logIfErr(logFile, err)
 	checkLaunchErr(err)
 	launchLogger.Println("done")
-	// fmt.Fprintln(logFile, "(launcher) done")
 }
 
 func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 	controlDir string, resultPath string, logPath string) {
 
 	defer wg.Done()
-	// hbDebug, hbErr := os.Create(controlDir + hb + ".log")
-	// loggerIfErr(debugLogger, hbErr)
-	// defer hbDebug.Close()
-	// debugPrefix := strings.ToUpper(hb) + " "
-	// hbLogger := log.New(hbDebug, debugPrefix, log.Ltime|log.Lshortfile)
 
-	// const HBSCRIPT string = "heartbeat.sh"
-	// fmt.Printf("(heartbeat) checking if %v is alive\n", launchedPid)
 	_, err := os.Stat(controlDir)
 	if os.IsNotExist(err) {
 		hbLogger.Printf("%v\n", err.Error())
@@ -201,34 +147,6 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 		hbLogger.Printf("Result file already exists, stopping heartbeat.\n%v\n", resultPath)
 		return
 	}
-	// create the heartbeat script
-	// heartbeat := fmt.Sprintf("#! /bin/sh\n%v; pid=\"$$\"; echo \"(heartbeat) pid: \"$pid\"\"; while true ; do kill -0 %v; status=\"$?\"; if [ \"$status\" -ne 0 ]; then break; fi; echo \"\"$pid\"\"; touch %v; sleep 3; done; echo \"(\\\"$pid\\\") exiting\"; exit",
-	// 	trapSig, launchedPid, logPath)
-	// heartbeatPath := controlDir + HBSCRIPT
-	// heartbeatScript, err := os.Create(heartbeatPath)
-	// checkHeartbeatErr(err)
-	// err = os.Chmod(heartbeatPath, 0755)
-	// checkHeartbeatErr(err)
-	// heartbeatScript.WriteString(heartbeat)
-	// heartbeatScript.Close()
-
-	// heartbeatCmd := exec.Command(heartbeatPath)
-
-	/************************************
-	// Warning: DO NOT set cmd.Stdout/StdErr is set to os.Stdout/Stderr
-	// If you do, the heartbeat thread will not survive jenkins termination
-	///////////// DO NOT DO THIS ///////////////
-	// heartbeatCmd.Stdout = os.Stdout
-	// heartbeatCmd.Stderr = os.Stderr
-	************************************************/
-	// heartbeatCmd.Stdout = logFile
-	// heartbeatCmd.Stderr = logFile
-	// heartbeatCmd.SysProcAttr = &unix.SysProcAttr{Setsid: true}
-	// heartbeatCmd.Start()
-	// pid := heartbeatCmd.Process.Pid
-	// fmt.Printf("(heartbeat) heartbeat pid (%v)\n", pid)
-	// err = heartbeatCmd.Wait()
-	// checkHeartbeatErr(err)
 
 	for {
 		select {
@@ -243,24 +161,9 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 			time.Sleep(time.Second * 3)
 		}
 	}
-	// hbLogger.Println("exit")
 }
 
 func main() {
-	// argLen := len(os.Args)
-	// if argLen < 5 || argLen > 6 {
-	// 	// invalid number of args
-	// 	os.Stderr.WriteString("Input error: expected number of args is 5 or 6 (controlDir, resultPath, logPath, scriptString, outputPath[opt])")
-	// 	return
-	// }
-	// controlDir := os.Args[1]
-	// resultPath := os.Args[2]
-	// logPath := os.Args[3]
-	// scriptString := os.Args[4]
-	// outputPath := ""
-	// if argLen == 6 {
-	// 	outputPath = os.Args[5]
-	// }
 	var controlDir, resultPath, logPath, cookieName, cookieVal, scriptPath, interpreter, outputPath string
 	const controlFlag = "controldir"
 	const resultFlag = "result"
@@ -285,13 +188,6 @@ func main() {
 		return
 	}
 	defer logFile.Close()
-
-	// debugFile, debugErr := os.Create(controlDir + base + ".log")
-	// if debugErr != nil {
-	// 	// os.Stderr.WriteString("unable to create debug log file\n")
-	// 	return
-	// }
-	// defer debugFile.Close()
 	mainLogger = log.New(logFile, strings.ToUpper(base)+" ", log.Lmicroseconds|log.Lshortfile)
 	launchLogger = log.New(logFile, strings.ToUpper(launch)+" ", log.Lmicroseconds|log.Lshortfile)
 	hbLogger = log.New(logFile, strings.ToUpper(hb)+" ", log.Lmicroseconds|log.Lshortfile)
@@ -306,16 +202,10 @@ func main() {
 	for _, reqFlag := range required {
 		if !defined[reqFlag] {
 			errMsg := fmt.Sprintf("-%v flag missing\n", reqFlag)
-			// os.Stderr.WriteString(errMsg)
 			mainLogger.Println(errMsg)
 			return
 		}
 	}
-
-	// debugLogger.Printf("number of args: %v\n", os.Args)
-	// for i := 0; i < len(os.Args); i++ {
-	// 	debugLogger.Printf("arg %v: %v\n", i, os.Args[i])
-	// }
 
 	mainLogger.Printf("Main pid is: %v\n", os.Getpid())
 	mainLogger.Printf("Parent pid is: %v\n", os.Getppid())
