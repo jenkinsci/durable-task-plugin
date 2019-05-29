@@ -135,8 +135,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         ShellController c = new ShellController(ws,(os == OsType.ZOS));
         FilePath shf = c.getScriptFile(ws);
 
-//        String cookieString = String.format("jsc=%s; %s=$jsc; ", cookieValue, cookieVariable);
-//        shf.write(cookieString + script, scriptEncodingCharset);
         shf.write(script, scriptEncodingCharset);
 
         final Jenkins jenkins = Jenkins.getInstance();
@@ -158,20 +156,29 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
-//        String launcherCmd = null;
-//        if ((os == OsType.DARWIN) || (os == OsType.UNIX)) {
-//            String catchSig = "trap ':' INT TERM EXIT; ";
-//            launcherCmd = catchSig + binaryLauncherCmd(c, ws, os, interpreter, scriptPath, cookieValue, cookieVariable);
-//        } else {
-//           launcherCmd = scriptLauncherCmd(c, ws, interpreter, scriptPath, cookieValue, cookieVariable);
-//        }
-//        launcherCmd = launcherCmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
-        List<String> args = binaryLauncherCmd(c, ws, os, shell, scriptPath, cookieValue, cookieVariable);
+        List<String> launcherCmd = null;
+        String launcher_binary = LAUNCHER_PREFIX + os.toString();
+        InputStream launcherStream = BourneShellScript.class.getResourceAsStream(launcher_binary);
+        if (launcherStream != null) {
+            FilePath controlDir = c.controlDir(ws);
+            FilePath launcherAgent = controlDir.child(launcher_binary);
+            launcherAgent.copyFrom(launcherStream);
+            launcherAgent.chmod(0755);
+            launcherCmd = binaryLauncherCmd(c, ws, shell,
+                                            controlDir.getRemote(),
+                                            launcherAgent.getRemote(),
+                                            scriptPath,
+                                            cookieValue,
+                                            cookieVariable);
+        } else {
+           String scriptString = scriptLauncherCmd(c, ws, interpreter, scriptPath, cookieValue, cookieVariable);
+           scriptString = scriptString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+           launcherCmd = new ArrayList<>();
+           launcherCmd.addAll(Arrays.asList("sh", "-c", scriptString));
+        }
 
-        // Catches signal termination in order to allow graceful exit (and no zombies)
-//        args.addAll(Arrays.asList("sh", "-c", launcherCmd));
-        LOGGER.log(Level.FINE, "launching {0}", args);
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
+        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
+        Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
         boolean novel;
         synchronized (encounteredPaths) {
             Integer cnt = encounteredPaths.get(ws);
@@ -192,22 +199,14 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
-    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, OsType os, String shell, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, String shell, String controlDirPath, String binaryPath, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
-        FilePath controlDir = c.controlDir(ws);
         String outputFile = c.getOutputFile(ws).getRemote();
 
-        String launcher_binary = LAUNCHER_PREFIX + os.toString();
-
-        InputStream launcherStream = BourneShellScript.class.getResourceAsStream(launcher_binary);
-        FilePath launcherAgent = controlDir.child(launcher_binary);
-        launcherAgent.copyFrom(launcherStream);
-        launcherAgent.chmod(0755);
-
         List<String> cmd = new ArrayList<>();
-        cmd.add(launcherAgent.getRemote());
-        cmd.add("-controldir=" + controlDir.getRemote());
+        cmd.add(binaryPath);
+        cmd.add("-controldir=" + controlDirPath);
         cmd.add("-result=" + resultFile);
         cmd.add("-log=" + logFile);
         cmd.add("-cookiename=" + cookieVariable);
@@ -219,21 +218,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd.add("-output=" + outputFile);
         }
-
-//        String args = String.format("%s %s %s '%s %s'",
-//                        controlDir.getRemote(),
-//                        resultFile,
-//                        logFile,
-//                        interpreter, scriptPath);
-//        if (capturingOutput) {
-//            args = args + " " + outputFile;
-//        }
-//        String cmd = String.format("jsc=%s; %s=$jsc %s %s; ",
-//                        cookieValue,
-//                        cookieVariable,
-//                        launcherAgent.getRemote(),
-//                        args);
-
         return cmd;
     }
 
@@ -243,7 +227,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmd = String.format("pid=$$; { while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                     controlDir,
                     resultFile,
                     logFile,
@@ -255,7 +239,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                     logFile,
                     resultFile, resultFile, resultFile);
         } else {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmd = String.format("pid=$$; { while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                     controlDir,
                     resultFile,
                     logFile,
