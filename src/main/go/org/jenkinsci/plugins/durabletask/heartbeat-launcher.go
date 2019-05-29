@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -16,13 +16,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const base = "main"
-const hb = "heartbeat"
-const launch = "launcher"
-
 var mainLogger *log.Logger
-var launchLogger *log.Logger
 var hbLogger *log.Logger
+var launchLogger *log.Logger
+var scriptLogger *log.Logger
 
 func checkIfErr(process string, err error) bool {
 	if err != nil {
@@ -32,21 +29,13 @@ func checkIfErr(process string, err error) bool {
 	return false
 }
 
-func checkLaunchErr(err error) bool {
-	return loggerIfErr(launchLogger, err)
+func checkScriptErr(err error) bool {
+	return loggerIfErr(scriptLogger, err)
 }
 
 func loggerIfErr(logger *log.Logger, err error) bool {
 	if err != nil {
 		logger.Println(err.Error())
-		return true
-	}
-	return false
-}
-
-func logIfErr(output io.Writer, err error) bool {
-	if err != nil {
-		fmt.Fprint(output, err.Error())
 		return true
 	}
 	return false
@@ -78,18 +67,18 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 	if outputPath != "" {
 		// capturing output
 		outputFile, err := os.Create(outputPath)
-		if checkLaunchErr(err) {
-			exitLauncher(exitChan, -2, resultPath)
+		if checkScriptErr(err) {
+			exitLauncher(-2, resultPath)
 			return
 		}
 		defer outputFile.Close()
 		scriptCmd.Stdout = outputFile
 	} else {
-		scriptCmd.Stdout = launchLogger.Writer()
+		scriptCmd.Stdout = scriptLogger.Writer()
 	}
 	if outputPath != "" {
 		// capturing output
-		scriptCmd.Stderr = launchLogger.Writer()
+		scriptCmd.Stderr = scriptLogger.Writer()
 	} else {
 		// Note: pointing to os.Stdout will not capture all err logs
 		scriptCmd.Stderr = scriptCmd.Stdout
@@ -100,35 +89,34 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 		launchLogger.Printf("args %v: %v\n", i, scriptCmd.Args[i])
 	}
 	err := scriptCmd.Start()
-	if checkLaunchErr(err) {
-		exitLauncher(exitChan, -2, resultPath)
+	if checkScriptErr(err) {
+		exitLauncher(-2, resultPath)
 		return
 	}
 	pid := scriptCmd.Process.Pid
 	launchLogger.Printf("launched %v\n", pid)
 	err = scriptCmd.Wait()
-	checkLaunchErr(err)
+	checkScriptErr(err)
 	resultVal := scriptCmd.ProcessState.ExitCode()
 	launchLogger.Printf("script exit code: %v\n", resultVal)
 
-	exitLauncher(exitChan, resultVal, resultPath)
+	exitLauncher(resultVal, resultPath)
 }
 
 func signalFinished(exitChan chan bool) {
 	exitChan <- true
 }
 
-func exitLauncher(exitChan chan bool, exitCode int, resultPath string) {
-	launchLogger.Printf("signaled script exit\n")
+func exitLauncher(exitCode int, resultPath string) {
 	resultFile, err := os.Create(resultPath)
-	if checkLaunchErr(err) {
+	if checkScriptErr(err) {
 		return
 	}
 	defer resultFile.Close()
 	_, err = resultFile.WriteString(strconv.Itoa(exitCode))
-	checkLaunchErr(err)
+	checkScriptErr(err)
 	err = resultFile.Close()
-	checkLaunchErr(err)
+	checkScriptErr(err)
 	launchLogger.Println("done")
 }
 
@@ -165,6 +153,7 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 
 func main() {
 	var controlDir, resultPath, logPath, cookieName, cookieVal, scriptPath, interpreter, outputPath string
+	var debug bool
 	const controlFlag = "controldir"
 	const resultFlag = "result"
 	const logFlag = "log"
@@ -173,6 +162,7 @@ func main() {
 	const scriptFlag = "script"
 	const shellFlag = "shell"
 	const outputFlag = "output"
+	const debugFlag = "debug"
 	flag.StringVar(&controlDir, controlFlag, "", "working directory")
 	flag.StringVar(&resultPath, resultFlag, "", "full path of the result file")
 	flag.StringVar(&logPath, logFlag, "", "full path of the log file")
@@ -181,6 +171,7 @@ func main() {
 	flag.StringVar(&scriptPath, scriptFlag, "", "full path of the script to be launched")
 	flag.StringVar(&interpreter, shellFlag, "", "(optional) interpreter to use")
 	flag.StringVar(&outputPath, outputFlag, "", "(optional) if recording output, full path of the output file")
+	flag.BoolVar(&debug, debugFlag, false, "noisy output to log")
 	flag.Parse()
 
 	logFile, logErr := os.Create(logPath)
@@ -188,9 +179,18 @@ func main() {
 		return
 	}
 	defer logFile.Close()
-	mainLogger = log.New(logFile, strings.ToUpper(base)+" ", log.Lmicroseconds|log.Lshortfile)
-	launchLogger = log.New(logFile, strings.ToUpper(launch)+" ", log.Lmicroseconds|log.Lshortfile)
-	hbLogger = log.New(logFile, strings.ToUpper(hb)+" ", log.Lmicroseconds|log.Lshortfile)
+	mainLogOut := ioutil.Discard
+	hbLogOut := ioutil.Discard
+	launchLogOut := ioutil.Discard
+	if debug {
+		mainLogOut = logFile
+		hbLogOut = logFile
+		launchLogOut = logFile
+	}
+	mainLogger = log.New(mainLogOut, "MAIN ", log.Lmicroseconds|log.Lshortfile)
+	hbLogger = log.New(hbLogOut, "HEARBEAT ", log.Lmicroseconds|log.Lshortfile)
+	launchLogger = log.New(launchLogOut, "LAUNCHER ", log.Lmicroseconds|log.Lshortfile)
+	scriptLogger = log.New(logFile, "", log.Lmicroseconds|log.Lshortfile)
 
 	// Validate that the required flags were all command-line defined
 	required := []string{controlFlag, resultFlag, logFlag, cookieNameFlag, cookieValFlag, scriptFlag}
