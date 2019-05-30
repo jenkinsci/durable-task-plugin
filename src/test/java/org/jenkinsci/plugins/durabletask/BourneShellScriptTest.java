@@ -448,7 +448,7 @@ public class BourneShellScriptTest {
     }
 
     private void setGlobalInterpreter(String interpreter) {
-        ExtensionList.lookup(Shell.DescriptorImpl.class).get(0).setShell(interpreter);
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell(interpreter);
     }
 }
 
