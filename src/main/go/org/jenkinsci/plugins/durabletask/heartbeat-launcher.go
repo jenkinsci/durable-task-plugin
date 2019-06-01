@@ -174,6 +174,27 @@ func main() {
 	flag.BoolVar(&debug, debugFlag, false, "noisy output to log")
 	flag.Parse()
 
+	// Validate that the required flags were all command-line defined
+	required := []string{controlFlag, resultFlag, logFlag, cookieNameFlag, cookieValFlag, scriptFlag}
+	defined := make(map[string]string)
+	flag.Visit(func(f *flag.Flag) {
+		defined[f.Name] = f.Value.String()
+	})
+	var missing []string
+	for _, reqFlag := range required {
+		if _, exists := defined[reqFlag]; !exists {
+			missing = append(missing, reqFlag)
+		}
+	}
+	if len(missing) > 0 {
+		fmt.Println("The following required flags are missing:")
+		for _, missingFlag := range missing {
+			fmt.Printf("-%v\n", missingFlag)
+		}
+		return
+	}
+
+	// Prepare logging
 	logFile, logErr := os.Create(logPath)
 	if checkIfErr("launcher", logErr) {
 		return
@@ -192,21 +213,9 @@ func main() {
 	launchLogger = log.New(launchLogOut, "LAUNCHER ", log.Lmicroseconds|log.Lshortfile)
 	scriptLogger = log.New(logFile, "", log.Lmicroseconds|log.Lshortfile)
 
-	// Validate that the required flags were all command-line defined
-	required := []string{controlFlag, resultFlag, logFlag, cookieNameFlag, cookieValFlag, scriptFlag}
-	defined := make(map[string]bool)
-	flag.Visit(func(f *flag.Flag) {
-		mainLogger.Println(f.Name + ": " + f.Value.String())
-		defined[f.Name] = true
-	})
-	for _, reqFlag := range required {
-		if !defined[reqFlag] {
-			errMsg := fmt.Sprintf("-%v flag missing\n", reqFlag)
-			mainLogger.Println(errMsg)
-			return
-		}
+	for key, val := range defined {
+		mainLogger.Printf("%v: %v", key, val)
 	}
-
 	mainLogger.Printf("Main pid is: %v\n", os.Getpid())
 	mainLogger.Printf("Parent pid is: %v\n", os.Getppid())
 
