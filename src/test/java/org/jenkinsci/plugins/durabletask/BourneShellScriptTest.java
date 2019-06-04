@@ -27,13 +27,11 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.Computer;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.DumbSlave;
 import hudson.slaves.OfflineCause;
-import hudson.slaves.SlaveComputer;
 import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
@@ -248,7 +246,7 @@ public class BourneShellScriptTest {
     @Issue("JENKINS-50902")
     @Test public void configuredInterpreter() throws Exception {
         // Run script inside the container as this is system dependent
-        DumbSlave node = createDockerSlave(dockerSlim.get());
+        DumbSlave node = createDockerSlave(dockerSlim.get(), SlimFixture.SLIM_JAVA_LOCATION);
         j.jenkins.addNode(node);
         j.waitOnline(node);
         launcher = node.createLauncher(listener);
@@ -297,28 +295,28 @@ public class BourneShellScriptTest {
 
     @Test public void runOnUbuntuDocker() throws Exception {
         JavaContainer container = dockerUbuntu.get();
-        runOnDocker(createDockerSlave(container));
+        runOnDocker(createDockerSlave(container, null));
     }
 
     @Test public void runOnCentOSDocker() throws Exception {
         CentOSFixture container = dockerCentOS.get();
-        runOnDocker(createDockerSlave(container));
+        runOnDocker(createDockerSlave(container, null));
     }
 
     @Issue("JENKINS-52847")
     @Test public void runOnAlpineDocker() throws Exception {
         AlpineFixture container = dockerAlpine.get();
-        runOnDocker(createDockerSlave(container), 45);
+        runOnDocker(createDockerSlave(container, null), 45);
     }
 
     @Issue("JENKINS-52881")
     @Test public void runOnSlimDocker() throws Exception {
         SlimFixture container = dockerSlim.get();
-        runOnDocker(createDockerSlave(container), 45);
+        runOnDocker(createDockerSlave(container, SlimFixture.SLIM_JAVA_LOCATION), 45);
     }
 
-    private DumbSlave createDockerSlave(DockerContainer container) throws hudson.model.Descriptor.FormException, IOException {
-        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", ""));
+    private DumbSlave createDockerSlave(DockerContainer container, String javaPath) throws hudson.model.Descriptor.FormException, IOException {
+        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "", javaPath, null, null));
     }
 
     private void runOnDocker(DumbSlave s) throws Exception {
