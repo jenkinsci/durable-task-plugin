@@ -101,8 +101,6 @@
                                 <argument>--rmi</argument>
                                 <argument>local</argument>
                                 <argument>-v</argument>
-                                <argument>-t</argument>
-                                <argument>30</argument>
                             </arguments>
                         </configuration>
                     </execution>
