@@ -72,18 +72,37 @@
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>1.6.0</version>
+                <configuration>
+                    <executable>docker-compose</executable>
+                    <workingDirectory>src/main/go/org/jenkinsci/plugins/durabletask</workingDirectory>
+                </configuration>
                 <executions>
                     <execution>
-                        <id>dockerbuildbinary</id>
+                        <id>docker-generate-binary</id>
                         <phase>generate-resources</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <executable>docker-compose</executable>
-                            <workingDirectory>${project.basedir}/src/main/go/org/jenkinsci/plugins/durabletask</workingDirectory>
                             <arguments>
                                 <argument>up</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>docker-cleanup</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>
+                                <argument>down</argument>
+                                <argument>--rmi</argument>
+                                <argument>local</argument>
+                                <argument>-v</argument>
+                                <argument>-t</argument>
+                                <argument>30</argument>
                             </arguments>
                         </configuration>
                     </execution>
