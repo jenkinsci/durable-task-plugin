@@ -25,6 +25,8 @@
         <jenkins.version>2.121.3</jenkins.version>
         <java.level>8</java.level>
         <findbugs.failOnError>false</findbugs.failOnError>
+        <binary.src>src/main/go/org/jenkinsci/plugins/durabletask</binary.src>
+        <binary.dockerimage>hbl-builder</binary.dockerimage>
     </properties>
     
     <repositories>
@@ -73,34 +75,52 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>1.6.0</version>
                 <configuration>
-                    <executable>docker-compose</executable>
-                    <workingDirectory>src/main/go/org/jenkinsci/plugins/durabletask</workingDirectory>
+                    <executable>docker</executable>
+                    <workingDirectory>${binary.src}</workingDirectory>
                 </configuration>
                 <executions>
                     <execution>
-                        <id>docker-generate-binary</id>
+                        <id>docker-build-image</id>
                         <phase>generate-resources</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
                         <configuration>
                             <arguments>
-                                <argument>up</argument>
+                                <argument>build</argument>
+                                <argument>-t</argument>
+                                <argument>${binary.dockerimage}:${revision}</argument>
+                                <argument>.</argument>
                             </arguments>
                         </configuration>
                     </execution>
                     <execution>
-                        <id>docker-cleanup</id>
+                        <id>docker-generate-binaries</id>
                         <phase>generate-resources</phase>
                         <goals>
                             <goal>exec</goal>
                         </goals>
                         <configuration>
                             <arguments>
-                                <argument>down</argument>
-                                <argument>--rmi</argument>
-                                <argument>local</argument>
-                                <argument>-v</argument>
+                                <argument>run</argument>
+                                <argument>-i</argument>
+                                <argument>--rm</argument>
+                                <argument>--mount</argument>
+                                <argument>type=bind,src=${basedir}/${binary.src},dst=/org/jenkinsci/plugins/durabletask</argument>
+                                <argument>${binary.dockerimage}:${revision}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>docker-image-cleanup</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <arguments>
+                                <argument>rmi</argument>
+                                <argument>${binary.dockerimage}:${revision}</argument>
                             </arguments>
                         </configuration>
                     </execution>
