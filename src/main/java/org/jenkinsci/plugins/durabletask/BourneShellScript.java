@@ -48,6 +48,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.io.File;
 import javax.annotation.Nonnull;
+
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import hudson.remoting.VirtualChannel;
@@ -148,7 +149,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
 
         String scriptPath = shf.getRemote();
-//        List<String> args = new ArrayList<>();
         if (os == OsType.WINDOWS) { // JENKINS-40255
             scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
         }
@@ -156,8 +156,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
+        String arch = ws.act(new getArchitecture());
         List<String> launcherCmd = null;
-        String launcher_binary = LAUNCHER_PREFIX + os.toString();
+        String launcher_binary = LAUNCHER_PREFIX + os.toString() + arch;
         InputStream launcherStream = BourneShellScript.class.getResourceAsStream(launcher_binary);
         if (launcherStream != null) {
             FilePath controlDir = c.controlDir(ws);
@@ -349,6 +350,14 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else {
               return OsType.UNIX; // Default Value
             }
+        }
+        private static final long serialVersionUID = 1L;
+    }
+
+    private static final class getArchitecture extends MasterToSlaveCallable<String,RuntimeException> {
+        @Override public String call() throws RuntimeException {
+            // Note: This will only determine the architecture of the JVM.
+            return System.getProperty("sun.arch.data.model");
         }
         private static final long serialVersionUID = 1L;
     }
