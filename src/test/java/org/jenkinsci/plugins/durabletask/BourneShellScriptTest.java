@@ -40,6 +40,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -401,6 +402,22 @@ public class BourneShellScriptTest {
         if (simpleOrTini()) {
             assertTrue("no zombies running", noZombies());
         }
+    }
+
+    /**
+     * Checks if the golang binary outputs to stdout under normal shell execution.
+     * The binary must NOT output to stdout or else it will crash when Jenkins is terminated
+     * unexpectedly.
+     */
+    @Test public void stdout() throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
+        StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
+        String script = String.format("echo hello world");
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, stdoutListener);
+        awaitCompletion(c);
+        assertThat(baos.toString(), isEmptyString());
+        c.cleanup(ws);
     }
 
     private boolean noZombies() throws InterruptedException {
