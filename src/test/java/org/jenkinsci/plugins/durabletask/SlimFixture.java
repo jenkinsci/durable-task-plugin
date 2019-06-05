@@ -29,5 +29,8 @@ import org.jenkinsci.test.acceptance.docker.DockerFixture;
 
 /** Analog of {@link JavaContainer} but using Debian Slim. */
 @DockerFixture(id = "slim", ports = 22)
-public class SlimFixture extends DockerContainer {}
+public class SlimFixture extends DockerContainer {
 
+    public static final String SLIM_JAVA_LOCATION = "/usr/local/openjdk-8/bin/java";
+
+}

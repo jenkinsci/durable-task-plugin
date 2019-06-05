@@ -135,9 +135,11 @@ public class BourneShellScriptTest {
 
     private Slave prepareAgentDocker() throws Exception {
         DockerContainer container = null;
+        String customJavaPath = null;
         switch (platform) {
             case SLIM:
                 container = dockerSlim.get();
+                customJavaPath = SlimFixture.SLIM_JAVA_LOCATION;
                 break;
             case ALPINE:
                 container = dockerAlpine.get();
@@ -152,7 +154,7 @@ public class BourneShellScriptTest {
                 Assert.fail("Unknown enum value: " + platform);
                 break;
         }
-        return createDockerSlave(container);
+        return createDockerSlave(container, customJavaPath);
     }
 
     private Slave prepareAgentCommandLauncher() throws Exception{
@@ -454,8 +456,8 @@ public class BourneShellScriptTest {
         }
     }
 
-    private DumbSlave createDockerSlave(DockerContainer container) throws hudson.model.Descriptor.FormException, IOException {
-        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", ""));
+    private DumbSlave createDockerSlave(DockerContainer container, String javaPath) throws hudson.model.Descriptor.FormException, IOException {
+        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "", javaPath, null, null));
     }
 
     private void awaitCompletion(Controller c) throws IOException, InterruptedException {
