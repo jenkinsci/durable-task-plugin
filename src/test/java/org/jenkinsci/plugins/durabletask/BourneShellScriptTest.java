@@ -187,10 +187,24 @@ public class BourneShellScriptTest {
     }
 
     @Test public void smokeTest() throws Exception {
-        boolean isNative = (platform == TestPlatform.NATIVE);
-        int sleepSeconds = 10;
-        if (isNative) {
-            sleepSeconds = 0;
+        boolean notNative = (platform != TestPlatform.NATIVE);
+        int sleepSeconds = 0;
+        if (notNative) {
+            switch (platform) {
+                case CENTOS:
+                case UBUNTU:
+                case TINI:
+                case SIMPLE:
+                    sleepSeconds = 10;
+                    break;
+                case ALPINE:
+                case SLIM:
+                    sleepSeconds = 45;
+                    break;
+                default:
+                    Assert.fail("Unknown enum value: " + platform);
+                    break;
+            }
         }
 
         String script = String.format("echo hello world; sleep %s", sleepSeconds);
@@ -201,7 +215,7 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
-        if (!isNative) {
+        if (notNative) {
             assertTrue("no zombies running", noZombies());
         }
     }
