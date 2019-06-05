@@ -136,7 +136,11 @@ public final class BourneShellScript extends FileMonitoringTask {
         final Jenkins jenkins = Jenkins.getInstance();
         String interpreter = "";
         if (!script.startsWith("#!")) {
-            String shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
+            String shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
+            if (shell == null) {
+                // Do not use getShellOrDefault, as that assumes that the filesystem layout of the agent matches that seen from a possibly decorated launcher.
+                shell = "sh";
+            }
             interpreter = "'" + shell + "' -xe ";
         } else {
             shf.chmod(0755);
