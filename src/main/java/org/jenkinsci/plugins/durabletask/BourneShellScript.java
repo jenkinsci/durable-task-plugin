@@ -217,7 +217,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         cmd.add("-cookiename=" + cookieVariable);
         cmd.add("-cookieval=" + cookieValue);
         cmd.add("-script=" + scriptPath);
-        if (shell != "") {
+        if (shell != null) {
             cmd.add("-shell=" + shell);
         }
         if (capturingOutput) {
