@@ -163,7 +163,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         String arch = ws.act(new getArchitecture());
         List<String> launcherCmd = null;
         String launcher_binary = LAUNCHER_PREFIX + os.toString() + arch;
-        InputStream launcherStream = BourneShellScript.class.getResourceAsStream(launcher_binary);
+        InputStream launcherStream = DurableTask.class.getResourceAsStream(launcher_binary);
         if (launcherStream != null) {
             FilePath controlDir = c.controlDir(ws);
             FilePath launcherAgent = controlDir.child(launcher_binary);
@@ -176,10 +176,10 @@ public final class BourneShellScript extends FileMonitoringTask {
                                             cookieValue,
                                             cookieVariable);
         } else {
-           String scriptString = scriptLauncherCmd(c, ws, interpreter, scriptPath, cookieValue, cookieVariable);
-           scriptString = scriptString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
-           launcherCmd = new ArrayList<>();
-           launcherCmd.addAll(Arrays.asList("sh", "-c", scriptString));
+            String scriptString = scriptLauncherCmd(c, ws, interpreter, scriptPath, cookieValue, cookieVariable);
+            scriptString = scriptString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+            launcherCmd = new ArrayList<>();
+            launcherCmd.addAll(Arrays.asList("sh", "-c", scriptString));
         }
 
         LOGGER.log(Level.FINE, "launching {0}", launcherCmd);

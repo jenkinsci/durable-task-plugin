@@ -29,7 +29,7 @@
         <binary.dockerimage>hbl-builder</binary.dockerimage>
         <binary.prefix>heartbeat-launcher</binary.prefix>
     </properties>
-    
+
     <repositories>
         <repository>
             <id>repo.jenkins-ci.org</id>
@@ -80,8 +80,8 @@
                     <workingDirectory>${binary.src}</workingDirectory>
                     <arguments>
                         <argument>${revision}</argument>
-                        <argument>${basedir}/${binary.src}</argument>
-                        <argument>${basedir}/target/generated-resources</argument>
+                        <argument>${project.basedir}/${binary.src}</argument>
+                        <argument>${project.build.directory}/classes/org/jenkinsci/plugins/durabletask</argument>
                     </arguments>
                 </configuration>
                 <executions>
