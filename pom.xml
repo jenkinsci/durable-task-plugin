@@ -27,6 +27,7 @@
         <findbugs.failOnError>false</findbugs.failOnError>
         <binary.src>src/main/go/org/jenkinsci/plugins/durabletask</binary.src>
         <binary.dockerimage>hbl-builder</binary.dockerimage>
+        <binary.prefix>heartbeat-launcher</binary.prefix>
     </properties>
     
     <repositories>
@@ -78,6 +79,21 @@
             </activation>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-clean-plugin</artifactId>
+                        <version>3.1.0</version>
+                        <configuration>
+                            <filesets>
+                                <fileset>
+                                    <directory>${binary.src}</directory>
+                                    <includes>
+                                        <include>${binary.prefix}-*</include>
+                                    </includes>
+                                </fileset>
+                            </filesets>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
@@ -146,7 +162,7 @@
                                     <goal>copy-resources</goal>
                                 </goals>
                                 <configuration>
-                                    <outputDirectory>src/main/resources/org/jenkinsci/plugins/durabletask</outputDirectory>
+                                    <outputDirectory>target/generated-resources</outputDirectory>
                                     <resources>
                                         <resource>
                                             <directory>src/main/go/org/jenkinsci/plugins/durabletask</directory>
@@ -163,4 +179,22 @@
             </build>
         </profile>
     </profiles>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-help-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>show-profile</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>active-profiles</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
