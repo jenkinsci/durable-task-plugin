@@ -1,1 +1,1 @@
-buildPlugin(platforms: ['docker',  'windows'])
+buildPlugin(platforms: ['docker'])
