@@ -1,6 +1,6 @@
 // The plugin must be built on a docker platform.
 // TODO: remove skiptests if can't test manual like windows
-buildPlugin(platforms: ['docker'], tests: ['skip'])
+buildPlugin(platforms: ['docker'], tests: [skip: true])
 
 node('windows') {
     timeout(60) {
