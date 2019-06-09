@@ -4,12 +4,12 @@ buildPlugin(platforms: ['docker'], tests: [skip: true])
 
 node('windows') {
     timeout(60) {
-        stage ("Test windows") {
+        stage ('Test windows') {
             // checkout the repo again
             checkout scm
             // Need compiled java jar. Because multiple jars are archived,
             // easier to get the hpi that contains the compiled jar
-            unarchive mapping: ['*.hpi': 'durable-task.hpi']
+            unarchive mapping: ['org/jenkins-ci/plugins/durable-task/*.hpi': 'durable-task.hpi']
             unzip zipfile: 'durqble-task.hpi', dir: 'target/hpi'
 
             // unpack the jar with the compiled sources into target/classes
