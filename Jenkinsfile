@@ -20,6 +20,8 @@ node('windows') {
                     "PATH+MAVEN=${tool 'mvn'}/bin"
             ]
             String commands = """
+                                echo %JAVA_HOME%
+                                dir /s %JAVA_HOME 
                                 java -h
                                 jar -h
                                 dir
@@ -37,9 +39,9 @@ node('windows') {
                                 dir
                                 chdir ..\\..
                                 mvn resources:testResources
-                                mvn compiler:testCompiler
+                                mvn compiler:testCompile
                                 mvn surefire:test
-                               """
+                              """
             withEnv(env) {
                 bat commands
                 // record test results
