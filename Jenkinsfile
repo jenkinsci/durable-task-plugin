@@ -5,8 +5,9 @@ buildPlugin(platforms: ['docker'], tests: [skip: true])
 node('windows') {
     timeout(60) {
         stage ('Test windows') {
+            bat 'echo %JAVA_HOME%'
             bat 'dir %JAVA_HOME%'
-            bat 'dir %JAVA_HOME%/bin'
+            bat 'dir %JAVA_HOME%\\bin'
             // checkout the repo again
             checkout scm
             bat 'dir'
@@ -15,7 +16,7 @@ node('windows') {
             unarchive mapping: ['**/*.hpi': 'durable-task.hpi']
             bat 'dir'
             dir ('target/hpi') {
-                bat 'move ../../durable-task.hpi %cd%'
+                bat 'move ..\\..\\durable-task.hpi %cd%'
                 bat 'dir'
 //                bat 'jar -xvf durable-task.hpi'
                 bat 'unzip durable-task.jar'
@@ -24,7 +25,7 @@ node('windows') {
             bat 'dir'
             // unpack the jar with the compiled sources into target/classes
             dir ('target/classes') {
-                bat 'xcopy ../hpi/WEB-INF/lib/durable-task.jar %cd%'
+                bat 'xcopy ..\\hpi\\WEB-INF\\lib\\durable-task.jar %cd%'
                 bat 'dir'
 //                bat 'jar -xvf durable-task.jar'
                 bat 'unzip durable-task.jar'
