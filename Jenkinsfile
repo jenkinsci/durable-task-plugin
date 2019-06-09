@@ -16,7 +16,8 @@ node('windows') {
             dir ('target/hpi') {
                 bat 'move ../../durable-task.hpi %cd%'
                 bat 'dir'
-                bat 'jar -xvf durable-task.hpi'
+//                bat 'jar -xvf durable-task.hpi'
+                bat 'unzip durable-task.jar'
                 bat 'dir'
             }
             bat 'dir'
@@ -24,7 +25,8 @@ node('windows') {
             dir ('target/classes') {
                 bat 'xcopy ../hpi/WEB-INF/lib/durable-task.jar %cd%'
                 bat 'dir'
-                bat 'jar -xvf durable-task.jar'
+//                bat 'jar -xvf durable-task.jar'
+                bat 'unzip durable-task.jar'
                 bat 'dir'
             }
 
