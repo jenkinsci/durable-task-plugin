@@ -5,6 +5,7 @@ buildPlugin(platforms: ['docker'], tests: [skip: true])
 node('windows') {
     timeout(60) {
         stage ('Test windows') {
+            bat 'java -h'
             bat 'echo %JAVA_HOME%'
             bat 'dir %JAVA_HOME%'
             bat 'dir %JAVA_HOME%\\bin'
