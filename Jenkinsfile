@@ -19,9 +19,7 @@ node('windows') {
                 unarchive mapping: ['**/*.hpi': 'hpi']
                 bat 'dir'
                 // find the  *.hpi file nested  in the directory
-//                bat 'for /r hpi %%f in (*) do echo %%f'
                 bat 'for /r hpi %%f in (*.hpi) do move %%f target\\hpi\\durable-task.hpi'
-                bat 'dir target\\hpi'
                 List<String> env = [
                         "JAVA_HOME=${tool 'jdk8'}",
                         'PATH+JAVA=${JAVA_HOME}/bin',
@@ -32,19 +30,21 @@ node('windows') {
                                 echo %JAVA_HOME%
                                 set jar=%JAVA_HOME%\\bin\\jar
                                 chdir target\\hpi
-                                dir
+                                :: Extract the .hpi
                                 %jar% -xvf durable-task.hpi
                                 dir /s
+                                :: move the compiled jar to target\\classes
                                 move WEB-INF\\lib\\durable-task.jar ..\\classes 
                                 chdir ..\\classes
-                                dir
+                                :: extract the compiled classes
                                 %jar% -xvf durable-task.jar
-                                dir
+                                :: go back to root of project
                                 chdir ..\\..
                               """
                 withEnv(env) {
                     bat setup
                     bat 'mvn resources:testResources'
+                    bat 'echo adding some noise here'
                     bat 'mvn compiler:testCompile'
                     bat 'mvn surefire:test'
                     // record test results
