@@ -31,7 +31,7 @@ node('windows') {
                                 %jar% -xvf durable-task.hpi
                                 dir /s
                                 :: move the compiled jar to target\\classes
-                                move WEB-INF\\lib\\durable-task.jar ..\\classes 
+                                move WEB-INF\\lib\\durable-task.jar ..\\classes
                                 chdir ..\\classes
                                 :: extract the compiled classes
                                 %jar% -xvf durable-task.jar
@@ -43,13 +43,17 @@ node('windows') {
                     // Compile only the test resources and test code, then run tests
                     bat 'mvn resources:testResources'
                     bat 'mvn compiler:testCompile'
-                    bat 'mvn surefire:test'
+                    // do not let the test script fail so we can record results
+                    bat script: 'mvn surefire:test', returnStatus: 0
                 }
             }
         }
         stage("Archive (windows-8") {
             // record test results
             junit '**/target/surefire-reports/**/*.xml'
+            if (currentBuild.result == 'UNSTABLE') {
+                error 'There were test failures'
+            }
         }
     }
 }
