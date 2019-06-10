@@ -1,6 +1,5 @@
 // The plugin must be built on a docker platform.
-// TODO: remove skiptests if can't test manual like windows
-buildPlugin(platforms: ['docker'], tests: [skip: true])
+buildPlugin(platforms: ['docker'])
 
 
 node('windows') {
@@ -9,17 +8,15 @@ node('windows') {
 
             dir('durable-task') {
                 deleteDir()
-                // checkout the repo again
                 checkout scm
-                bat 'dir'
                 bat 'mkdir target\\classes'
                 bat 'mkdir target\\hpi'
-                // Need compiled java jar. Because multiple jars are archived,
-                // easier to get the hpi that contains the compiled jar
+                // Need compiled java jar. Since we don't know the specific name, and because
+                // multiple jars are archived, get the hpi that contains the compiled jar
                 unarchive mapping: ['**/*.hpi': 'hpi']
-                bat 'dir'
-                // find the  *.hpi file nested  in the directory
+                // find the  *.hpi file nested in the directory
                 bat 'for /r hpi %%f in (*.hpi) do move %%f target\\hpi\\durable-task.hpi'
+                // In order to extract the hpi and jar files, need the jar bin
                 List<String> env = [
                         "JAVA_HOME=${tool 'jdk8'}",
                         'PATH+JAVA=${JAVA_HOME}/bin',
@@ -43,8 +40,8 @@ node('windows') {
                               """
                 withEnv(env) {
                     bat setup
+                    // Compile only the test resources and test code, then run tests
                     bat 'mvn resources:testResources'
-                    bat 'echo adding some noise here'
                     bat 'mvn compiler:testCompile'
                     bat 'mvn surefire:test'
                     // record test results
