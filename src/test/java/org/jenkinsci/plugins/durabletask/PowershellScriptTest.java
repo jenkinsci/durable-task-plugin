@@ -47,6 +47,9 @@ import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import java.util.Properties;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.apache.commons.io.IOUtils;
 import org.junit.AssumptionViolatedException;
 
@@ -131,7 +134,19 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
-        assertThat(baos.toString(), containsString("Bogus error"));
+        String regex = "Bogus\\s+error";
+        Pattern p = Pattern.compile(regex);
+        Matcher m = p.matcher(baos.toString());
+        assertTrue(m.matches());
+        regex = "Bogus error";
+        p = Pattern.compile(regex);
+        m = p.matcher(baos.toString());
+        assertFalse(m.matches());
+        regex = "bogus error";
+        p = Pattern.compile(regex);
+        m = p.matcher(baos.toString());
+        assertFalse(m.matches());
+//        assertThat(baos.toString(), containsString("Bogus error"));
         c.cleanup(ws);
     }
     
