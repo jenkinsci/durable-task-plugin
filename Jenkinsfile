@@ -17,7 +17,6 @@ node('windows') {
                 // Need compiled java jar. Because multiple jars are archived,
                 // easier to get the hpi that contains the compiled jar
                 unarchive mapping: ['**/*.hpi': 'hpi']
-                copyArtifacts
                 bat 'xcopy hpi\\org\\jenkins-ci\\plugins\\durable-task\\*\\*.hpi target\\hpi'
                 bat 'dir /s target'
                 List<String> env = [
