@@ -17,7 +17,6 @@ node('windows') {
                 // Need compiled java jar. Because multiple jars are archived,
                 // easier to get the hpi that contains the compiled jar
                 unarchive mapping: ['**/*.hpi': 'target/hpi/durable-task.hpi']
-                bat 'dir /s target'
                 List<String> env = [
                         "JAVA_HOME=${tool 'jdk8'}",
                         'PATH+JAVA=${JAVA_HOME}/bin',
@@ -26,17 +25,16 @@ node('windows') {
                 String commands = """
                                 :: Get the path to the jar binary
                                 echo %JAVA_HOME%
-                                dir %JAVA_HOME%\\bin
                                 set jar=%JAVA_HOME%\\bin\\jar
                                 %jar%
                                 chdir target\\hpi
                                 dir
-                                %jar% -xvf durable-task.hpi
+                                %jar% -xvf %cd%\\durable-task.hpi
                                 dir
                                 xcopy WEB-INF\\lib\\durable-task.jar ..\\classes 
                                 chdir ..\\classes
                                 dir
-                                %jar% -xvf durable-task.jar
+                                %jar% -xvf %cd%\\durable-task.jar
                                 dir
                                 chdir ..\\..
                                 mvn resources:testResources
