@@ -134,6 +134,7 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
+        System.out.println(baos.toString());
         String regex = "Bogus\\s+error";
         Pattern p = Pattern.compile(regex);
         Matcher m = p.matcher(baos.toString());
