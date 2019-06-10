@@ -12,11 +12,12 @@ node('windows') {
                 // checkout the repo again
                 checkout scm
                 bat 'dir'
-                bat 'mkdir target\\hpi'
                 bat 'mkdir target\\classes'
                 // Need compiled java jar. Because multiple jars are archived,
                 // easier to get the hpi that contains the compiled jar
-                unarchive mapping: ['**/*.hpi': 'target/hpi/durable-task.file']
+                unarchive mapping: ['**/*.hpi/**/*.hpi': 'target/hpi']
+//                bat 'xcopy target\\hpi\\org\\jenkins-ci\\plugins\\durable-task'
+                bat 'dir /s target'
                 List<String> env = [
                         "JAVA_HOME=${tool 'jdk8'}",
                         'PATH+JAVA=${JAVA_HOME}/bin',
