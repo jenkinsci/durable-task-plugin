@@ -1,5 +1,5 @@
 // The plugin must be built on a docker platform.
-buildPlugin(platforms: ['docker'])
+buildPlugin(platforms: ['docker'], tests: [skip: true])
 
 
 node('windows') {
@@ -20,8 +20,20 @@ node('windows') {
                 List<String> env = [
                         "JAVA_HOME=${tool 'jdk8'}",
                         'PATH+JAVA=${JAVA_HOME}/bin',
-                        "PATH+MAVEN=${tool 'mvn'}/bin"
+                        "PATH+MAVEN=${tool 'mvn'}/bin",
                 ]
+                String m2repo = "${pwd tmp: true}/m2repo"
+                List<String> mvnOptions = [
+                        '--batch-mode',
+                        '--show-version',
+                        '--errors',
+                        '-Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn',
+                        '--update-snapshots',
+                        "-Dmaven.repo.local=${m2repo}",
+                ]
+                String testResources = "mvn resources:testResources ${mvnOptions.join(' ')}"
+                String testCompile = "mvn compiler:testCompile ${mvnOptions.join(' ')}"
+                String test = "mvn surefire:test ${mvnOptions.join(' ')}"
                 String setup = """
                                 :: Get the path to the jar binary
                                 echo %JAVA_HOME%
@@ -41,10 +53,10 @@ node('windows') {
                 withEnv(env) {
                     bat setup
                     // Compile only the test resources and test code, then run tests
-                    bat 'mvn resources:testResources'
-                    bat 'mvn compiler:testCompile'
+                    bat "${testResources}"
+                    bat "${testCompile}"
                     // do not let the test script fail so we can record results
-                    bat script: 'mvn surefire:test', returnStatus: true
+                    bat script: "${test}", returnStatus: true
                 }
             }
         }
