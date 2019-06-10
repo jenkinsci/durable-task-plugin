@@ -4,7 +4,7 @@ buildPlugin(platforms: ['docker'])
 
 node('windows') {
     timeout(60) {
-        stage ('Test windows') {
+        stage ('Test (windows-8)') {
 
             dir('durable-task') {
                 deleteDir()
@@ -44,10 +44,12 @@ node('windows') {
                     bat 'mvn resources:testResources'
                     bat 'mvn compiler:testCompile'
                     bat 'mvn surefire:test'
-                    // record test results
-                    junit '**/target/surefire-reports/**/*.xml'
                 }
             }
+        }
+        stage("Archive (windows-8") {
+            // record test results
+            junit '**/target/surefire-reports/**/*.xml'
         }
     }
 }
