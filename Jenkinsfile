@@ -21,21 +21,21 @@ node('windows') {
             ]
             String commands = """
                                 echo %JAVA_HOME%
-                                dir /s %JAVA_HOME%
-                                %JAVA_HOME%\\java -h
-                                %JAVA_HOME%\\jar -h
+                                dir %JAVA_HOME%\\bin
+                                set jar=%JAVA_HOME%\\bin\\jar
+                                jar -h
                                 dir
                                 mkdir target\\hpi
                                 mkdir target\\classes
                                 move durable-task.hpi target\\hpi
                                 chdir target\\hpi
                                 dir
-                                %JAVA_HOME%\\jar -xvf durable-task.hpi
+                                jar -xvf durable-task.hpi
                                 dir
                                 xcopy WEB-INF\\lib\\durable-task.jar ..\\classes 
                                 chdir ..\\classes
                                 dir
-                                %JAVA_HOME%\\jar -xvf durable-task.jar
+                                jar -xvf durable-task.jar
                                 dir
                                 chdir ..\\..
                                 mvn resources:testResources
