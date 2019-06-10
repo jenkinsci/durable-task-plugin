@@ -56,7 +56,7 @@ node('windows') {
                     bat "${testResources}"
                     bat "${testCompile}"
                     // do not let the test script fail so we can record results
-                    bat script: "${test}" returnStatus: true
+                    bat script: "${test}", returnStatus: true
                 }
             }
         }
