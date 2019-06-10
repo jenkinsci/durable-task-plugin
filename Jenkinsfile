@@ -1,5 +1,5 @@
 // The plugin must be built on a docker platform.
-buildPlugin(platforms: ['docker'])
+buildPlugin(platforms: ['docker'], test: [skip: true])
 
 
 node('windows') {
