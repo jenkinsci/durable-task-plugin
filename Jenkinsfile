@@ -44,7 +44,7 @@ node('windows') {
                     bat 'mvn resources:testResources'
                     bat 'mvn compiler:testCompile'
                     // do not let the test script fail so we can record results
-                    bat script: 'mvn surefire:test', returnStatus: 0
+                    bat script: 'mvn surefire:test', returnStatus: true
                 }
             }
         }
