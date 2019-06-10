@@ -19,9 +19,9 @@ node('windows') {
                 unarchive mapping: ['**/*.hpi': 'hpi']
                 bat 'dir'
                 // find the  *.hpi file nested  in the directory
-//                bat 'for /r %f in (*.hpi) do xcopy %f target\\hpi\\durable-taks.hpi'
-                bat 'for /r %%f in (*) do echo %%f'
-                bat 'dir /s target'
+//                bat 'for /r hpi %%f in (*) do echo %%f'
+                bat 'for /r hpi %%f in (*) do move %%f target\\hpi\\durable-task.hpi'
+                bat 'dir target\\hpi'
                 List<String> env = [
                         "JAVA_HOME=${tool 'jdk8'}",
                         'PATH+JAVA=${JAVA_HOME}/bin',
@@ -34,8 +34,8 @@ node('windows') {
                                 %jar%
                                 chdir target\\hpi
                                 dir
-                                %jar% -xvf durable-task.file
-                                dir
+                                %jar% -xvf durable-task.hpi
+                                dir /s
                                 xcopy WEB-INF\\lib\\durable-task.jar ..\\classes 
                                 chdir ..\\classes
                                 dir
