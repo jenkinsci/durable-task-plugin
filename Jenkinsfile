@@ -12,8 +12,8 @@ node('windows') {
                 // checkout the repo again
                 checkout scm
                 bat 'dir'
-                bat 'mkdir target/hpi'
-                bat 'mkdir target/classes'
+                bat 'mkdir target\\hpi'
+                bat 'mkdir target\\classes'
                 // Need compiled java jar. Because multiple jars are archived,
                 // easier to get the hpi that contains the compiled jar
                 unarchive mapping: ['**/*.hpi': 'target/hpi/durable-task.hpi']
