@@ -23,19 +23,19 @@ node('windows') {
                                 echo %JAVA_HOME%
                                 dir %JAVA_HOME%\\bin
                                 set jar=%JAVA_HOME%\\bin\\jar
-                                jar -h
+                                %jar% -h
                                 dir
                                 mkdir target\\hpi
                                 mkdir target\\classes
                                 move durable-task.hpi target\\hpi
                                 chdir target\\hpi
                                 dir
-                                jar -xvf durable-task.hpi
+                                %jar% -xvf durable-task.hpi
                                 dir
                                 xcopy WEB-INF\\lib\\durable-task.jar ..\\classes 
                                 chdir ..\\classes
                                 dir
-                                jar -xvf durable-task.jar
+                                %jar% -xvf durable-task.jar
                                 dir
                                 chdir ..\\..
                                 mvn resources:testResources
