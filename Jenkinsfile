@@ -17,7 +17,8 @@ node('windows') {
                 // Need compiled java jar. Because multiple jars are archived,
                 // easier to get the hpi that contains the compiled jar
                 unarchive mapping: ['**/*.hpi': 'hpi']
-                bat 'xcopy hpi\\org\\jenkins-ci\\plugins\\durable-task\\*\\*.hpi target\\hpi'
+                // find the  *.hpi file nested  in the directory
+                bat 'for /r %f in (*.hpi) do xcopy %f target\\hpi\\durable-taks.hpi'
                 bat 'dir /s target'
                 List<String> env = [
                         "JAVA_HOME=${tool 'jdk8'}",
