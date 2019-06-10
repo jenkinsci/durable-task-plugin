@@ -20,34 +20,33 @@ node('windows') {
                 bat 'dir'
                 // find the  *.hpi file nested  in the directory
 //                bat 'for /r hpi %%f in (*) do echo %%f'
-                bat 'for /r hpi %%f in (*) do move %%f target\\hpi\\durable-task.hpi'
+                bat 'for /r hpi %%f in (*.hpi) do move %%f target\\hpi\\durable-task.hpi'
                 bat 'dir target\\hpi'
                 List<String> env = [
                         "JAVA_HOME=${tool 'jdk8'}",
                         'PATH+JAVA=${JAVA_HOME}/bin',
                         "PATH+MAVEN=${tool 'mvn'}/bin"
                 ]
-                String commands = """
+                String setup = """
                                 :: Get the path to the jar binary
                                 echo %JAVA_HOME%
                                 set jar=%JAVA_HOME%\\bin\\jar
-                                %jar%
                                 chdir target\\hpi
                                 dir
                                 %jar% -xvf durable-task.hpi
                                 dir /s
-                                xcopy WEB-INF\\lib\\durable-task.jar ..\\classes 
+                                move WEB-INF\\lib\\durable-task.jar ..\\classes 
                                 chdir ..\\classes
                                 dir
                                 %jar% -xvf durable-task.jar
                                 dir
                                 chdir ..\\..
-                                mvn resources:testResources
-                                mvn compiler:testCompile
-                                mvn surefire:test
                               """
                 withEnv(env) {
-                    bat commands
+                    bat setup
+                    bat 'mvn resources:testResources'
+                    bat 'mvn compiler:testCompile'
+                    bat 'mvn surefire:test'
                     // record test results
                     junit '**/target/surefire-reports/**/*.xml'
                 }
