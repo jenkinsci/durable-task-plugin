@@ -134,20 +134,21 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
-        System.out.println(baos.toString());
-        String regex = "Bogus\\s+error";
-        Pattern p = Pattern.compile(regex);
-        Matcher m = p.matcher(baos.toString());
-        assertTrue(m.matches());
-        regex = "Bogus error";
-        p = Pattern.compile(regex);
-        m = p.matcher(baos.toString());
-        assertFalse(m.matches());
-        regex = "bogus error";
-        p = Pattern.compile(regex);
-        m = p.matcher(baos.toString());
-        assertFalse(m.matches());
+//        System.out.println(baos.toString());
+//        String regex = "Bogus\\s+error";
+//        Pattern p = Pattern.compile(regex);
+//        Matcher m = p.matcher(baos.toString());
+//        assertTrue(m.matches());
+//        regex = "Bogus error";
+//        p = Pattern.compile(regex);
+//        m = p.matcher(baos.toString());
+//        assertFalse(m.matches());
+//        regex = "bogus error";
+//        p = Pattern.compile(regex);
+//        m = p.matcher(baos.toString());
+//        assertFalse(m.matches());
 //        assertThat(baos.toString(), containsString("Bogus error"));
+        assertTrue(baos.toString().contains("Bogus error"));
         c.cleanup(ws);
     }
     
