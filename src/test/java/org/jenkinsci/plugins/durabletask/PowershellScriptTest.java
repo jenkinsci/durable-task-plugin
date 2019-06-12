@@ -131,7 +131,7 @@ public class PowershellScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
-        assertThat(baos.toString(), containsString("Bogus error"));
+        assertTrue(baos.toString().contains("Bogus error"));
         c.cleanup(ws);
     }
     
