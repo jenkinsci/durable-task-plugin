@@ -50,9 +50,6 @@ import javax.annotation.CheckForNull;
 import jenkins.MasterToSlaveFileCallable;
 import com.google.common.io.Files;
 import hudson.Proc;
-import jenkins.util.Timer;
-
-
 
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
@@ -181,7 +178,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
 
-        args.addAll(Arrays.asList("sh", "-c", cmd));
+        if (LAUNCH_DIAGNOSTICS) {
+            args.addAll(Arrays.asList("sh", "-c", cmd));
+        } else {
+            // setsid --fork also works but not in, say, busybox; or even Ubuntu prior to Cosmic
+            args.addAll(Arrays.asList("sh", "-c", "(" + cmd + ") &"));
+        }
         LOGGER.log(Level.FINE, "launching {0}", args);
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         if (LAUNCH_DIAGNOSTICS) {
@@ -190,17 +192,18 @@ public final class BourneShellScript extends FileMonitoringTask {
             ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
         }
         final Proc proc = ps.start();
-        if (!LAUNCH_DIAGNOSTICS && proc instanceof AutoCloseable) {
-            Timer.get().schedule(new Runnable() {
+        if (!LAUNCH_DIAGNOSTICS) {
+            new Thread("waiting for " + proc + " in " + controlDir) {
                 @Override public void run() {
+                    LOGGER.log(Level.FINE, "waiting for exit in {0}", controlDir);
                     try {
-                        LOGGER.log(Level.FINE, "cleaning up {0} in {1}", new Object[] {proc, controlDir});
-                        ((AutoCloseable) proc).close();
+                        int r = proc.join();
+                        LOGGER.log(Level.FINE, "{0} in {1} exited with status {2}", new Object[] {proc, controlDir, r});
                     } catch (Exception x) {
-                        LOGGER.log(Level.WARNING, "failed to clean up " + proc + " in " + controlDir, x);
+                        LOGGER.log(/* best effort only */Level.FINE, "failed to wait for " + proc + " in " + controlDir, x);
                     }
                 }
-            }, 1, TimeUnit.MINUTES);
+            }.start();
         }
         return c;
     }
