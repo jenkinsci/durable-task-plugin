@@ -40,12 +40,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
@@ -331,33 +330,12 @@ public class BourneShellScriptTest {
         j.waitOnline(s);
         FilePath dockerWS = s.getWorkspaceRoot();
         Launcher dockerLauncher = s.createLauncher(listener);
-        final AtomicBoolean wrapperExited = new AtomicBoolean();
+        final AtomicReference<Proc> proc = new AtomicReference<>();
         Launcher decorated = new Launcher.DecoratedLauncher(dockerLauncher) {
             @Override public Proc launch(Launcher.ProcStarter starter) throws IOException {
-                final Proc delegate = super.launch(starter);
-                class DecoratedProc extends Proc {
-                    @Override public int join() throws IOException, InterruptedException {
-                        int r = delegate.join();
-                        wrapperExited.set(true);
-                        return r;
-                    }
-                    @Override public boolean isAlive() throws IOException, InterruptedException {
-                        return delegate.isAlive();
-                    }
-                    @Override public void kill() throws IOException, InterruptedException {
-                        delegate.kill();
-                    }
-                    @Override public InputStream getStdout() {
-                        return delegate.getStdout();
-                    }
-                    @Override public InputStream getStderr() {
-                        return delegate.getStderr();
-                    }
-                    @Override public OutputStream getStdin() {
-                        return delegate.getStdin();
-                    }
-                }
-                return new DecoratedProc();
+                Proc delegate = super.launch(starter);
+                assertTrue(proc.compareAndSet(null, delegate));
+                return delegate;
             }
         };
         String script = String.format("echo hello world; sleep 5; echo long since started; sleep %s", sleepSeconds - 5);
@@ -367,7 +345,8 @@ public class BourneShellScriptTest {
         while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
             c.writeLog(dockerWS, baos);
             if (baos.toString().contains("long since started")) {
-                assertTrue("wrapper process still running:\n" + baos, wrapperExited.get());
+                assertNotNull(proc.get());
+                assertFalse("JENKINS-58290: wrapper process still running:\n" + baos, proc.get().isAlive());
             }
             Thread.sleep(100);
         }

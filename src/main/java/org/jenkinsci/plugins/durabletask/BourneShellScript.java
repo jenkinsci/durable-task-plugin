@@ -49,7 +49,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.CheckForNull;
 import jenkins.MasterToSlaveFileCallable;
 import com.google.common.io.Files;
-import hudson.Proc;
 
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
@@ -151,7 +150,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         String cmd;
         FilePath logFile = c.getLogFile(ws);
         FilePath resultFile = c.getResultFile(ws);
-        final FilePath controlDir = c.controlDir(ws);
+        FilePath controlDir = c.controlDir(ws);
         if (capturingOutput) {
             cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
                 controlDir,
@@ -181,7 +180,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (LAUNCH_DIAGNOSTICS) {
             args.addAll(Arrays.asList("sh", "-c", cmd));
         } else {
-            // https://github.com/moby/moby/issues/33039#issuecomment-353250651
+            // JENKINS-58290: launch in the background. Also close stdout/err so docker-exec and the like do not wait.
             args.addAll(Arrays.asList("sh", "-c", "(" + cmd + ") >&- 2>&- &"));
         }
         LOGGER.log(Level.FINE, "launching {0}", args);
@@ -191,20 +190,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         } else {
             ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
         }
-        final Proc proc = ps.start();
-        if (!LAUNCH_DIAGNOSTICS) {
-            new Thread("waiting for " + proc + " in " + controlDir) {
-                @Override public void run() {
-                    LOGGER.log(Level.FINE, "waiting for exit in {0}", controlDir);
-                    try {
-                        int r = proc.join();
-                        LOGGER.log(Level.FINE, "{0} in {1} exited with status {2}", new Object[] {proc, controlDir, r});
-                    } catch (Exception x) {
-                        LOGGER.log(/* best effort only */Level.FINE, "failed to wait for " + proc + " in " + controlDir, x);
-                    }
-                }
-            }.start();
-        }
+        ps.start();
         return c;
     }
 
