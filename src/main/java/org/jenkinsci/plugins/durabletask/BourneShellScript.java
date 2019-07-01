@@ -181,8 +181,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (LAUNCH_DIAGNOSTICS) {
             args.addAll(Arrays.asList("sh", "-c", cmd));
         } else {
-            // setsid --fork also works but not in, say, busybox; or even Ubuntu prior to Cosmic
-            args.addAll(Arrays.asList("sh", "-c", "(" + cmd + ") &"));
+            // https://github.com/moby/moby/issues/33039#issuecomment-353250651
+            args.addAll(Arrays.asList("sh", "-c", "(" + cmd + ") >&- 2>&- &"));
         }
         LOGGER.log(Level.FINE, "launching {0}", args);
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
