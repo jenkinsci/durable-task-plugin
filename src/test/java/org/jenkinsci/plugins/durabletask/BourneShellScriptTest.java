@@ -27,6 +27,7 @@ package org.jenkinsci.plugins.durabletask;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Proc;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.VirtualChannel;
@@ -43,6 +44,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
@@ -328,13 +330,26 @@ public class BourneShellScriptTest {
         j.waitOnline(s);
         FilePath dockerWS = s.getWorkspaceRoot();
         Launcher dockerLauncher = s.createLauncher(listener);
-        String script = String.format("echo hello world; sleep %s", sleepSeconds);
-        Controller c = new BourneShellScript(script).launch(new EnvVars(), dockerWS, dockerLauncher, listener);
+        final AtomicReference<Proc> proc = new AtomicReference<>();
+        Launcher decorated = new Launcher.DecoratedLauncher(dockerLauncher) {
+            @Override public Proc launch(Launcher.ProcStarter starter) throws IOException {
+                Proc delegate = super.launch(starter);
+                assertTrue(proc.compareAndSet(null, delegate));
+                return delegate;
+            }
+        };
+        String script = String.format("echo hello world; sleep 5; echo long since started; sleep %s", sleepSeconds - 5);
+        ByteArrayOutputStream baos;
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), dockerWS, decorated, listener);
+        baos = new ByteArrayOutputStream();
         while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
+            c.writeLog(dockerWS, baos);
+            if (baos.toString().contains("long since started")) {
+                assertNotNull(proc.get());
+                assertFalse("JENKINS-58290: wrapper process still running:\n" + baos, proc.get().isAlive());
+            }
             Thread.sleep(100);
         }
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(dockerWS, baos);
         assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(dockerWS);
