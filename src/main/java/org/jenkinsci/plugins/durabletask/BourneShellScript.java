@@ -61,6 +61,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
 
+    private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
     /**
      * Whether to stream stdio from the wrapper script, which should normally not print any.
      * Copying output from the controller process consumes a Java thread, so we want to avoid it generally.
@@ -70,7 +71,7 @@ public final class BourneShellScript extends FileMonitoringTask {
      */
     @SuppressWarnings("FieldMayBeFinal")
     // TODO use SystemProperties if and when unrestricted
-    private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS");
+    private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
 
     /**
      * Seconds between heartbeat checks, where we check to see if
@@ -241,6 +242,9 @@ public final class BourneShellScript extends FileMonitoringTask {
                 long currentTimestamp = getLogFile(workspace).lastModified();
                 if (currentTimestamp == 0) {
                     listener.getLogger().println("process apparently never started in " + controlDir);
+                    if (!LAUNCH_DIAGNOSTICS) {
+                        listener.getLogger().println("(running Jenkins temporarily with -D" + LAUNCH_DIAGNOSTICS_PROP + "=true might make the problem clearer)");
+                    }
                     return recordExitStatus(workspace, -2);
                 } else if (checkedTimestamp > 0) {
                     if (currentTimestamp < checkedTimestamp) {
