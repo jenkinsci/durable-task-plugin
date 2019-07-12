@@ -223,6 +223,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd.add("-output=" + outputFile);
         }
+        cmd.add("-debug");
         return cmd;
     }
 
