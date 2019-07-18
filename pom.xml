@@ -60,4 +60,13 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.jenkins-ci</groupId>
+                <artifactId>symbol-annotation</artifactId>
+                <version>1.7</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>
