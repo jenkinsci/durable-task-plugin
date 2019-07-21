@@ -80,7 +80,7 @@ public class BourneShellScriptTest {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
     }
 
-    private void assumeDocker() throws Exception {
+    static void assumeDocker() throws Exception {
         assumeTrue("Docker is available", new Docker().isAvailable());
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         assumeThat("`docker version` could be run", new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}").stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join(), is(0));
