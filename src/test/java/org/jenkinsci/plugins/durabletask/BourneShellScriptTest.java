@@ -76,8 +76,12 @@ public class BourneShellScriptTest {
 
     @Rule public DockerRule<SlimFixture> dockerSlim = new DockerRule<>(SlimFixture.class);
 
-    @BeforeClass public static void unixAndDocker() throws Exception {
+    @BeforeClass public static void unix() throws Exception {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
+    }
+
+    private void assumeDocker() throws Exception {
+        assumeTrue("Docker is available", new Docker().isAvailable());
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         assumeThat("`docker version` could be run", new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}").stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join(), is(0));
         assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
@@ -247,6 +251,7 @@ public class BourneShellScriptTest {
 
     @Issue("JENKINS-50902")
     @Test public void configuredInterpreter() throws Exception {
+        assumeDocker();
         // Run script inside the container as this is system dependent
         DumbSlave node = createDockerSlave(dockerSlim.get(), SlimFixture.SLIM_JAVA_LOCATION);
         j.jenkins.addNode(node);
@@ -326,6 +331,7 @@ public class BourneShellScriptTest {
     }
 
     private void runOnDocker(DumbSlave s, int sleepSeconds) throws Exception {
+        assumeDocker();
         j.jenkins.addNode(s);
         j.waitOnline(s);
         FilePath dockerWS = s.getWorkspaceRoot();
@@ -368,12 +374,10 @@ public class BourneShellScriptTest {
     }
 
     @Test public void runWithCommandLauncher() throws Exception {
-        assumeTrue("Docker required for this test", new Docker().isAvailable());
         runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
     }
 
     @Test public void runWithTiniCommandLauncher() throws Exception {
-        assumeTrue("Docker required for this test", new Docker().isAvailable());
         runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
     }
 
