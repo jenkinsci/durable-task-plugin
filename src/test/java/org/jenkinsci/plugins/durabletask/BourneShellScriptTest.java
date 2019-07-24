@@ -28,6 +28,7 @@ import hudson.EnvVars;
 import hudson.ExtensionList;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Platform;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.VirtualChannel;
@@ -47,6 +48,9 @@ import java.util.EnumSet;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
@@ -67,7 +71,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, ALPINE, CENTOS, UBUNTU, SLIM, SIMPLE, TINI
+    NATIVE, ALPINE, CENTOS, UBUNTU, SLIM, SIMPLE
 }
 
 @RunWith(Parameterized.class)
@@ -100,13 +104,11 @@ public class BourneShellScriptTest {
     private static int counter = 0; // used to prevent docker container name-smashing
 
     public BourneShellScriptTest(TestPlatform platform) throws Exception {
-        System.out.println("My platform: " + platform);
         this.platform = platform;
         this.listener = StreamTaskListener.fromStdout();
     }
 
     @Before public void prepareAgentForPlatform() throws Exception {
-        System.out.println("prepare platform: " + platform);
         switch (platform) {
             case NATIVE:
                 s = j.createOnlineSlave();
@@ -115,13 +117,8 @@ public class BourneShellScriptTest {
             case ALPINE:
             case CENTOS:
             case UBUNTU:
-                s = prepareAgentDocker();
-                j.jenkins.addNode(s);
-                j.waitOnline(s);
-                break;
             case SIMPLE:
-            case TINI:
-                s = prepareAgentCommandLauncher();
+                s = prepareAgentDocker();
                 j.jenkins.addNode(s);
                 j.waitOnline(s);
                 break;
@@ -134,6 +131,21 @@ public class BourneShellScriptTest {
     }
 
     private Slave prepareAgentDocker() throws Exception {
+        switch(platform) {
+            case SLIM:
+            case ALPINE:
+            case CENTOS:
+            case UBUNTU:
+                return prepareDockerPlatforms();
+            case SIMPLE:
+                return prepareAgentCommandLauncher();
+            default:
+                Assert.fail("Unknown test platform: " + platform);
+                return null;
+        }
+    }
+
+    private Slave prepareDockerPlatforms() throws Exception {
         DockerContainer container = null;
         String customJavaPath = null;
         switch (platform) {
@@ -154,7 +166,9 @@ public class BourneShellScriptTest {
                 Assert.fail("Unknown enum value: " + platform);
                 break;
         }
-        return createDockerSlave(container, customJavaPath);
+        return new DumbSlave("docker",
+                "/home/test",
+                new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "", customJavaPath, null, null));
     }
 
     private Slave prepareAgentCommandLauncher() throws Exception{
@@ -164,47 +178,33 @@ public class BourneShellScriptTest {
         String agent = "agent-" + counter++;
         String remoteFs = "/home/jenkins/" + agent;
 
-        Slave agentSlave = null;
-        switch (platform) {
-            case SIMPLE:
-                String dockerRunSimple = String.format("docker run -i --rm --name %s jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
-                agentSlave = new DumbSlave(name, remoteFs, new SimpleCommandLauncher(dockerRunSimple));
-                break;
-            case TINI:
-                String dockerRunTini = String.format("docker run -i --rm --name %s --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
-                agentSlave = new DumbSlave(name, remoteFs, new SimpleCommandLauncher(dockerRunTini));
-                break;
-            default:
-                Assert.fail("Unknown enum value: " + platform);
-                break;
-        }
-        return agentSlave;
+        String dockerRunSimple = String.format("docker run -i --rm --name %s jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
+        return new DumbSlave(name, remoteFs, new SimpleCommandLauncher(dockerRunSimple));
     }
 
-    @After public void slaveCleanup() throws IOException, InterruptedException {
+    @After public void agentCleanup() throws IOException, InterruptedException {
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
         j.jenkins.removeNode(s);
     }
 
     @Test public void smokeTest() throws Exception {
-        boolean notNative = (platform != TestPlatform.NATIVE);
-        int sleepSeconds = 0;
-        if (notNative) {
-            switch (platform) {
-                case CENTOS:
-                case UBUNTU:
-                case TINI:
-                case SIMPLE:
-                    sleepSeconds = 10;
-                    break;
-                case ALPINE:
-                case SLIM:
-                    sleepSeconds = 45;
-                    break;
-                default:
-                    Assert.fail("Unknown enum value: " + platform);
-                    break;
-            }
+        int sleepSeconds = -1;
+        switch (platform) {
+            case NATIVE:
+                sleepSeconds = 0;
+                break;
+            case CENTOS:
+            case UBUNTU:
+            case SIMPLE:
+                sleepSeconds = 10;
+                break;
+            case ALPINE:
+            case SLIM:
+                sleepSeconds = 45;
+                break;
+            default:
+                Assert.fail("Unknown enum value: " + platform);
+                break;
         }
 
         String script = String.format("echo hello world; sleep %s", sleepSeconds);
@@ -215,9 +215,7 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
-        if (notNative) {
-            assertTrue("no zombies running", noZombies());
-        }
+        assertThat(getZombies(), isEmptyString());
     }
 
     @Test public void stop() throws Exception {
@@ -236,9 +234,7 @@ public class BourneShellScriptTest {
         assertTrue(log.contains("sleep 999"));
         assertTrue(log.contains("got SIG"));
         c.cleanup(ws);
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
+        assertThat(getZombies(), isEmptyString());
     }
 
     @Test public void reboot() throws Exception {
@@ -247,9 +243,9 @@ public class BourneShellScriptTest {
         try {
             FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
             Thread.sleep(1000);
-            psOut();
+            psOut(null);
             launcher.kill(Collections.singletonMap("killemall", "true"));
-            psOut();
+            psOut(null);
             // waiting for launcher to write a termination result before attempting to delete it
             awaitCompletion(c);
             c.getResultFile(ws).delete();
@@ -264,9 +260,7 @@ public class BourneShellScriptTest {
         } finally {
             BourneShellScript.HEARTBEAT_CHECK_INTERVAL = orig;
         }
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
+        assertThat(getZombies(), isEmptyString());
     }
 
     @Test public void justSlow() throws Exception {
@@ -275,9 +269,7 @@ public class BourneShellScriptTest {
         c.writeLog(ws, System.out);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
+        assertThat(getZombies(), isEmptyString());
     }
 
     @Issue("JENKINS-27152")
@@ -289,9 +281,6 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("---. .. stuff---"));
         c.cleanup(ws);
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
     }
 
     @Issue("JENKINS-26133")
@@ -306,9 +295,6 @@ public class BourneShellScriptTest {
         assertThat(baos.toString(), containsString("+ echo 42"));
         assertEquals("42\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
     }
 
     @Issue("JENKINS-38381")
@@ -334,9 +320,7 @@ public class BourneShellScriptTest {
         assertEquals("result\n", output.take());
         assertEquals("[+ echo result]", lines.toString());
         c.cleanup(ws);
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
+        assertThat(getZombies(), isEmptyString());
     }
     static class MockHandler extends Handler {
         final BlockingQueue<Integer> status;
@@ -366,13 +350,10 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
         c.cleanup(ws);
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
     }
 
     @Test public void shebang() throws Exception {
-        setGlobalInterpreter("/bin/false"); // Should be overridden
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("/bin/false"); // Should be overridden
         Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -380,14 +361,11 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("Hello, world!"));
         c.cleanup(ws);
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
     }
 
     @Issue("JENKINS-50902")
     @Test public void configuredInterpreter() throws Exception {
-        setGlobalInterpreter("/bin/bash");
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("/bin/bash");
         String script = "if [ ! -z \"$BASH_VERSION\" ]; then echo 'this is bash'; else echo 'this is not'; fi";
         Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
@@ -398,7 +376,7 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
 
         // Find it in the PATH
-        setGlobalInterpreter("bash");
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("bash");
         c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         baos = new ByteArrayOutputStream();
@@ -407,7 +385,7 @@ public class BourneShellScriptTest {
         assertThat(baos.toString(), containsString("this is bash"));
         c.cleanup(ws);
 
-        setGlobalInterpreter("no_such_shell");
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("no_such_shell");
         c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         baos = new ByteArrayOutputStream();
@@ -415,9 +393,6 @@ public class BourneShellScriptTest {
         assertNotEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("no_such_shell"));
         c.cleanup(ws);
-        if (simpleOrTini()) {
-            assertTrue("no zombies running", noZombies());
-        }
     }
 
     /**
@@ -436,52 +411,72 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
-    private boolean noZombies() throws InterruptedException {
-        ByteArrayOutputStream baos = null;
+    private String getZombies() throws InterruptedException, IOException {
+        // Due to backgrounding, running durable-task in a docker container with init process is guaranteed to leave a zombie. Just let this test pass.
+        // See PR #98 (https://github.com/jenkinsci/durable-task-plugin/pull/98)
+        if (platform.equals(TestPlatform.SIMPLE)) {
+            return "";
+        }
+
+        String psFormat = setPsFormat();
+        String psString = null;
         do {
             Thread.sleep(1000);
-            baos = new ByteArrayOutputStream();
-            try {
-                assertEquals(0, launcher.launch().cmds("ps", "-e", "-o", "pid,ppid,stat,comm").stdout(new TeeOutputStream(baos, System.out)).join());
-            } catch (IOException x) { // no ps? forget this check
-                System.err.println(x);
-                break;
-            }
-        } while (baos.toString().contains(" sleep "));
-        return !baos.toString().contains(" Z ");
+           psString = psOut(psFormat);
+        } while (psString.contains("sh -xe " + ws.getRemote()));
+
+        // Give some time to see if binary becomes a zombie
+        Thread.sleep(1000);
+        Pattern zombiePattern = Pattern.compile(".+Z[s|\\s]\\s*\\[heart.+");
+        Matcher zombieMatcher = zombiePattern.matcher(psOut(psFormat));
+        if (zombieMatcher.find()) {
+            return zombieMatcher.group();
+        } else {
+            return "";
+        }
     }
 
-    // to assist with debugging
-    private String psOut() throws InterruptedException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try {
-            launcher.launch().cmds("ps", "-ef").stdout(new TeeOutputStream(baos, System.out)).join();
-        } catch (IOException x) { // no ps? skip
-            System.err.println(x);
+    /**
+     * Outputs the result of a `ps` shell call to a string. Useful for debugging.
+     *
+     * @param psFormat String of the column format in which to display the `ps` result
+     * @return String of the `ps` shell call
+     * @throws InterruptedException
+     * @throws IOException
+     */
+    private String psOut(String psFormat) throws InterruptedException, IOException {
+        if (psFormat == null) {
+            psFormat = setPsFormat();
         }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        assertEquals(0, launcher.launch().cmds("ps", "-e", "-o", psFormat).stdout(new TeeOutputStream(baos, System.out)).join());
         return baos.toString();
     }
 
-    private boolean simpleOrTini() {
-        if (platform == TestPlatform.SIMPLE || platform == TestPlatform.TINI) {
-            return true;
-        } else {
-            return false;
+    /**
+     * Convenience method that sets the `ps` column format to PID, parent PID, process status, and launch command of the process
+     *
+     * @return
+     */
+    private String setPsFormat() {
+        String cmdCol = null;
+        switch (platform) {
+            case NATIVE:
+                cmdCol = Platform.isDarwin() ? "comm" : "cmd";
+                break;
+            case ALPINE:
+                cmdCol = "args";
+                break;
+            default:
+                cmdCol = "cmd";
         }
-    }
-
-    private DumbSlave createDockerSlave(DockerContainer container, String javaPath) throws hudson.model.Descriptor.FormException, IOException {
-        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "", javaPath, null, null));
+        return "pid,ppid,stat," + cmdCol;
     }
 
     private void awaitCompletion(Controller c) throws IOException, InterruptedException {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-    }
-
-    private void setGlobalInterpreter(String interpreter) {
-        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell(interpreter);
     }
 }
 

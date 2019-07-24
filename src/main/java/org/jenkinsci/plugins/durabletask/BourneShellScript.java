@@ -223,6 +223,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd.add("-output=" + outputFile);
         }
+        cmd.add("-daemon");
         return cmd;
     }
 
@@ -262,7 +263,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         /** Last time we checked the timestamp, in nanoseconds on the master. */
         private transient long lastCheck;
-        /** Last-observed modification time of {@link getLogFile} on remote computer, in milliseconds. */
+        /** Last-observed modification time of {@link FileMonitoringTask.FileMonitoringController#getLogFile(FilePath)} on remote computer, in milliseconds. */
         private transient long checkedTimestamp;
 
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -73,14 +74,9 @@ func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieV
 		}
 		defer outputFile.Close()
 		scriptCmd.Stdout = outputFile
-	} else {
-		scriptCmd.Stdout = scriptLogger.Writer()
-	}
-	if outputPath != "" {
-		// capturing output
 		scriptCmd.Stderr = scriptLogger.Writer()
 	} else {
-		// Note: pointing to os.Stdout will not capture all err logs
+		scriptCmd.Stdout = scriptLogger.Writer()
 		scriptCmd.Stderr = scriptCmd.Stdout
 	}
 	// Create new session
@@ -153,7 +149,7 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 
 func main() {
 	var controlDir, resultPath, logPath, cookieName, cookieVal, scriptPath, interpreter, outputPath string
-	var debug bool
+	var debug, daemon bool
 	const controlFlag = "controldir"
 	const resultFlag = "result"
 	const logFlag = "log"
@@ -163,6 +159,7 @@ func main() {
 	const shellFlag = "shell"
 	const outputFlag = "output"
 	const debugFlag = "debug"
+	const daemonFlag = "daemon"
 	flag.StringVar(&controlDir, controlFlag, "", "working directory")
 	flag.StringVar(&resultPath, resultFlag, "", "full path of the result file")
 	flag.StringVar(&logPath, logFlag, "", "full path of the log file")
@@ -172,6 +169,7 @@ func main() {
 	flag.StringVar(&interpreter, shellFlag, "", "(optional) interpreter to use")
 	flag.StringVar(&outputPath, outputFlag, "", "(optional) if recording output, full path of the output file")
 	flag.BoolVar(&debug, debugFlag, false, "noisy output to log")
+	flag.BoolVar(&daemon, daemonFlag, false, "Free binary from parent process")
 	flag.Parse()
 
 	// Validate that the required flags were all command-line defined
@@ -190,6 +188,27 @@ func main() {
 		fmt.Println("The following required flags are missing:")
 		for _, missingFlag := range missing {
 			fmt.Printf("-%v\n", missingFlag)
+		}
+		return
+	}
+
+	// Double launch to free from parent process. Using a flag because it is possible for parent PID = 1 (i.e. Docker with no init process)
+	if daemon {
+		rebuiltArgs := make([]string, len(os.Args[1:]))
+		argIndex := 0
+		for argKey, argValue := range defined {
+			if argKey != daemonFlag {
+				rebuiltArgs[argIndex] = fmt.Sprintf("-%v=%v", argKey, argValue)
+				argIndex++
+			}
+		}
+		doubleLaunchCmd := exec.Command(os.Args[0], rebuiltArgs...)
+		doubleLaunchCmd.Stdout = nil
+		doubleLaunchCmd.Stderr = nil
+		doubleLaunchCmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		doubleLaunchErr := doubleLaunchCmd.Start()
+		if doubleLaunchErr != nil {
+			panic("Double launch failed, exiting")
 		}
 		return
 	}
