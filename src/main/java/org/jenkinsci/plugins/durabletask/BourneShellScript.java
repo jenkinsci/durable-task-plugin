@@ -55,13 +55,13 @@ import com.google.common.io.Files;
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
  */
 public final class BourneShellScript extends FileMonitoringTask {
-    
+
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
-    
+
     private static enum OsType {DARWIN, UNIX, WINDOWS, ZOS}
 
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
-    
+
     private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
     /**
      * Whether to stream stdio from the wrapper script, which should normally not print any.
@@ -73,15 +73,15 @@ public final class BourneShellScript extends FileMonitoringTask {
     @SuppressWarnings("FieldMayBeFinal")
     // TODO use SystemProperties if and when unrestricted
     private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
-    
+
     private final String LAUNCHER_PREFIX = "heartbeat-launcher-";
-    
+
     /**
      * Seconds between heartbeat checks, where we check to see if
      * {@code jenkins-log.txt} is still being modified.
      */
     static int HEARTBEAT_CHECK_INTERVAL = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_CHECK_INTERVAL", 300);
-    
+
     /**
      * Minimum timestamp difference on {@code jenkins-log.txt} that is
      * considered an actual modification. Theoretically could be zero (if
@@ -90,22 +90,22 @@ public final class BourneShellScript extends FileMonitoringTask {
      */
     @SuppressWarnings("FieldMayBeFinal")
     private static int HEARTBEAT_MINIMUM_DELTA = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_MINIMUM_DELTA", 2);
-    
+
     private final @Nonnull String script;
     private boolean capturingOutput;
-    
+
     @DataBoundConstructor public BourneShellScript(String script) {
         this.script = Util.fixNull(script);
     }
-    
+
     public String getScript() {
         return script;
     }
-    
+
     @Override public void captureOutput() {
         capturingOutput = true;
     }
-    
+
     @Override protected FileMonitoringController launchWithCookie(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
@@ -120,12 +120,12 @@ public final class BourneShellScript extends FileMonitoringTask {
             }
             scriptEncodingCharset = zOSSystemEncodingCharset.name();
         }
-        
+
         ShellController c = new ShellController(ws,(os == OsType.ZOS));
         FilePath shf = c.getScriptFile(ws);
-        
+
         shf.write(script, scriptEncodingCharset);
-        
+
         final Jenkins jenkins = Jenkins.getInstance();
         String shell = null;
         String interpreter = "";
@@ -139,15 +139,15 @@ public final class BourneShellScript extends FileMonitoringTask {
         } else {
             shf.chmod(0755);
         }
-        
+
         String scriptPath = shf.getRemote();
         if (os == OsType.WINDOWS) { // JENKINS-40255
             scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
         }
-        
+
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
-        
+
         String arch = ws.act(new getArchitecture());
         List<String> launcherCmd = null;
         String launcherBinary = LAUNCHER_PREFIX + os.toString() + arch;
@@ -174,7 +174,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 launcherCmd.addAll(Arrays.asList("sh", "-c", "(" + scriptString + ") >&- 2>&- &"));
             }
         }
-        
+
         LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
         Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
         if (LAUNCH_DIAGNOSTICS) {
@@ -185,12 +185,12 @@ public final class BourneShellScript extends FileMonitoringTask {
         ps.start();
         return c;
     }
-    
+
     private List<String> binaryLauncherCmd(ShellController c, FilePath ws, String shell, String controlDirPath, String binaryPath, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
         String outputFile = c.getOutputFile(ws).getRemote();
-        
+
         List<String> cmd = new ArrayList<>();
         cmd.add(binaryPath);
         cmd.add("-controldir=" + controlDirPath);
@@ -211,7 +211,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         return cmd;
     }
-    
+
     private String scriptLauncherCmd(ShellController c, FilePath ws, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String cmd;
         FilePath logFile = c.getLogFile(ws);
@@ -243,31 +243,31 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         return cmd;
     }
-    
+
     /*package*/ static final class ShellController extends FileMonitoringController {
-        
+
         /** Last time we checked the timestamp, in nanoseconds on the master. */
         private transient long lastCheck;
         /** Last-observed modification time of {@link FileMonitoringTask.FileMonitoringController#getLogFile(FilePath)} on remote computer, in milliseconds. */
         private transient long checkedTimestamp;
-        
+
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */
         private final boolean isZos;
-        
+
         private ShellController(FilePath ws, boolean zOsFlag) throws IOException, InterruptedException {
             super(ws);
             this.isZos = zOsFlag;
         }
-        
+
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("script.sh");
         }
-        
+
         /** Only here for compatibility. */
         private FilePath pidFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("pid");
         }
-        
+
         @Override protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
             Integer status;
             if(isZos) {
@@ -315,23 +315,23 @@ public final class BourneShellScript extends FileMonitoringTask {
             }
             return null;
         }
-        
+
         private int recordExitStatus(FilePath workspace, int code) throws IOException, InterruptedException {
             getResultFile(workspace).write(Integer.toString(code), null);
             return code;
         }
-        
+
         private static final long serialVersionUID = 1L;
     }
-    
+
     @Extension public static final class DescriptorImpl extends DurableTaskDescriptor {
-        
+
         @Override public String getDisplayName() {
             return Messages.BourneShellScript_bourne_shell();
         }
-        
+
     }
-    
+
     private static final class getOsType extends MasterToSlaveCallable<OsType,RuntimeException> {
         @Override public OsType call() throws RuntimeException {
             if (Platform.isDarwin()) {
@@ -346,7 +346,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         private static final long serialVersionUID = 1L;
     }
-    
+
     private static final class getArchitecture extends MasterToSlaveCallable<String,RuntimeException> {
         @Override public String call() throws RuntimeException {
             // Note: This will only determine the architecture of the JVM.
@@ -354,7 +354,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         private static final long serialVersionUID = 1L;
     }
-    
+
     private static final class getIBMzOsEncoding extends MasterToSlaveCallable<String,RuntimeException> {
         @Override public String call() throws RuntimeException {
             // Not null on z/OS systems
@@ -362,7 +362,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
         private static final long serialVersionUID = 1L;
     }
-    
+
     /* Local copy of StatusCheck to run on z/OS   */
     static class StatusCheckWithEncoding extends MasterToSlaveFileCallable<Integer> {
         private final String charset;
