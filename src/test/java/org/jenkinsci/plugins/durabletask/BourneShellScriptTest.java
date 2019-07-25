@@ -25,8 +25,10 @@
 package org.jenkinsci.plugins.durabletask;
 
 import hudson.EnvVars;
+import hudson.ExtensionList;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Platform;
 import hudson.Proc;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
@@ -40,40 +42,51 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
-import org.jenkinsci.test.acceptance.docker.Docker;
+
 import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
+
+import org.junit.*;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
+enum TestPlatform {
+    SIMPLE, ALPINE, NATIVE, CENTOS, UBUNTU, SLIM
+}
+
+@RunWith(Parameterized.class)
 public class BourneShellScriptTest {
+    @Parameters(name = "{index}: {0}")
+    public static Iterable<? extends Object> data() {
+        return EnumSet.allOf(TestPlatform.class);
+    }
 
     @Rule public JenkinsRule j = new JenkinsRule();
-
     @Rule public DockerRule<JavaContainer> dockerUbuntu = new DockerRule<>(JavaContainer.class);
-
     @Rule public DockerRule<CentOSFixture> dockerCentOS = new DockerRule<>(CentOSFixture.class);
-
     @Rule public DockerRule<AlpineFixture> dockerAlpine = new DockerRule<>(AlpineFixture.class);
-
     @Rule public DockerRule<SlimFixture> dockerSlim = new DockerRule<>(SlimFixture.class);
 
     @BeforeClass public static void unixAndDocker() throws Exception {
@@ -85,25 +98,125 @@ public class BourneShellScriptTest {
 
     @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
+    private TestPlatform platform;
     private StreamTaskListener listener;
+    private Slave s;
     private FilePath ws;
     private Launcher launcher;
+    private static int counter = 0; // used to prevent docker container name-smashing
 
-    @Before public void vars() {
-        listener = StreamTaskListener.fromStdout();
-        ws = j.jenkins.getRootPath().child("ws");
-        launcher = j.jenkins.createLauncher(listener);
+    public BourneShellScriptTest(TestPlatform platform) throws Exception {
+        this.platform = platform;
+        this.listener = StreamTaskListener.fromStdout();
     }
 
-    @Test
-    public void smokeTest() throws Exception {
-        Controller c = new BourneShellScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
+    @Before public void prepareAgentForPlatform() throws Exception {
+        switch (platform) {
+            case NATIVE:
+                s = j.createOnlineSlave();
+                break;
+            case SLIM:
+            case ALPINE:
+            case CENTOS:
+            case UBUNTU:
+            case SIMPLE:
+                s = prepareAgentDocker();
+                j.jenkins.addNode(s);
+                j.waitOnline(s);
+                break;
+            default:
+                Assert.fail("Unknown enum value: " + platform);
+                break;
+        }
+        ws = s.getWorkspaceRoot().child("ws");
+        launcher = s.createLauncher(listener);
+    }
+
+    private Slave prepareAgentDocker() throws Exception {
+        switch(platform) {
+            case SLIM:
+            case ALPINE:
+            case CENTOS:
+            case UBUNTU:
+                return prepareDockerPlatforms();
+            case SIMPLE:
+                return prepareAgentCommandLauncher();
+            default:
+                Assert.fail("Unknown test platform: " + platform);
+                return null;
+        }
+    }
+
+    private Slave prepareDockerPlatforms() throws Exception {
+        DockerContainer container = null;
+        String customJavaPath = null;
+        switch (platform) {
+            case SLIM:
+                container = dockerSlim.get();
+                customJavaPath = SlimFixture.SLIM_JAVA_LOCATION;
+                break;
+            case ALPINE:
+                container = dockerAlpine.get();
+                break;
+            case CENTOS:
+                container = dockerCentOS.get();
+                break;
+            case UBUNTU:
+                container = dockerUbuntu.get();
+                break;
+            default:
+                Assert.fail("Unknown enum value: " + platform);
+                break;
+        }
+        return new DumbSlave("docker",
+                "/home/test",
+                new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "", customJavaPath, null, null));
+    }
+
+    private Slave prepareAgentCommandLauncher() throws Exception{
+        // counter used to prevent name smashing when a docker container from the previous test is
+        // still shutting down but the new test container is being spun up. Seems more ideal than adding a wait.
+        String name = "docker";
+        String agent = "agent-" + counter++;
+        String remoteFs = "/home/jenkins/" + agent;
+        String dockerRunSimple = String.format("docker run -i --rm --name %s jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
+        return new DumbSlave(name, remoteFs, new SimpleCommandLauncher(dockerRunSimple));
+    }
+
+    @After public void agentCleanup() throws IOException, InterruptedException {
+        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+        j.jenkins.removeNode(s);
+    }
+
+    @Test public void smokeTest() throws Exception {
+        int sleepSeconds = -1;
+        switch (platform) {
+            case NATIVE:
+                sleepSeconds = 0;
+                break;
+            case CENTOS:
+            case UBUNTU:
+            case SIMPLE:
+                sleepSeconds = 10;
+                break;
+            case ALPINE:
+            case SLIM:
+                sleepSeconds = 45;
+                break;
+            default:
+                Assert.fail("Unknown enum value: " + platform);
+                break;
+        }
+
+        String script = String.format("echo hello world; sleep %s", sleepSeconds);
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
+        assertThat(getZombies(), isEmptyString());
     }
 
     @Test public void stop() throws Exception {
@@ -122,27 +235,31 @@ public class BourneShellScriptTest {
         assertTrue(log.contains("sleep 999"));
         assertTrue(log.contains("got SIG"));
         c.cleanup(ws);
+        assertThat(getZombies(), isEmptyString());
     }
 
     @Test public void reboot() throws Exception {
         int orig = BourneShellScript.HEARTBEAT_CHECK_INTERVAL;
         BourneShellScript.HEARTBEAT_CHECK_INTERVAL = 15;
         try {
-        FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
-        Thread.sleep(1000);
-        launcher.kill(Collections.singletonMap("killemall", "true"));
-        c.getResultFile(ws).delete();
-        awaitCompletion(c);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        String log = baos.toString();
-        System.out.println(log);
-        assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher, listener));
-        assertTrue(log.contains("sleep 999"));
-        c.cleanup(ws);
+            FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
+            Thread.sleep(1000);
+            launcher.kill(Collections.singletonMap("killemall", "true"));
+            // waiting for launcher to write a termination result before attempting to delete it
+            awaitCompletion(c);
+            c.getResultFile(ws).delete();
+            awaitCompletion(c);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            c.writeLog(ws, baos);
+            String log = baos.toString();
+            System.out.println(log);
+            assertEquals(Integer.valueOf(-1), c.exitStatus(ws, launcher, listener));
+            assertTrue(log.contains("sleep 999"));
+            c.cleanup(ws);
         } finally {
             BourneShellScript.HEARTBEAT_CHECK_INTERVAL = orig;
         }
+        assertThat(getZombies(), isEmptyString());
     }
 
     @Test public void justSlow() throws Exception {
@@ -151,6 +268,7 @@ public class BourneShellScriptTest {
         c.writeLog(ws, System.out);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
+        assertThat(getZombies(), isEmptyString());
     }
 
     @Issue("JENKINS-27152")
@@ -180,9 +298,6 @@ public class BourneShellScriptTest {
 
     @Issue("JENKINS-38381")
     @Test public void watch() throws Exception {
-        Slave s = j.createOnlineSlave();
-        ws = s.getWorkspaceRoot();
-        launcher = s.createLauncher(listener);
         DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
         BlockingQueue<Integer> status = new LinkedBlockingQueue<>();
@@ -203,6 +318,8 @@ public class BourneShellScriptTest {
         assertEquals(0, status.take().intValue());
         assertEquals("result\n", output.take());
         assertEquals("[+ echo result]", lines.toString());
+        c.cleanup(ws);
+        assertThat(getZombies(), isEmptyString());
     }
     static class MockHandler extends Handler {
         final BlockingQueue<Integer> status;
@@ -235,7 +352,7 @@ public class BourneShellScriptTest {
     }
 
     @Test public void shebang() throws Exception {
-        setGlobalInterpreter("/bin/false"); // Should be overridden
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("/bin/false"); // Should be overridden
         Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -247,15 +364,7 @@ public class BourneShellScriptTest {
 
     @Issue("JENKINS-50902")
     @Test public void configuredInterpreter() throws Exception {
-        // Run script inside the container as this is system dependent
-        DumbSlave node = createDockerSlave(dockerSlim.get(), SlimFixture.SLIM_JAVA_LOCATION);
-        j.jenkins.addNode(node);
-        j.waitOnline(node);
-        launcher = node.createLauncher(listener);
-        ws = node.getWorkspaceRoot().child("configuredInterpreter");
-        ws.mkdirs();
-
-        setGlobalInterpreter("/bin/bash");
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("/bin/bash");
         String script = "if [ ! -z \"$BASH_VERSION\" ]; then echo 'this is bash'; else echo 'this is not'; fi";
         Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
@@ -266,7 +375,7 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
 
         // Find it in the PATH
-        setGlobalInterpreter("bash");
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("bash");
         c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         baos = new ByteArrayOutputStream();
@@ -275,7 +384,7 @@ public class BourneShellScriptTest {
         assertThat(baos.toString(), containsString("this is bash"));
         c.cleanup(ws);
 
-        setGlobalInterpreter("no_such_shell");
+        ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("no_such_shell");
         c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         baos = new ByteArrayOutputStream();
@@ -285,53 +394,44 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
-    private void setGlobalInterpreter(String interpreter) {
-        j.jenkins.getInjector().getInstance(Shell.DescriptorImpl.class).setShell(interpreter);
+    /**
+     * Checks if the golang binary outputs to stdout under normal shell execution.
+     * The binary must NOT output to stdout or else it will crash when Jenkins is terminated
+     * unexpectedly.
+     */
+    @Test public void stdout() throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
+        StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
+        String script = String.format("echo hello world");
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, stdoutListener);
+        awaitCompletion(c);
+        assertThat(baos.toString(), isEmptyString());
+        c.cleanup(ws);
     }
 
-    private void awaitCompletion(Controller c) throws IOException, InterruptedException {
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
+    @Issue("JENKINS-58290")
+    @Test public void backgroundLaunch() throws IOException, InterruptedException {
+        int sleepSeconds = -1;
+        switch (platform) {
+            case NATIVE:
+                sleepSeconds = 0;
+                break;
+            case CENTOS:
+            case UBUNTU:
+            case SIMPLE:
+                sleepSeconds = 10;
+                break;
+            case ALPINE:
+            case SLIM:
+                sleepSeconds = 45;
+                break;
+            default:
+                Assert.fail("Unknown enum value: " + platform);
+                break;
         }
-    }
-
-    @Test public void runOnUbuntuDocker() throws Exception {
-        JavaContainer container = dockerUbuntu.get();
-        runOnDocker(createDockerSlave(container, null));
-    }
-
-    @Test public void runOnCentOSDocker() throws Exception {
-        CentOSFixture container = dockerCentOS.get();
-        runOnDocker(createDockerSlave(container, null));
-    }
-
-    @Issue("JENKINS-52847")
-    @Test public void runOnAlpineDocker() throws Exception {
-        AlpineFixture container = dockerAlpine.get();
-        runOnDocker(createDockerSlave(container, null), 45);
-    }
-
-    @Issue("JENKINS-52881")
-    @Test public void runOnSlimDocker() throws Exception {
-        SlimFixture container = dockerSlim.get();
-        runOnDocker(createDockerSlave(container, SlimFixture.SLIM_JAVA_LOCATION), 45);
-    }
-
-    private DumbSlave createDockerSlave(DockerContainer container, String javaPath) throws hudson.model.Descriptor.FormException, IOException {
-        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "", javaPath, null, null));
-    }
-
-    private void runOnDocker(DumbSlave s) throws Exception {
-        runOnDocker(s, 10);
-    }
-
-    private void runOnDocker(DumbSlave s, int sleepSeconds) throws Exception {
-        j.jenkins.addNode(s);
-        j.waitOnline(s);
-        FilePath dockerWS = s.getWorkspaceRoot();
-        Launcher dockerLauncher = s.createLauncher(listener);
         final AtomicReference<Proc> proc = new AtomicReference<>();
-        Launcher decorated = new Launcher.DecoratedLauncher(dockerLauncher) {
+        Launcher decorated = new Launcher.DecoratedLauncher(launcher) {
             @Override public Proc launch(Launcher.ProcStarter starter) throws IOException {
                 Proc delegate = super.launch(starter);
                 assertTrue(proc.compareAndSet(null, delegate));
@@ -340,41 +440,101 @@ public class BourneShellScriptTest {
         };
         String script = String.format("echo hello world; sleep 5; echo long since started; sleep %s", sleepSeconds - 5);
         ByteArrayOutputStream baos;
-        Controller c = new BourneShellScript(script).launch(new EnvVars(), dockerWS, decorated, listener);
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, decorated, listener);
         baos = new ByteArrayOutputStream();
-        while (c.exitStatus(dockerWS, dockerLauncher, listener) == null) {
-            c.writeLog(dockerWS, baos);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            c.writeLog(ws, baos);
             if (baos.toString().contains("long since started")) {
                 assertNotNull(proc.get());
                 assertFalse("JENKINS-58290: wrapper process still running:\n" + baos, proc.get().isAlive());
             }
             Thread.sleep(100);
         }
-        assertEquals(0, c.exitStatus(dockerWS, dockerLauncher, listener).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
-        c.cleanup(dockerWS);
+        c.cleanup(ws);
+        assertThat(getZombies(), isEmptyString());
+    }
+
+    /**
+     * Returns the first zombie process it finds. This method can only be used on tests that launch a script that executes
+     * a `sleep` call and where the end of the `sleep` function also indicates the end of the script.
+     * Additionally, this function cannot be run on the NATIVE platform as the testing conditions are too generic and may be
+     * triggered by some other, unrelated, process.
+     *
+     * @return String `ps` line output of the zombie process found. Empty string otherwise.
+     * @throws InterruptedException
+     * @throws IOException
+     */
+    private String getZombies() throws InterruptedException, IOException {
+        switch(platform) {
+            // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
+            case SIMPLE:
+            // Run only on docker platforms as NATIVE `ps` output cannot guarantee it will detect processes correctly. Just let this test pass.
+            case NATIVE:
+                return "";
+        }
+
+        String psFormat = setPsFormat();
+        String psString = null;
         do {
             Thread.sleep(1000);
-            baos = new ByteArrayOutputStream();
-            try {
-                assertEquals(0, dockerLauncher.launch().cmds("ps", "-e", "-o", "pid,stat,comm").stdout(new TeeOutputStream(baos, System.out)).join());
-            } catch (IOException x) { // no ps? forget this check
-                System.err.println(x);
+            psString = psOut(psFormat);
+        } while (psString.contains(" sleep "));
+
+        // Give some time to see if binary becomes a zombie
+        Thread.sleep(1000);
+        Pattern zombiePattern = Pattern.compile(".+ Z .+");
+        psString = psOut(psFormat);
+        Matcher zombieMatcher = zombiePattern.matcher(psString);
+        if (zombieMatcher.find()) {
+            return zombieMatcher.group();
+        } else {
+            return "";
+        }
+    }
+
+    /**
+     * Outputs the result of a `ps` shell call to a string. Useful for debugging.
+     *
+     * @param psFormat String of the column format in which to display the `ps` result
+     * @return String of the `ps` shell call
+     * @throws InterruptedException
+     * @throws IOException
+     */
+    private String psOut(String psFormat) throws InterruptedException, IOException {
+        if (psFormat == null) {
+            psFormat = setPsFormat();
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        assertEquals(0, launcher.launch().cmds("ps", "-e", "-o", psFormat).stdout(new TeeOutputStream(baos, System.out)).join());
+        return baos.toString();
+    }
+
+    /**
+     * Convenience method that will set the `ps -o` column format to a consistent output across *NIX flavors.
+     * The column format is process PID, parent PID, process status, and launch command of the process.
+     *
+     * @return String of the `ps -o` column format
+     */
+    private String setPsFormat() {
+        String cmdCol = null;
+        switch (platform) {
+            case NATIVE:
+                cmdCol = Platform.isDarwin() ? "comm" : "cmd";
                 break;
-            }
-        } while (baos.toString().contains(" sleep "));
-        assertThat("no zombies running", baos.toString(), not(containsString(" Z ")));
-        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+            case ALPINE:
+                cmdCol = "args";
+                break;
+            default:
+                cmdCol = "cmd";
+        }
+        return "pid,ppid,stat," + cmdCol;
     }
 
-    @Test public void runWithCommandLauncher() throws Exception {
-        assumeTrue("Docker required for this test", new Docker().isAvailable());
-        runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
+    private void awaitCompletion(Controller c) throws IOException, InterruptedException {
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
     }
-
-    @Test public void runWithTiniCommandLauncher() throws Exception {
-        assumeTrue("Docker required for this test", new Docker().isAvailable());
-        runOnDocker(new DumbSlave("docker", "/home/jenkins/agent", new SimpleCommandLauncher("docker run -i --rm --name agent --init jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar")));
-    }
-
 }

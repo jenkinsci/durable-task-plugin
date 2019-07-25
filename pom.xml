@@ -22,8 +22,8 @@
     <properties>
         <revision>1.31</revision>
         <changelist>-SNAPSHOT</changelist>
-        <jenkins.version>2.7.3</jenkins.version>
-        <java.level>7</java.level>
+        <jenkins.version>2.121.3</jenkins.version>
+        <java.level>8</java.level>
         <findbugs.failOnError>false</findbugs.failOnError>
     </properties>
     
@@ -56,8 +56,18 @@
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-slaves</artifactId>
-            <version>1.25</version>
+            <version>1.27</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.jenkins-ci</groupId>
+                <artifactId>symbol-annotation</artifactId>
+                <version>1.17</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>
