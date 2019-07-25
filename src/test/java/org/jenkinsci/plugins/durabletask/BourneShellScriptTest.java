@@ -244,9 +244,7 @@ public class BourneShellScriptTest {
         try {
             FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController) new BourneShellScript("sleep 999").launch(new EnvVars("killemall", "true"), ws, launcher, listener);
             Thread.sleep(1000);
-            psOut(null);
             launcher.kill(Collections.singletonMap("killemall", "true"));
-            psOut(null);
             // waiting for launcher to write a termination result before attempting to delete it
             awaitCompletion(c);
             c.getResultFile(ws).delete();
@@ -459,8 +457,7 @@ public class BourneShellScriptTest {
     }
     
     private String getZombies() throws InterruptedException, IOException {
-        // Due to backgrounding, running durable-task in a docker container with init process is guaranteed to leave a zombie. Just let this test pass.
-        // See PR #98 (https://github.com/jenkinsci/durable-task-plugin/pull/98)
+        // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
         if (platform.equals(TestPlatform.SIMPLE)) {
             return "";
         }

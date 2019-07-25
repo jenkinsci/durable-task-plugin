@@ -59,7 +59,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
     
     private static enum OsType {DARWIN, UNIX, WINDOWS, ZOS}
-    
+
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
     
     private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
@@ -150,11 +150,11 @@ public final class BourneShellScript extends FileMonitoringTask {
         
         String arch = ws.act(new getArchitecture());
         List<String> launcherCmd = null;
-        String launcher_binary = LAUNCHER_PREFIX + os.toString() + arch;
-        InputStream launcherStream = DurableTask.class.getResourceAsStream(launcher_binary);
+        String launcherBinary = LAUNCHER_PREFIX + os.toString() + arch;
+        InputStream launcherStream = DurableTask.class.getResourceAsStream(launcherBinary);
         if (launcherStream != null) {
             FilePath controlDir = c.controlDir(ws);
-            FilePath launcherAgent = controlDir.child(launcher_binary);
+            FilePath launcherAgent = controlDir.child(launcherBinary);
             launcherAgent.copyFrom(launcherStream);
             launcherAgent.chmod(0755);
             launcherCmd = binaryLauncherCmd(c, ws, shell,
