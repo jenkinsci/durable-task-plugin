@@ -73,7 +73,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-NATIVE, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM
+    NATIVE, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM
 }
 
 @RunWith(Parameterized.class)
@@ -415,8 +415,6 @@ public class BourneShellScriptTest {
         int sleepSeconds = -1;
         switch (platform) {
             case NATIVE:
-                sleepSeconds = 0;
-                break;
             case CENTOS:
             case UBUNTU:
             case SIMPLE:
@@ -457,9 +455,12 @@ public class BourneShellScriptTest {
     }
 
     private String getZombies() throws InterruptedException, IOException {
-        // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
-        if (platform.equals(TestPlatform.SIMPLE)) {
-            return "";
+        switch (platform) {
+            // Debian slim does not have ps
+            case SLIM:
+            // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
+            case SIMPLE:
+                return "";
         }
 
         String psFormat = setPsFormat();
