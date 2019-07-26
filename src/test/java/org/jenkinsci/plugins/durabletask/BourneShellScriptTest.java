@@ -468,6 +468,8 @@ public class BourneShellScriptTest {
      */
     private String getZombies() throws InterruptedException, IOException {
         switch(platform) {
+            // debian slim image does not contain PS
+            case SLIM:
             // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
             case SIMPLE:
             // Run only on docker platforms as NATIVE `ps` output cannot guarantee it will detect processes correctly. Just let this test pass.
