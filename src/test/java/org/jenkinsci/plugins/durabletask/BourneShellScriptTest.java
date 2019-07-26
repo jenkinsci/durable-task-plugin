@@ -73,7 +73,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-NATIVE, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM
+    LOCAL, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM
 }
 
 @RunWith(Parameterized.class)
@@ -112,7 +112,7 @@ public class BourneShellScriptTest {
 
     @Before public void prepareAgentForPlatform() throws Exception {
         switch (platform) {
-            case NATIVE:
+            case LOCAL:
                 s = j.createOnlineSlave();
                 break;
             case SLIM:
@@ -191,7 +191,7 @@ public class BourneShellScriptTest {
     @Test public void smokeTest() throws Exception {
         int sleepSeconds = -1;
         switch (platform) {
-            case NATIVE:
+            case LOCAL:
                 sleepSeconds = 0;
                 break;
             case CENTOS:
@@ -414,7 +414,7 @@ public class BourneShellScriptTest {
     @Test public void backgroundLaunch() throws IOException, InterruptedException {
         int sleepSeconds = -1;
         switch (platform) {
-            case NATIVE:
+            case LOCAL:
                 sleepSeconds = 0;
                 break;
             case CENTOS:
@@ -457,9 +457,12 @@ public class BourneShellScriptTest {
     }
 
     private String getZombies() throws InterruptedException, IOException {
-        // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
-        if (platform.equals(TestPlatform.SIMPLE)) {
-            return "";
+        switch (platform) {
+            // Debian slim does not have ps
+            case SLIM:
+            // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
+            case SIMPLE:
+                return "";
         }
 
         String psFormat = setPsFormat();
@@ -506,7 +509,7 @@ public class BourneShellScriptTest {
     private String setPsFormat() {
         String cmdCol = null;
         switch (platform) {
-            case NATIVE:
+            case LOCAL:
                 cmdCol = Platform.isDarwin() ? "comm" : "cmd";
                 break;
             case ALPINE:
