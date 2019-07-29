@@ -74,7 +74,7 @@
             <id>generate-binaries-profile</id>
             <activation>
                 <property>
-                    <name>SKIP_BINARY_GENERATION</name>
+                    <name>${env.SKIP_BINARY_GENERATION}</name>
                     <value>!true</value>
                 </property>
             </activation>
