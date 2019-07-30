@@ -57,13 +57,18 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
 
+import org.jenkinsci.test.acceptance.docker.Docker;
 import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
-import org.junit.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import  org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -89,8 +94,12 @@ public class BourneShellScriptTest {
     @Rule public DockerRule<AlpineFixture> dockerAlpine = new DockerRule<>(AlpineFixture.class);
     @Rule public DockerRule<SlimFixture> dockerSlim = new DockerRule<>(SlimFixture.class);
 
-    @BeforeClass public static void unixAndDocker() throws Exception {
+    @BeforeClass public static void unix() throws Exception {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
+    }
+
+    static void assumeDocker() throws Exception {
+        assumeTrue("Docker is available", new Docker().isAvailable());
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         assumeThat("`docker version` could be run", new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}").stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join(), is(0));
         assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
@@ -104,6 +113,7 @@ public class BourneShellScriptTest {
     private FilePath ws;
     private Launcher launcher;
     private static int counter = 0; // used to prevent docker container name-smashing
+    private boolean testExecuted;
 
     public BourneShellScriptTest(TestPlatform platform) throws Exception {
         this.platform = platform;
@@ -111,8 +121,10 @@ public class BourneShellScriptTest {
     }
 
     @Before public void prepareAgentForPlatform() throws Exception {
+        testExecuted = false;
         switch (platform) {
             case NATIVE:
+                testExecuted = true;
                 s = j.createOnlineSlave();
                 break;
             case SLIM:
@@ -120,12 +132,14 @@ public class BourneShellScriptTest {
             case CENTOS:
             case UBUNTU:
             case SIMPLE:
+                assumeDocker();
+                testExecuted = true;
                 s = prepareAgentDocker();
                 j.jenkins.addNode(s);
                 j.waitOnline(s);
                 break;
             default:
-                Assert.fail("Unknown enum value: " + platform);
+                fail("Unknown enum value: " + platform);
                 break;
         }
         ws = s.getWorkspaceRoot().child("ws");
@@ -142,7 +156,7 @@ public class BourneShellScriptTest {
             case SIMPLE:
                 return prepareAgentCommandLauncher();
             default:
-                Assert.fail("Unknown test platform: " + platform);
+                fail("Unknown test platform: " + platform);
                 return null;
         }
     }
@@ -165,7 +179,7 @@ public class BourneShellScriptTest {
                 container = dockerUbuntu.get();
                 break;
             default:
-                Assert.fail("Unknown enum value: " + platform);
+                fail("Unknown enum value: " + platform);
                 break;
         }
         return new DumbSlave("docker",
@@ -184,8 +198,10 @@ public class BourneShellScriptTest {
     }
 
     @After public void agentCleanup() throws IOException, InterruptedException {
-        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
-        j.jenkins.removeNode(s);
+        if (testExecuted) {
+            s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+            j.jenkins.removeNode(s);
+        }
     }
 
     @Test public void smokeTest() throws Exception {
@@ -204,7 +220,7 @@ public class BourneShellScriptTest {
                 sleepSeconds = 45;
                 break;
             default:
-                Assert.fail("Unknown enum value: " + platform);
+                fail("Unknown enum value: " + platform);
                 break;
         }
 
@@ -425,7 +441,7 @@ public class BourneShellScriptTest {
                 sleepSeconds = 45;
                 break;
             default:
-                Assert.fail("Unknown enum value: " + platform);
+                fail("Unknown enum value: " + platform);
                 break;
         }
         final AtomicReference<Proc> proc = new AtomicReference<>();

@@ -68,7 +68,8 @@ public class EncodingTest {
     @ClassRule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
     @BeforeClass public static void unixAndDocker() throws Exception {
-        BourneShellScriptTest.unixAndDocker();
+        BourneShellScriptTest.unix();
+        BourneShellScriptTest.assumeDocker();
     }
 
     private static DumbSlave s;
