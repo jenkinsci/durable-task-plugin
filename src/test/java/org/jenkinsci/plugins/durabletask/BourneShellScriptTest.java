@@ -219,6 +219,7 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
         assertThat(getZombies(), isEmptyString());
     }
+
 /*
     @Test public void stop() throws Exception {
         // Have observed both SIGTERM and SIGCHLD, perhaps depending on which process (the written sh, or sleep) gets the signal first.
@@ -322,6 +323,7 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
         assertThat(getZombies(), isEmptyString());
     }
+*/
     static class MockHandler extends Handler {
         final BlockingQueue<Integer> status;
         final BlockingQueue<String> output;
@@ -341,6 +343,7 @@ public class BourneShellScriptTest {
         }
     }
 
+/*
     @Issue("JENKINS-40734")
     @Test public void envWithShellChar() throws Exception {
         Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
@@ -395,6 +398,7 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 */
+
     /**
      * Checks if the golang binary outputs to stdout under normal shell execution.
      * The binary must NOT output to stdout or else it will crash when Jenkins is terminated unexpectedly.
