@@ -188,6 +188,7 @@ public class BourneShellScriptTest {
         j.jenkins.removeNode(s);
     }
 
+    /*
     @Test public void smokeTest() throws Exception {
         int sleepSeconds = -1;
         switch (platform) {
@@ -213,14 +214,12 @@ public class BourneShellScriptTest {
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
-        System.out.println("output: " + baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
         assertThat(getZombies(), isEmptyString());
     }
 
-/*
     @Test public void stop() throws Exception {
         // Have observed both SIGTERM and SIGCHLD, perhaps depending on which process (the written sh, or sleep) gets the signal first.
         // TODO without the `trap … EXIT` the other handlers do not seem to get run, and we get exit code 143 (~ uncaught SIGTERM). Why?
@@ -419,8 +418,6 @@ public class BourneShellScriptTest {
         int sleepSeconds = -1;
         switch (platform) {
             case NATIVE:
-                sleepSeconds = 0;
-                break;
             case CENTOS:
             case UBUNTU:
             case SIMPLE:
