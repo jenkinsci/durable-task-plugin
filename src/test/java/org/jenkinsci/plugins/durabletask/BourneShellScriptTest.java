@@ -213,12 +213,13 @@ public class BourneShellScriptTest {
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
+        System.out.println("output: " + baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
         assertThat(getZombies(), isEmptyString());
     }
-
+/*
     @Test public void stop() throws Exception {
         // Have observed both SIGTERM and SIGCHLD, perhaps depending on which process (the written sh, or sleep) gets the signal first.
         // TODO without the `trap … EXIT` the other handlers do not seem to get run, and we get exit code 143 (~ uncaught SIGTERM). Why?
@@ -393,22 +394,21 @@ public class BourneShellScriptTest {
         assertThat(baos.toString(), containsString("no_such_shell"));
         c.cleanup(ws);
     }
-
+*/
     /**
      * Checks if the golang binary outputs to stdout under normal shell execution.
-     * The binary must NOT output to stdout or else it will crash when Jenkins is terminated
-     * unexpectedly.
+     * The binary must NOT output to stdout or else it will crash when Jenkins is terminated unexpectedly.
      */
-    @Test public void stdout() throws Exception {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
-        StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
-        String script = String.format("echo hello world");
-        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, stdoutListener);
-        awaitCompletion(c);
-        assertThat(baos.toString(), isEmptyString());
-        c.cleanup(ws);
-    }
+//    @Test public void stdout() throws Exception {
+//        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+//        TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
+//        StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
+//        String script = String.format("echo hello world");
+//        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, stdoutListener);
+//        awaitCompletion(c);
+//        assertThat(baos.toString(), isEmptyString());
+//        c.cleanup(ws);
+//    }
 
     @Issue("JENKINS-58290")
     @Test public void backgroundLaunch() throws IOException, InterruptedException {
