@@ -192,6 +192,8 @@ public class BourneShellScriptTest {
         int sleepSeconds = -1;
         switch (platform) {
             case NATIVE:
+                sleepSeconds = 0;
+                break;
             case CENTOS:
             case UBUNTU:
             case SIMPLE:
@@ -413,8 +415,6 @@ public class BourneShellScriptTest {
         int sleepSeconds = -1;
         switch (platform) {
             case NATIVE:
-                sleepSeconds = 0;
-                break;
             case CENTOS:
             case UBUNTU:
             case SIMPLE:
