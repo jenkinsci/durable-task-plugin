@@ -24,6 +24,11 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import com.cloudbees.plugins.credentials.Credentials;
+import com.cloudbees.plugins.credentials.CredentialsScope;
+import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
+import com.cloudbees.plugins.credentials.domains.Domain;
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
@@ -35,6 +40,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.BlockingQueue;
@@ -81,7 +87,10 @@ public class EncodingTest {
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
         JavaContainer container = dockerUbuntu.create();
-        s = new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "-Dfile.encoding=ISO-8859-1"));
+        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
+        SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
+        sshLauncher.setJvmOptions("-Dfile.encoding=ISO-8859-1");
+        s = new DumbSlave("docker", "/home/test", sshLauncher);
         r.jenkins.addNode(s);
         r.waitOnline(s);
         assertEquals("ISO-8859-1", s.getChannel().call(new DetectCharset()));

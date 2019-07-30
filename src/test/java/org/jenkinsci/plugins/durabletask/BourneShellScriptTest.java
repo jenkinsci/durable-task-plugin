@@ -24,6 +24,11 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import com.cloudbees.plugins.credentials.Credentials;
+import com.cloudbees.plugins.credentials.CredentialsScope;
+import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
+import com.cloudbees.plugins.credentials.domains.Domain;
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import hudson.EnvVars;
 import hudson.ExtensionList;
 import hudson.FilePath;
@@ -182,9 +187,10 @@ public class BourneShellScriptTest {
                 fail("Unknown enum value: " + platform);
                 break;
         }
-        return new DumbSlave("docker",
-                "/home/test",
-                new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "", customJavaPath, null, null));
+        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
+        SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
+        sshLauncher.setJavaPath(customJavaPath);
+        return new DumbSlave("docker", "/home/test", sshLauncher);
     }
 
     private Slave prepareAgentCommandLauncher() throws Exception{
