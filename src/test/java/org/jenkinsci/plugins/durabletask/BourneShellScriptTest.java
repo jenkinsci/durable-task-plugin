@@ -450,6 +450,7 @@ public class BourneShellScriptTest {
             }
             Thread.sleep(100);
         }
+        System.out.println("output: " + baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
