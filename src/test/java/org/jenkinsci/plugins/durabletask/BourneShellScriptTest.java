@@ -73,7 +73,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    SIMPLE, ALPINE, NATIVE, CENTOS, UBUNTU, SLIM
+    NATIVE, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM
 }
 
 @RunWith(Parameterized.class)
@@ -192,8 +192,6 @@ public class BourneShellScriptTest {
         int sleepSeconds = -1;
         switch (platform) {
             case NATIVE:
-                sleepSeconds = 0;
-                break;
             case CENTOS:
             case UBUNTU:
             case SIMPLE:
