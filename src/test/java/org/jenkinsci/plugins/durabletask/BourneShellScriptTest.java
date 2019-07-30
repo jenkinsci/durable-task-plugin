@@ -24,6 +24,11 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import com.cloudbees.plugins.credentials.Credentials;
+import com.cloudbees.plugins.credentials.CredentialsScope;
+import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
+import com.cloudbees.plugins.credentials.domains.Domain;
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
@@ -323,7 +328,10 @@ public class BourneShellScriptTest {
     }
 
     private DumbSlave createDockerSlave(DockerContainer container, String javaPath) throws hudson.model.Descriptor.FormException, IOException {
-        return new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "", javaPath, null, null));
+        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
+        SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
+        sshLauncher.setJavaPath(javaPath);
+        return new DumbSlave("docker", "/home/test", sshLauncher);
     }
 
     private void runOnDocker(DumbSlave s) throws Exception {
