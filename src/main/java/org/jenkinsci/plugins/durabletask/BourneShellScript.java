@@ -79,7 +79,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     // TODO use SystemProperties if and when unrestricted
     private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
 
-    private final String LAUNCHER_PREFIX = "heartbeat-launcher-";
+    private final String LAUNCHER_PREFIX = "durable_task_monitor_";
 
     /**
      * Seconds between heartbeat checks, where we check to see if

@@ -73,7 +73,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM, UBUNTU_NO_BINARY
+    NATIVE, ALPINE, CENTOS, UBUNTU, SLIM, SIMPLE, UBUNTU_NO_BINARY
 }
 
 @RunWith(Parameterized.class)
@@ -471,7 +471,7 @@ public class BourneShellScriptTest {
                 break;
             default:
                 exitString = "sh -xe " + ws.getRemote();
-                zombieString = ".+Z[s|\\s]\\s*\\[heart.+";
+                zombieString = ".+Z[s|\\s]\\s*\\[durable.+";
         }
 
         String psFormat = setPsFormat();
