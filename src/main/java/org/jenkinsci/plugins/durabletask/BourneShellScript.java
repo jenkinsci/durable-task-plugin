@@ -46,6 +46,8 @@ import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import hudson.remoting.VirtualChannel;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.CheckForNull;
 import jenkins.MasterToSlaveFileCallable;
@@ -55,6 +57,9 @@ import com.google.common.io.Files;
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
  */
 public final class BourneShellScript extends FileMonitoringTask {
+
+    @Restricted(NoExternalUse.class)
+    public static boolean FORCE_SHELL_WRAPPER = false;
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
@@ -152,7 +157,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         List<String> launcherCmd = null;
         String launcherBinary = LAUNCHER_PREFIX + os.toString() + arch;
         InputStream launcherStream = DurableTask.class.getResourceAsStream(launcherBinary);
-        if (launcherStream != null) {
+        if ((launcherStream != null) && !FORCE_SHELL_WRAPPER) {
             FilePath controlDir = c.controlDir(ws);
             FilePath launcherAgent = controlDir.child(launcherBinary);
             launcherAgent.copyFrom(launcherStream);
@@ -181,6 +186,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             ps.stdout(listener);
         } else {
             ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
+            LOGGER.log(Level.WARNING,"Durable Task launching wrapper process in the background. An init process must be used to reap the orphaned wrapper process.");
         }
         ps.start();
         return c;

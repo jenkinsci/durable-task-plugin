@@ -73,7 +73,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM
+    NATIVE, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM, UBUNTU_NO_BINARY
 }
 
 @RunWith(Parameterized.class)
@@ -115,6 +115,8 @@ public class BourneShellScriptTest {
             case NATIVE:
                 s = j.createOnlineSlave();
                 break;
+            case UBUNTU_NO_BINARY:
+                BourneShellScript.FORCE_SHELL_WRAPPER = true;
             case SLIM:
             case ALPINE:
             case CENTOS:
@@ -134,16 +136,10 @@ public class BourneShellScriptTest {
 
     private Slave prepareAgentDocker() throws Exception {
         switch(platform) {
-            case SLIM:
-            case ALPINE:
-            case CENTOS:
-            case UBUNTU:
-                return prepareDockerPlatforms();
             case SIMPLE:
                 return prepareAgentCommandLauncher();
             default:
-                Assert.fail("Unknown test platform: " + platform);
-                return null;
+                return prepareDockerPlatforms();
         }
     }
 
@@ -162,6 +158,7 @@ public class BourneShellScriptTest {
                 container = dockerCentOS.get();
                 break;
             case UBUNTU:
+            case UBUNTU_NO_BINARY:
                 container = dockerUbuntu.get();
                 break;
             default:
@@ -186,6 +183,9 @@ public class BourneShellScriptTest {
     @After public void agentCleanup() throws IOException, InterruptedException {
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
         j.jenkins.removeNode(s);
+        if (platform.equals(TestPlatform.UBUNTU_NO_BINARY)) {
+            BourneShellScript.FORCE_SHELL_WRAPPER = false;
+        }
     }
 
     @Test public void smokeTest() throws Exception {
@@ -196,6 +196,7 @@ public class BourneShellScriptTest {
                 break;
             case CENTOS:
             case UBUNTU:
+            case UBUNTU_NO_BINARY:
             case SIMPLE:
                 sleepSeconds = 10;
                 break;
@@ -417,6 +418,7 @@ public class BourneShellScriptTest {
             case NATIVE:
             case CENTOS:
             case UBUNTU:
+            case UBUNTU_NO_BINARY:
             case SIMPLE:
                 sleepSeconds = 10;
                 break;
@@ -455,12 +457,21 @@ public class BourneShellScriptTest {
     }
 
     private String getZombies() throws InterruptedException, IOException {
+        String exitString = null;
+        String zombieString = null;
         switch (platform) {
             // Debian slim does not have ps
             case SLIM:
             // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
             case SIMPLE:
                 return "";
+            case UBUNTU_NO_BINARY:
+                exitString = " sleep ";
+                zombieString = ".+ Z .+";
+                break;
+            default:
+                exitString = "sh -xe " + ws.getRemote();
+                zombieString = ".+Z[s|\\s]\\s*\\[heart.+";
         }
 
         String psFormat = setPsFormat();
@@ -468,11 +479,11 @@ public class BourneShellScriptTest {
         do {
             Thread.sleep(1000);
             psString = psOut(psFormat);
-        } while (psString.contains("sh -xe " + ws.getRemote()));
+        } while (psString.contains(exitString));
 
         // Give some time to see if binary becomes a zombie
         Thread.sleep(1000);
-        Pattern zombiePattern = Pattern.compile(".+Z[s|\\s]\\s*\\[heart.+");
+        Pattern zombiePattern = Pattern.compile(zombieString);
         Matcher zombieMatcher = zombiePattern.matcher(psOut(psFormat));
         if (zombieMatcher.find()) {
             return zombieMatcher.group();
