@@ -39,7 +39,6 @@ import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.DumbSlave;
-import hudson.slaves.OfflineCause;
 import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
@@ -47,7 +46,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
@@ -113,7 +111,6 @@ public class BourneShellScriptTest {
     private Slave s;
     private FilePath ws;
     private Launcher launcher;
-    private static int counter = 0; // used to prevent docker container name-smashing
 
     public BourneShellScriptTest(TestPlatform platform) throws Exception {
         this.platform = platform;
@@ -189,7 +186,6 @@ public class BourneShellScriptTest {
 
     @After public void agentCleanup() throws IOException, InterruptedException {
         if (s != null) {
-            s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
             j.jenkins.removeNode(s);
         }
     }
@@ -396,17 +392,6 @@ public class BourneShellScriptTest {
         c.writeLog(ws, new TeeOutputStream(baos, System.out));
         assertNotEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("no_such_shell"));
-        c.cleanup(ws);
-    }
-
-    @Test public void noStdout() throws Exception {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
-        StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
-        String script = String.format("echo hello world");
-        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, stdoutListener);
-        awaitCompletion(c);
-        assertThat(baos.toString(), isEmptyString());
         c.cleanup(ws);
     }
 
