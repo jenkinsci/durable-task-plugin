@@ -50,7 +50,6 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
@@ -83,14 +82,14 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, SIMPLE, ALPINE, CENTOS, UBUNTU, SLIM
+    NATIVE, ALPINE, CENTOS, UBUNTU, SLIM, NO_INIT
 }
 
 @RunWith(Parameterized.class)
 public class BourneShellScriptTest {
     @Parameters(name = "{index}: {0}")
-    public static Iterable<? extends Object> data() {
-        return EnumSet.allOf(TestPlatform.class);
+    public static Object[] data() {
+        return TestPlatform.values();
     }
 
     @Rule public JenkinsRule j = new JenkinsRule();
@@ -136,7 +135,7 @@ public class BourneShellScriptTest {
             case ALPINE:
             case CENTOS:
             case UBUNTU:
-            case SIMPLE:
+            case NO_INIT:
                 assumeDocker();
                 testExecuted = true;
                 s = prepareAgentDocker();
@@ -158,8 +157,10 @@ public class BourneShellScriptTest {
             case CENTOS:
             case UBUNTU:
                 return prepareDockerPlatforms();
-            case SIMPLE:
-                return prepareAgentCommandLauncher();
+            case NO_INIT:
+                return new DumbSlave("docker",
+                            "/home/jenkins/agent",
+                            new SimpleCommandLauncher("docker run -i --rm jenkins/slave:3.29-2 java -jar /usr/share/jenkins/slave.jar"));
             default:
                 fail("Unknown test platform: " + platform);
                 return null;
@@ -193,16 +194,6 @@ public class BourneShellScriptTest {
         return new DumbSlave("docker", "/home/test", sshLauncher);
     }
 
-    private Slave prepareAgentCommandLauncher() throws Exception{
-        // counter used to prevent name smashing when a docker container from the previous test is
-        // still shutting down but the new test container is being spun up. Seems more ideal than adding a wait.
-        String name = "docker";
-        String agent = "agent-" + counter++;
-        String remoteFs = "/home/jenkins/" + agent;
-        String dockerRunSimple = String.format("docker run -i --rm --name %s jenkinsci/slave:3.7-1 java -jar /usr/share/jenkins/slave.jar", agent);
-        return new DumbSlave(name, remoteFs, new SimpleCommandLauncher(dockerRunSimple));
-    }
-
     @After public void agentCleanup() throws IOException, InterruptedException {
         if (testExecuted) {
             s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
@@ -211,14 +202,14 @@ public class BourneShellScriptTest {
     }
 
     @Test public void smokeTest() throws Exception {
-        int sleepSeconds = -1;
+        int sleepSeconds;
         switch (platform) {
             case NATIVE:
                 sleepSeconds = 0;
                 break;
             case CENTOS:
             case UBUNTU:
-            case SIMPLE:
+            case NO_INIT:
                 sleepSeconds = 10;
                 break;
             case ALPINE:
@@ -226,8 +217,7 @@ public class BourneShellScriptTest {
                 sleepSeconds = 45;
                 break;
             default:
-                fail("Unknown enum value: " + platform);
-                break;
+                throw new AssertionError(platform);
         }
 
         String script = String.format("echo hello world; sleep %s", sleepSeconds);
@@ -416,12 +406,7 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
-    /**
-     * Checks if the golang binary outputs to stdout under normal shell execution.
-     * The binary must NOT output to stdout or else it will crash when Jenkins is terminated
-     * unexpectedly.
-     */
-    @Test public void stdout() throws Exception {
+    @Test public void noStdout() throws Exception {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
         StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
@@ -434,12 +419,12 @@ public class BourneShellScriptTest {
 
     @Issue("JENKINS-58290")
     @Test public void backgroundLaunch() throws IOException, InterruptedException {
-        int sleepSeconds = -1;
+        int sleepSeconds;
         switch (platform) {
             case NATIVE:
             case CENTOS:
             case UBUNTU:
-            case SIMPLE:
+            case NO_INIT:
                 sleepSeconds = 10;
                 break;
             case ALPINE:
@@ -447,8 +432,7 @@ public class BourneShellScriptTest {
                 sleepSeconds = 45;
                 break;
             default:
-                fail("Unknown enum value: " + platform);
-                break;
+                throw new AssertionError(platform);
         }
         final AtomicReference<Proc> proc = new AtomicReference<>();
         Launcher decorated = new Launcher.DecoratedLauncher(launcher) {
@@ -492,7 +476,7 @@ public class BourneShellScriptTest {
             // debian slim image does not contain PS
             case SLIM:
             // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
-            case SIMPLE:
+            case NO_INIT:
             // Run only on docker platforms as NATIVE `ps` output cannot guarantee it will detect processes correctly. Just let this test pass.
             case NATIVE:
                 return "";
