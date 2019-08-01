@@ -117,7 +117,6 @@ public class BourneShellScriptTest {
     private FilePath ws;
     private Launcher launcher;
     private static int counter = 0; // used to prevent docker container name-smashing
-    private boolean testExecuted;
 
     public BourneShellScriptTest(TestPlatform platform) throws Exception {
         this.platform = platform;
@@ -125,10 +124,8 @@ public class BourneShellScriptTest {
     }
 
     @Before public void prepareAgentForPlatform() throws Exception {
-        testExecuted = false;
         switch (platform) {
             case NATIVE:
-                testExecuted = true;
                 s = j.createOnlineSlave();
                 break;
             case SLIM:
@@ -137,7 +134,6 @@ public class BourneShellScriptTest {
             case UBUNTU:
             case NO_INIT:
                 assumeDocker();
-                testExecuted = true;
                 s = prepareAgentDocker();
                 j.jenkins.addNode(s);
                 j.waitOnline(s);
@@ -195,7 +191,7 @@ public class BourneShellScriptTest {
     }
 
     @After public void agentCleanup() throws IOException, InterruptedException {
-        if (testExecuted) {
+        if (s != null) {
             s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
             j.jenkins.removeNode(s);
         }
