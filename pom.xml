@@ -18,15 +18,18 @@
             <url>https://opensource.org/licenses/MIT</url>
         </license>
     </licenses>
-    
+
     <properties>
         <revision>1.31</revision>
         <changelist>-SNAPSHOT</changelist>
         <jenkins.version>2.150.1</jenkins.version>
         <java.level>8</java.level>
         <findbugs.failOnError>false</findbugs.failOnError>
+        <binary.src>src/main/go/org/jenkinsci/plugins/durabletask</binary.src>
+        <binary.dockerimage>hbl-builder</binary.dockerimage>
+        <binary.prefix>heartbeat-launcher</binary.prefix>
     </properties>
-    
+
     <repositories>
         <repository>
             <id>repo.jenkins-ci.org</id>
@@ -69,4 +72,42 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+    <profiles>
+        <profile>
+            <id>generate-binaries-profile</id>
+            <activation>
+                <property>
+                    <name>env.SKIP_BINARY_GENERATION</name>
+                    <value>!true</value>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>1.6.0</version>
+                        <configuration>
+                            <executable>${binary.src}/generate-binaries.sh</executable>
+                            <workingDirectory>${binary.src}</workingDirectory>
+                            <arguments>
+                                <argument>${revision}</argument>
+                                <argument>${project.basedir}/${binary.src}</argument>
+                                <argument>${project.build.directory}/classes/org/jenkinsci/plugins/durabletask</argument>
+                            </arguments>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>docker-generate-binaries</id>
+                                <phase>generate-resources</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
