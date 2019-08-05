@@ -473,6 +473,7 @@ public abstract class FileMonitoringTask extends DurableTask {
             this.handler = handler;
             this.listener = listener;
             cs = FileMonitoringController.transcodingCharset(controller.charset);
+            LOGGER.log(Level.FINE, "remote transcoding charset: {0}", cs);
         }
 
         @Override public void run() {
@@ -491,7 +492,9 @@ public abstract class FileMonitoringTask extends DurableTask {
                         InputStream locallyEncodedStream = Channels.newInputStream(ch.position(lastLocation));
                         InputStream utf8EncodedStream = cs == null ? locallyEncodedStream : new ReaderInputStream(new InputStreamReader(locallyEncodedStream, cs), StandardCharsets.UTF_8);
                         handler.output(utf8EncodedStream);
-                        lastLocationFile.write(Long.toString(ch.position()), null);
+                        long newLocation = ch.position();
+                        lastLocationFile.write(Long.toString(newLocation), null);
+                        LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, logFile});
                     }
                 }
                 if (exitStatus != null) {
@@ -501,6 +504,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     } else {
                         output = null;
                     }
+                    LOGGER.log(Level.FINE, "exiting with code {0}", exitStatus);
                     handler.exited(exitStatus, output);
                     controller.cleanup(workspace);
                 } else {
