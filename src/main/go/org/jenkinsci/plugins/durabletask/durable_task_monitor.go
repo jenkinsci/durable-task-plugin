@@ -1,3 +1,27 @@
+/*
+ * The MIT License
+ *
+ * Copyright 2019 CloudBees, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 package main
 
 import (
@@ -42,13 +66,15 @@ func loggerIfErr(logger *log.Logger, err error) bool {
 	return false
 }
 
-// Catch a termination signal to allow for a graceful exit (i.e. no zombies)
+// Catch termination signals to allow for a graceful exit (i.e. no zombies)
+// Only for this process, does not catch any signals to the launched script.
 func signalCatcher(sigChan chan os.Signal) {
 	for sig := range sigChan {
 		mainLogger.Printf("(sig catcher) caught: %v\n", sig)
 	}
 }
 
+// Launches the script in a new session and waits for its completion.
 func launcher(wg *sync.WaitGroup, exitChan chan bool, cookieName string, cookieVal string,
 	interpreter string, scriptPath string, resultPath string, outputPath string) {
 
@@ -116,6 +142,7 @@ func exitLauncher(exitCode int, resultPath string) {
 	launchLogger.Println("done")
 }
 
+// Touches log file while launched script is still active
 func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 	controlDir string, resultPath string, logPath string) {
 
@@ -147,6 +174,9 @@ func heartbeat(wg *sync.WaitGroup, exitChan chan bool,
 	}
 }
 
+// Launches a script in a new session and monitors its running status. This program should
+// survive the termination of its launching process with or without the -daemon flag. No part of this
+// program should output to stdout/stderr or else it can terminate when its parent process has terminated.
 func main() {
 	var controlDir, resultPath, logPath, cookieName, cookieVal, scriptPath, interpreter, outputPath string
 	var debug, daemon bool
@@ -169,7 +199,7 @@ func main() {
 	flag.StringVar(&interpreter, shellFlag, "", "(optional) interpreter to use")
 	flag.StringVar(&outputPath, outputFlag, "", "(optional) if recording output, full path of the output file")
 	flag.BoolVar(&debug, debugFlag, false, "noisy output to log")
-	flag.BoolVar(&daemon, daemonFlag, false, "Free binary from parent process")
+	flag.BoolVar(&daemon, daemonFlag, false, "Immediately free binary from parent process")
 	flag.Parse()
 
 	// Validate that the required flags were all command-line defined

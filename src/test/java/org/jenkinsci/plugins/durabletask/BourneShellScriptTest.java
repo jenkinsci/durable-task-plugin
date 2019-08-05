@@ -78,7 +78,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, ALPINE, CENTOS, UBUNTU, SLIM, NO_INIT, UBUNTU_NO_BINARY
+    NATIVE, ALPINE, UBUNTU_NO_BINARY, CENTOS, UBUNTU, SLIM, NO_INIT//, UBUNTU_NO_BINARY
 }
 
 @RunWith(Parameterized.class)
@@ -190,9 +190,7 @@ public class BourneShellScriptTest {
         if (s != null) {
             j.jenkins.removeNode(s);
         }
-        if (BourneShellScript.FORCE_SHELL_WRAPPER) {
-            BourneShellScript.FORCE_SHELL_WRAPPER = false;
-        }
+        BourneShellScript.FORCE_SHELL_WRAPPER = false;
     }
 
     @Test public void smokeTest() throws Exception {

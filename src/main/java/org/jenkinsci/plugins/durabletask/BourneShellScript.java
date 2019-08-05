@@ -59,7 +59,7 @@ import com.google.common.io.Files;
 public final class BourneShellScript extends FileMonitoringTask {
 
     @Restricted(NoExternalUse.class)
-    public static boolean FORCE_SHELL_WRAPPER = false;
+    public static boolean FORCE_SHELL_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".FORCE_SHELL_WRAPPER");
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
@@ -133,50 +133,38 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         final Jenkins jenkins = Jenkins.getInstance();
         String shell = null;
-        String interpreter = "";
         if (!script.startsWith("#!")) {
             shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
             if (shell == null) {
                 // Do not use getShellOrDefault, as that assumes that the filesystem layout of the agent matches that seen from a possibly decorated launcher.
                 shell = "sh";
             }
-            interpreter = "'" + shell + "' -xe ";
         } else {
             shf.chmod(0755);
         }
 
         String scriptPath = shf.getRemote();
-        if (os == OsType.WINDOWS) { // JENKINS-40255
-            scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
-        }
 
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
         String arch = ws.act(new getArchitecture());
-        List<String> launcherCmd = null;
-        String launcherBinary = LAUNCHER_PREFIX + os.toString() + arch;
-        InputStream launcherStream = DurableTask.class.getResourceAsStream(launcherBinary);
-        if ((launcherStream != null) && !FORCE_SHELL_WRAPPER) {
-            FilePath controlDir = c.controlDir(ws);
-            FilePath launcherAgent = controlDir.child(launcherBinary);
-            launcherAgent.copyFrom(launcherStream);
-            launcherAgent.chmod(0755);
-            launcherCmd = binaryLauncherCmd(c, ws, shell,
-                                            controlDir.getRemote(),
-                                            launcherAgent.getRemote(),
-                                            scriptPath,
-                                            cookieValue,
-                                            cookieVariable);
-        } else {
-            String scriptString = scriptLauncherCmd(c, ws, interpreter, scriptPath, cookieValue, cookieVariable);
-            scriptString = scriptString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
-            launcherCmd = new ArrayList<>();
-            if (LAUNCH_DIAGNOSTICS) {
-                launcherCmd.addAll(Arrays.asList("sh", "-c", scriptString));
+        List<String> launcherCmd;
+        String launcherBinary = LAUNCHER_PREFIX + os.toString().toLowerCase() + arch;
+        try (InputStream launcherStream = DurableTask.class.getResourceAsStream(launcherBinary)) {
+            if ((launcherStream != null) && !FORCE_SHELL_WRAPPER) {
+                FilePath controlDir = c.controlDir(ws);
+                FilePath launcherAgent = controlDir.child(launcherBinary);
+                launcherAgent.copyFrom(launcherStream);
+                launcherAgent.chmod(0755);
+                launcherCmd = binaryLauncherCmd(c, ws, shell,
+                        controlDir.getRemote(),
+                        launcherAgent.getRemote(),
+                        scriptPath,
+                        cookieValue,
+                        cookieVariable);
             } else {
-                // JENKINS-58290: launch in the background. Also close stdout/err so docker-exec and the like do not wait.
-                launcherCmd.addAll(Arrays.asList("sh", "-c", "(" + scriptString + ") >&- 2>&- &"));
+                launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
             }
         }
 
@@ -218,34 +206,54 @@ public final class BourneShellScript extends FileMonitoringTask {
         return cmd;
     }
 
-    private String scriptLauncherCmd(ShellController c, FilePath ws, String interpreter, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
-        String cmd;
+    private List<String> scriptLauncherCmd(ShellController c, FilePath ws, String shell, OsType os, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+        String cmdString;
         FilePath logFile = c.getLogFile(ws);
         FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
+        String interpreter = "";
+
+        if (!script.startsWith("#!")) {
+            interpreter = "'" + shell + "' -xe ";
+        }
+        if (os == OsType.WINDOWS) { // JENKINS-40255
+            scriptPath = scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
+        }
         if (capturingOutput) {
-            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                                controlDir,
-                                resultFile,
-                                logFile,
-                                cookieValue,
-                                cookieVariable,
-                                interpreter,
-                                scriptPath,
-                                c.getOutputFile(ws),
-                                logFile,
-                                resultFile, resultFile, resultFile);
+            cmdString = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                                      controlDir,
+                                      resultFile,
+                                      logFile,
+                                      cookieValue,
+                                      cookieVariable,
+                                      interpreter,
+                                      scriptPath,
+                                      c.getOutputFile(ws),
+                                      logFile,
+                                      resultFile, resultFile, resultFile);
         } else {
-            cmd = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                                controlDir,
-                                resultFile,
-                                logFile,
-                                cookieValue,
-                                cookieVariable,
-                                interpreter,
-                                scriptPath,
-                                logFile,
-                                resultFile, resultFile, resultFile);
+            cmdString = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                                      controlDir,
+                                      resultFile,
+                                      logFile,
+                                      cookieValue,
+                                      cookieVariable,
+                                      interpreter,
+                                      scriptPath,
+                                      logFile,
+                                      resultFile, resultFile, resultFile);
+        }
+
+        cmdString = cmdString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+        List<String> cmd = new ArrayList<>();
+        if (os != OsType.DARWIN) { // JENKINS-25848
+            cmd.add("nohup");
+        }
+        if (LAUNCH_DIAGNOSTICS) {
+            cmd.addAll(Arrays.asList("sh", "-c", cmdString));
+        } else {
+            // JENKINS-58290: launch in the background. Also close stdout/err so docker-exec and the like do not wait.
+            cmd.addAll(Arrays.asList("sh", "-c", "(" + cmdString + ") >&- 2>&- &"));
         }
         return cmd;
     }
