@@ -174,7 +174,6 @@ public final class BourneShellScript extends FileMonitoringTask {
             ps.stdout(listener);
         } else {
             ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
-            LOGGER.log(Level.WARNING,"Durable Task launching wrapper process in the background. An init process must be used to reap the orphaned wrapper process.");
         }
         ps.start();
         return c;
