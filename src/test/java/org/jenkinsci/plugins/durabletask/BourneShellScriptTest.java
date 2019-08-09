@@ -78,7 +78,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, ALPINE, UBUNTU_NO_BINARY, CENTOS, UBUNTU, SLIM, NO_INIT//, UBUNTU_NO_BINARY
+    NATIVE, ALPINE, CENTOS, UBUNTU, SLIM, NO_INIT, UBUNTU_NO_BINARY
 }
 
 @RunWith(Parameterized.class)
@@ -221,7 +221,7 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     @Test public void stop() throws Exception {
@@ -240,7 +240,7 @@ public class BourneShellScriptTest {
         assertTrue(log.contains("sleep 999"));
         assertTrue(log.contains("got SIG"));
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     @Test public void reboot() throws Exception {
@@ -264,7 +264,7 @@ public class BourneShellScriptTest {
         } finally {
             BourneShellScript.HEARTBEAT_CHECK_INTERVAL = orig;
         }
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     @Test public void justSlow() throws Exception {
@@ -273,7 +273,7 @@ public class BourneShellScriptTest {
         c.writeLog(ws, System.out);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     @Issue("JENKINS-27152")
@@ -324,7 +324,7 @@ public class BourneShellScriptTest {
         assertEquals("result\n", output.take());
         assertEquals("[+ echo result]", lines.toString());
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
     static class MockHandler extends Handler {
         final BlockingQueue<Integer> status;
@@ -400,11 +400,12 @@ public class BourneShellScriptTest {
     }
 
     /**
-     * Checks if the golang binary outputs to stdout under normal shell execution.
-     * The binary must NOT output to stdout or else it will crash when Jenkins is terminated
-     * unexpectedly.
+     * Make sure the golang binary does not output to stdout/stderr when running in non-daemon mode,
+     * otherwise binary will crash if Jenkins is terminated unexpectedly.
      */
     @Test public void noStdout() throws Exception {
+        assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        System.setProperty(BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "true");
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
         StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
@@ -413,6 +414,7 @@ public class BourneShellScriptTest {
         awaitCompletion(c);
         assertThat(baos.toString(), isEmptyString());
         c.cleanup(ws);
+        System.clearProperty(BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS");
     }
 
     @Issue("JENKINS-58290")
@@ -456,7 +458,7 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     /**
@@ -466,15 +468,15 @@ public class BourneShellScriptTest {
      * @throws InterruptedException
      * @throws IOException
      */
-    private String getZombies() throws InterruptedException, IOException {
+    private void assertNoZombies() throws InterruptedException, IOException {
         String exitString = null;
         String zombieString = null;
         switch (platform) {
-            // Debian slim does not have ps
             case SLIM:
-            // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
-            case NO_INIT:
-                return "";
+                // Debian slim does not have ps
+//            case NO_INIT:
+                // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
+                assumeTrue(true);
             case UBUNTU_NO_BINARY:
                 exitString = " sleep ";
                 zombieString = ".+ Z .+";
@@ -496,9 +498,7 @@ public class BourneShellScriptTest {
         Pattern zombiePattern = Pattern.compile(zombieString);
         Matcher zombieMatcher = zombiePattern.matcher(psOut(psFormat));
         if (zombieMatcher.find()) {
-            return zombieMatcher.group();
-        } else {
-            return "";
+            fail(zombieMatcher.group());
         }
     }
 

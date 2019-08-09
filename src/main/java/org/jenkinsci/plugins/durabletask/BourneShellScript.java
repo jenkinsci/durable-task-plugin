@@ -34,6 +34,7 @@ import hudson.model.TaskListener;
 import hudson.tasks.Shell;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -63,11 +64,27 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
-    private static enum OsType {DARWIN, UNIX, WINDOWS, ZOS}
-
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
 
     private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
+
+    private enum OsType {
+        DARWIN("darwin"),
+        UNIX("unix"),
+        WINDOWS("windows"),
+        ZOS("zos");
+
+        private final String binaryName;
+        OsType(final String binaryName) {
+            this.binaryName = binaryName;
+        }
+        public String getNameForBinary() {
+            return binaryName;
+        }
+    }
+
+    private enum ArchType {_32, _64}
+
     /**
      * Whether to stream stdio from the wrapper script, which should normally not print any.
      * Copying output from the controller process consumes a Java thread, so we want to avoid it generally.
@@ -115,7 +132,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
-        OsType os = ws.act(new getOsType());
+        AgentInfo agentInfo = ws.act(new getAgentInfo());
+        OsType os = agentInfo.getOs();
         String scriptEncodingCharset = "UTF-8";
         if(os == OsType.ZOS) {
             Charset zOSSystemEncodingCharset = Charset.forName(ws.act(new getIBMzOsEncoding()));
@@ -148,9 +166,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        String arch = ws.act(new getArchitecture());
+        String arch = agentInfo.getArch().toString();
         List<String> launcherCmd;
-        String launcherBinary = LAUNCHER_PREFIX + os.toString().toLowerCase() + arch;
+        String launcherBinary = LAUNCHER_PREFIX + os.getNameForBinary() + arch;
         try (InputStream launcherStream = DurableTask.class.getResourceAsStream(launcherBinary)) {
             if ((launcherStream != null) && !FORCE_SHELL_WRAPPER) {
                 FilePath controlDir = c.controlDir(ws);
@@ -179,7 +197,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
-    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, String shell, String controlDirPath, String binaryPath, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+    private List<String> binaryLauncherCmd(@Nonnull ShellController c, @Nonnull FilePath ws, @Nonnull String shell,
+                                           @Nonnull String controlDirPath, @Nonnull String binaryPath, @Nonnull String scriptPath,
+                                           @Nonnull String cookieValue, @Nonnull String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
         String outputFile = c.getOutputFile(ws).getRemote();
@@ -205,7 +225,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         return cmd;
     }
 
-    private List<String> scriptLauncherCmd(ShellController c, FilePath ws, String shell, OsType os, String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+    private List<String> scriptLauncherCmd(@Nonnull ShellController c, @Nonnull FilePath ws, @Nonnull String shell,
+                                           @Nonnull OsType os, @Nonnull String scriptPath, @Nonnull String cookieValue,
+                                           @Nonnull String cookieVariable) throws IOException, InterruptedException {
         String cmdString;
         FilePath logFile = c.getLogFile(ws);
         FilePath resultFile = c.getResultFile(ws);
@@ -345,6 +367,50 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     }
 
+    private static final class AgentInfo implements Serializable {
+        private final OsType os;
+        private final ArchType arch;
+
+        public AgentInfo(OsType os, ArchType arch) {
+            this.os = os;
+            this.arch = arch;
+        }
+
+        public OsType getOs() {
+            return os;
+        }
+
+        public ArchType getArch() {
+            return arch;
+        }
+    }
+
+    private static final class getAgentInfo extends MasterToSlaveCallable<AgentInfo,RuntimeException> {
+        @Override public AgentInfo call() throws RuntimeException {
+            OsType os;
+            if (Platform.isDarwin()) {
+                os = OsType.DARWIN;
+            } else if (Platform.current() == Platform.WINDOWS) {
+                os = OsType.WINDOWS;
+            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
+                os = OsType.ZOS;
+            } else {
+                os = OsType.UNIX; // Default Value
+            }
+
+            // Note: This will only determine the architecture of the JVM. The result will be "32" or "64".
+            ArchType arch;
+            String bits = System.getProperty("sun.arch.data.model");
+            if (bits.equals("64")) {
+                arch = ArchType._64;
+            } else {
+                arch = ArchType._32; // Default Value
+            }
+
+            return new AgentInfo(os, arch);
+        }
+        private static final long serialVersionUID = 1L;
+    }
     private static final class getOsType extends MasterToSlaveCallable<OsType,RuntimeException> {
         @Override public OsType call() throws RuntimeException {
             if (Platform.isDarwin()) {
@@ -362,7 +428,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private static final class getArchitecture extends MasterToSlaveCallable<String,RuntimeException> {
         @Override public String call() throws RuntimeException {
-            // Note: This will only determine the architecture of the JVM.
+            // Note: This will only determine the architecture of the JVM. The result will be "32" or "64".
             return System.getProperty("sun.arch.data.model");
         }
         private static final long serialVersionUID = 1L;
