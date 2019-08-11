@@ -8,7 +8,7 @@ SRC=$2
 DST=$3
 IMG_NAME="hbl-builder"
 BIN_NAME="durable_task_monitor"
-docker build -t ${IMG_NAME}:${VER} .
+docker build --build-arg PLUGIN_VER=${VER} -t ${IMG_NAME}:${VER} .
 docker run -i --rm \
     --mount type=bind,src=${SRC},dst=/org/jenkinsci/plugins/durabletask \
     ${IMG_NAME}:${VER}

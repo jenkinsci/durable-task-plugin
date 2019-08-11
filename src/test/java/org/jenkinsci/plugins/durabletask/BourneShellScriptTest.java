@@ -44,10 +44,12 @@ import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -58,6 +60,10 @@ import java.util.regex.Pattern;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
+
+import org.apache.maven.model.Model;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.jenkinsci.test.acceptance.docker.Docker;
 import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
@@ -119,6 +125,7 @@ public class BourneShellScriptTest {
     }
 
     @Before public void prepareAgentForPlatform() throws Exception {
+        BourneShellScript.PLUGIN_VERSION = readPluginVersion();
         switch (platform) {
             case NATIVE:
                 s = j.createOnlineSlave();
@@ -461,6 +468,54 @@ public class BourneShellScriptTest {
         assertNoZombies();
     }
 
+    @Test public void caching() throws Exception {
+        assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        String os;
+        if (Platform.isDarwin()) {
+            os = "darwin";
+        } else {
+            os = "unix";
+        }
+
+        String binaryName = "durable_task_monitor_" + BourneShellScript.PLUGIN_VERSION + "_" + os + "_64";
+        FilePath binaryPath = ws.getParent().getParent().child(binaryName);
+        assertFalse(binaryPath.exists());
+
+        BourneShellScript script = new BourneShellScript("echo hello");
+        EnvVars envVars = new EnvVars();
+        Controller c = script.launch(envVars, ws, launcher, listener);
+        awaitCompletion(c);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        Long timeCheck1 = binaryPath.lastModified();
+
+        c = script.launch(envVars, ws, launcher, listener);
+        awaitCompletion(c);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        Long timeCheck2 = binaryPath.lastModified();
+        assertEquals(timeCheck1, timeCheck2);
+
+        binaryPath.delete();
+        binaryPath.touch(Instant.now().toEpochMilli());
+        try {
+            c = script.launch(envVars, ws, launcher, listener);
+        } catch (Exception e) {
+            assertThat(e, instanceOf(IOException.class));
+            assertThat(e.getMessage(), containsString("Cannot run program"));
+        }
+    }
+
+    private static String readPluginVersion() throws IOException {
+        String pluginVersion = null;
+        try (FileReader pomReader = new FileReader("pom.xml")) {
+            MavenXpp3Reader reader = new MavenXpp3Reader();
+            Model model = reader.read(pomReader);
+            pluginVersion = model.getProperties().getProperty("revision");
+        } catch (XmlPullParserException e) {
+            e.printStackTrace();
+        }
+        return pluginVersion;
+    }
+
     /**
      * Returns the first zombie process it finds.
      *
@@ -474,7 +529,7 @@ public class BourneShellScriptTest {
         switch (platform) {
             case SLIM:
                 // Debian slim does not have ps
-//            case NO_INIT:
+            case NO_INIT:
                 // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
                 assumeTrue(true);
             case UBUNTU_NO_BINARY:

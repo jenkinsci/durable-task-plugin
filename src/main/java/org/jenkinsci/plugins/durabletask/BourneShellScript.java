@@ -28,10 +28,13 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Main;
 import hudson.Platform;
 import hudson.Util;
+import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -40,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.jar.Manifest;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.io.File;
@@ -47,6 +51,7 @@ import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import hudson.remoting.VirtualChannel;
+import org.jenkinsci.plugins.workflow.FilePathUtils;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -61,6 +66,9 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     @Restricted(NoExternalUse.class)
     public static boolean FORCE_SHELL_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".FORCE_SHELL_WRAPPER");
+
+    @Restricted(NoExternalUse.class)
+    public static String PLUGIN_VERSION;
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
@@ -96,7 +104,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     // TODO use SystemProperties if and when unrestricted
     private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
 
-    private final String LAUNCHER_PREFIX = "durable_task_monitor_";
+    private static final String LAUNCHER_PREFIX = "durable_task_monitor_";
 
     /**
      * Seconds between heartbeat checks, where we check to see if
@@ -132,7 +140,21 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
-        AgentInfo agentInfo = ws.act(new getAgentInfo());
+
+        final Jenkins jenkins = Jenkins.get();
+
+        Manifest manifest;
+        try (InputStream manifestStream = DurableTask.class.getResourceAsStream("/META-INF/MANIFEST.MF")) {
+            manifest = new Manifest(manifestStream);
+        }
+
+        Node wsNode = jenkins.getNode(FilePathUtils.getNodeName(ws));
+        FilePath nodeRoot = wsNode.getRootPath();
+
+        if (!Main.isUnitTest) {
+            PLUGIN_VERSION = manifest.getMainAttributes().getValue("Plugin-Version");
+        }
+        AgentInfo agentInfo = nodeRoot.act(new GetAgentInfo(nodeRoot, PLUGIN_VERSION));
         OsType os = agentInfo.getOs();
         String scriptEncodingCharset = "UTF-8";
         if(os == OsType.ZOS) {
@@ -149,7 +171,6 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         shf.write(script, scriptEncodingCharset);
 
-        final Jenkins jenkins = Jenkins.getInstance();
         String shell = null;
         if (!script.startsWith("#!")) {
             shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
@@ -166,18 +187,18 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        String arch = agentInfo.getArch().toString();
         List<String> launcherCmd;
-        String launcherBinary = LAUNCHER_PREFIX + os.getNameForBinary() + arch;
-        try (InputStream launcherStream = DurableTask.class.getResourceAsStream(launcherBinary)) {
+        FilePath launcherPath = agentInfo.getLauncherPath();
+        try (InputStream launcherStream = DurableTask.class.getResourceAsStream(launcherPath.getName())) {
             if ((launcherStream != null) && !FORCE_SHELL_WRAPPER) {
                 FilePath controlDir = c.controlDir(ws);
-                FilePath launcherAgent = controlDir.child(launcherBinary);
-                launcherAgent.copyFrom(launcherStream);
-                launcherAgent.chmod(0755);
+                if (!agentInfo.isLauncherCached()) {
+                    launcherPath.copyFrom(launcherStream);
+                    launcherPath.chmod(0755);
+                }
                 launcherCmd = binaryLauncherCmd(c, ws, shell,
                         controlDir.getRemote(),
-                        launcherAgent.getRemote(),
+                        launcherPath.getRemote(),
                         scriptPath,
                         cookieValue,
                         cookieVariable);
@@ -370,10 +391,14 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final class AgentInfo implements Serializable {
         private final OsType os;
         private final ArchType arch;
+        private final FilePath launcherPath;
+        private boolean launcherCached;
 
-        public AgentInfo(OsType os, ArchType arch) {
+        public AgentInfo(OsType os, ArchType arch, FilePath launcherPath) {
             this.os = os;
             this.arch = arch;
+            this.launcherPath = launcherPath;
+            this.launcherCached = false;
         }
 
         public OsType getOs() {
@@ -383,9 +408,29 @@ public final class BourneShellScript extends FileMonitoringTask {
         public ArchType getArch() {
             return arch;
         }
+
+        public FilePath getLauncherPath() {
+            return launcherPath;
+        }
+
+        public void setLauncherAvailability(boolean isCached) {
+            launcherCached = isCached;
+        }
+
+        public boolean isLauncherCached() {
+            return launcherCached;
+        }
     }
 
-    private static final class getAgentInfo extends MasterToSlaveCallable<AgentInfo,RuntimeException> {
+    private static final class GetAgentInfo extends MasterToSlaveCallable<AgentInfo,RuntimeException> {
+        private final FilePath nodeRoot;
+        private String launcherVersion;
+
+        GetAgentInfo(FilePath nodeRoot, String pluginVersion) {
+            this.nodeRoot = nodeRoot;
+            this.launcherVersion = pluginVersion;
+        }
+
         @Override public AgentInfo call() throws RuntimeException {
             OsType os;
             if (Platform.isDarwin()) {
@@ -407,7 +452,15 @@ public final class BourneShellScript extends FileMonitoringTask {
                 arch = ArchType._32; // Default Value
             }
 
-            return new AgentInfo(os, arch);
+            String launcherBinary = LAUNCHER_PREFIX + launcherVersion + "_" + os.getNameForBinary() + arch;
+            FilePath launcherPath = nodeRoot.child(launcherBinary);
+            AgentInfo agentInfo = new AgentInfo(os, arch, launcherPath);
+            try {
+                agentInfo.setLauncherAvailability(launcherPath.exists());
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            }
+            return agentInfo;
         }
         private static final long serialVersionUID = 1L;
     }
