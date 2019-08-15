@@ -248,7 +248,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         FilePath controlDir = c.controlDir(ws);
         String interpreter = "";
 
-        if ((script != null) && !script.startsWith("#!")) {
+        if ((shell != null) && !script.startsWith("#!")) {
             interpreter = "'" + shell + "' -xe ";
         }
         if (os == OsType.WINDOWS) { // JENKINS-40255
