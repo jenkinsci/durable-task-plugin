@@ -51,12 +51,13 @@ import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import hudson.remoting.VirtualChannel;
 import org.apache.commons.lang.StringUtils;
-import org.jenkinsci.plugins.workflow.FilePathUtils;
 import org.jenkinsci.remoting.RoleChecker;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
+
 import jenkins.MasterToSlaveFileCallable;
 import com.google.common.io.Files;
 
@@ -138,8 +139,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
 
-        final Jenkins jenkins = Jenkins.get();
-        Node wsNode = jenkins.getNode(FilePathUtils.getNodeName(ws));
+        Node wsNode = ws.toComputer().getNode();
         FilePath nodeRoot = wsNode.getRootPath();
         String pluginVersion = Jenkins.get().getPluginManager().getPlugin("durable-task").getVersion();
         pluginVersion = StringUtils.substringBefore(pluginVersion, "-");
@@ -161,6 +161,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         shf.write(script, scriptEncodingCharset);
 
+        final Jenkins jenkins = Jenkins.get();
         String shell = null;
         if (!script.startsWith("#!")) {
             shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
@@ -208,9 +209,10 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
-    private List<String> binaryLauncherCmd(@Nonnull ShellController c, @Nonnull FilePath ws, String shell,
-                                           @Nonnull String controlDirPath, @Nonnull String binaryPath, @Nonnull String scriptPath,
-                                           @Nonnull String cookieValue, @Nonnull String cookieVariable) throws IOException, InterruptedException {
+    @Nonnull
+    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, @Nullable String shell,
+                                           String controlDirPath, String binaryPath, String scriptPath,
+                                           String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
         String outputFile = c.getOutputFile(ws).getRemote();
@@ -236,16 +238,17 @@ public final class BourneShellScript extends FileMonitoringTask {
         return cmd;
     }
 
-    private List<String> scriptLauncherCmd(@Nonnull ShellController c, @Nonnull FilePath ws, String shell,
-                                           @Nonnull OsType os, @Nonnull String scriptPath, @Nonnull String cookieValue,
-                                           @Nonnull String cookieVariable) throws IOException, InterruptedException {
+    @Nonnull
+    private List<String> scriptLauncherCmd(ShellController c, FilePath ws, @CheckForNull String shell,
+                                           OsType os, String scriptPath, String cookieValue,
+                                           String cookieVariable) throws IOException, InterruptedException {
         String cmdString;
         FilePath logFile = c.getLogFile(ws);
         FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
         String interpreter = "";
 
-        if (!script.startsWith("#!")) {
+        if ((script != null) && !script.startsWith("#!")) {
             interpreter = "'" + shell + "' -xe ";
         }
         if (os == OsType.WINDOWS) { // JENKINS-40255

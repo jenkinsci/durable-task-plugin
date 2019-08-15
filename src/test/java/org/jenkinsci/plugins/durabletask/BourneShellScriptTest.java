@@ -503,6 +503,7 @@ public class BourneShellScriptTest {
         binaryPath.touch(Instant.now().toEpochMilli());
         try {
             c = script.launch(envVars, ws, launcher, listener);
+            fail("binary was copied over");
         } catch (Exception e) {
             assertThat(e, instanceOf(IOException.class));
             assertThat(e.getMessage(), containsString("Cannot run program"));
