@@ -24,13 +24,16 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.FilePath.FileCallable;
 import hudson.Launcher;
 import hudson.Platform;
+import hudson.PluginWrapper;
 import hudson.Util;
+import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
@@ -66,6 +69,7 @@ import com.google.common.io.Files;
  */
 public final class BourneShellScript extends FileMonitoringTask {
 
+    @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
     @Restricted(NoExternalUse.class)
     public static boolean FORCE_SHELL_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".FORCE_SHELL_WRAPPER");
 
@@ -139,10 +143,25 @@ public final class BourneShellScript extends FileMonitoringTask {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
 
-        Node wsNode = ws.toComputer().getNode();
+        Computer wsComputer = ws.toComputer();
+        if (wsComputer == null) {
+            throw new IOException("Unable to retrieve computer for workspace");
+        }
+        Node wsNode = wsComputer.getNode();
+        if (wsNode == null) {
+            throw new IOException("Unable to retrieve node for workspace");
+        }
         FilePath nodeRoot = wsNode.getRootPath();
-        String pluginVersion = Jenkins.get().getPluginManager().getPlugin("durable-task").getVersion();
-        pluginVersion = StringUtils.substringBefore(pluginVersion, "-");
+        if (nodeRoot == null) {
+            throw new IOException("Unable to retrieve root path of node");
+        }
+        final Jenkins jenkins = Jenkins.get();
+
+        PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
+        if (durablePlugin == null) {
+            throw new IOException("Unable to find durable task plugin");
+        }
+        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
         AgentInfo agentInfo = nodeRoot.act(new GetAgentInfo(pluginVersion));
 
         OsType os = agentInfo.getOs();
@@ -161,7 +180,6 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         shf.write(script, scriptEncodingCharset);
 
-        final Jenkins jenkins = Jenkins.get();
         String shell = null;
         if (!script.startsWith("#!")) {
             shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
@@ -448,7 +466,11 @@ public final class BourneShellScript extends FileMonitoringTask {
             }
 
             File cachePath = new File(nodeRoot, CACHE_PATH);
-            cachePath.mkdirs();
+            if (!cachePath.mkdirs()) {
+                if (!cachePath.isDirectory()) {
+                    throw new IOException("Cache path was not created: " +  cachePath.getAbsolutePath());
+                }
+            }
             String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + arch;
             File binaryFile = new File(cachePath, binaryName);
             AgentInfo agentInfo = new AgentInfo(os, arch, binaryFile.getAbsolutePath());
