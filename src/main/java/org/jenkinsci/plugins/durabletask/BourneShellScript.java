@@ -38,10 +38,15 @@ import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -62,7 +67,6 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
 import jenkins.MasterToSlaveFileCallable;
-import com.google.common.io.Files;
 
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
@@ -465,14 +469,10 @@ public final class BourneShellScript extends FileMonitoringTask {
                 arch = ArchType._32; // Default Value
             }
 
-            File cachePath = new File(nodeRoot, CACHE_PATH);
-            if (!cachePath.mkdirs()) {
-                if (!cachePath.isDirectory()) {
-                    throw new IOException("Cache path was not created: " +  cachePath.getAbsolutePath());
-                }
-            }
+            Path cachePath = Paths.get(nodeRoot.getAbsolutePath(), CACHE_PATH);
+            Files.createDirectories(cachePath);
             String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + arch;
-            File binaryFile = new File(cachePath, binaryName);
+            File binaryFile = new File(cachePath.toString(), binaryName);
             AgentInfo agentInfo = new AgentInfo(os, arch, binaryFile.getAbsolutePath());
             agentInfo.setBinaryAvailability(binaryFile.exists());
             return agentInfo;
@@ -503,7 +503,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
             if (f.exists() && f.length() > 0) {
                 try {
-                    String fileString = Files.readFirstLine(f, Charset.forName(charset));
+                    BufferedReader reader = new BufferedReader(new FileReader(f));
+                    String fileString = reader.readLine();
                     if (fileString == null || fileString.isEmpty()) {
                         return null;
                     } else {
