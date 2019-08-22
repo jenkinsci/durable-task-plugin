@@ -469,11 +469,11 @@ public final class BourneShellScript extends FileMonitoringTask {
                 arch = ArchType._32; // Default Value
             }
 
-            Path cachePath = Paths.get(nodeRoot.getAbsolutePath(), CACHE_PATH);
+            Path cachePath = Paths.get(nodeRoot.toPath().toString(), CACHE_PATH);
             Files.createDirectories(cachePath);
             String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + arch;
-            File binaryFile = new File(cachePath.toString(), binaryName);
-            AgentInfo agentInfo = new AgentInfo(os, arch, binaryFile.getAbsolutePath());
+            File binaryFile = new File(cachePath.toFile(), binaryName);
+            AgentInfo agentInfo = new AgentInfo(os, arch, binaryFile.toPath().toString());
             agentInfo.setBinaryAvailability(binaryFile.exists());
             return agentInfo;
         }
@@ -503,8 +503,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
             if (f.exists() && f.length() > 0) {
                 try {
-                    BufferedReader reader = new BufferedReader(new FileReader(f));
-                    String fileString = reader.readLine();
+                    String fileString = com.google.common.io.Files.readFirstLine(f, Charset.forName(charset));
                     if (fileString == null || fileString.isEmpty()) {
                         return null;
                     } else {
