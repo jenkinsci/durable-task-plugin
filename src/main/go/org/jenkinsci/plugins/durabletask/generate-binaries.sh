@@ -2,11 +2,11 @@
 set -x
 # maven plugin version
 VER=$1
-# path to the golang sournce
+# path to the golang source
 SRC=$2
 # path to where the binaries should be moved to
 DST=$3
-IMG_NAME="hbl-builder"
+IMG_NAME="durable-task-binary-generator"
 BIN_NAME="durable_task_monitor"
 docker build --build-arg PLUGIN_VER=${VER} -t ${IMG_NAME}:${VER} .
 docker run -i --rm \
