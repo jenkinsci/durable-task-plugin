@@ -179,7 +179,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
-            FilePath cd = tempDir(ws).child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
+            FilePath cd = WorkspaceList.tempDir(ws).child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
             cd.mkdirs();
             controlDir = cd.getRemote();
         }
@@ -366,11 +366,6 @@ public abstract class FileMonitoringTask extends DurableTask {
             id = null;
             LOGGER.info("using migrated control directory " + controlDir + " for remainder of this task");
             return cd;
-        }
-
-        // TODO 1.652 use WorkspaceList.tempDir
-        private static FilePath tempDir(FilePath ws) {
-            return ws.sibling(ws.getName() + System.getProperty(WorkspaceList.class.getName(), "@") + "tmp");
         }
 
         /**
