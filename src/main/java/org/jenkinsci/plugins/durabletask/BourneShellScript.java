@@ -123,7 +123,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         shf.write(script, scriptEncodingCharset);
 
-        final Jenkins jenkins = Jenkins.getInstance();
+        final Jenkins jenkins = Jenkins.get();
         String interpreter = "";
         if (!script.startsWith("#!")) {
             String shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
