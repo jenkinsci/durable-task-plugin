@@ -4,4 +4,7 @@
     <f:entry field="script" title="Script">
         <f:textarea/>
     </f:entry>
+    <f:entry field="powershellBinary" title="executable">
+        <f:select />
+    </f:entry>
 </j:jelly>
