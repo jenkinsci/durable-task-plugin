@@ -13,18 +13,24 @@ import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.DumbSlave;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.util.Collections;
+import java.util.Properties;
 import java.util.logging.Level;
+import org.jenkinsci.test.acceptance.docker.Docker;
 import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.LoggerRule;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.jenkinsci.plugins.durabletask.BourneShellScriptTest.assumeDocker;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
@@ -42,20 +48,51 @@ public class PowerShellCoreScriptTest {
     private FilePath ws;
     private Launcher launcher;
     private Slave s;
+    static boolean pwshExists;
+
+    @BeforeClass
+    public static void pwshOrDocker() throws Exception {
+        checkPwsh();
+        if (!pwshExists && new Docker().isAvailable()) {
+            assumeDocker();
+        } else {
+            Assume.assumeTrue("This test should only run if pwsh is available", pwshExists);
+        }
+    }
+
+    private static void checkPwsh() {
+        Properties properties = System.getProperties();
+        String pathSeparator = properties.getProperty("path.separator");
+        String[] paths = System.getenv("PATH").split(pathSeparator);
+        String cmd = "pwsh";
+        for (String p : paths) {
+            // If running on *nix then the binary does not have an extension.  Check for both variants to ensure *nix and windows+cygwin are both supported.
+            File withoutExtension = new File(p, cmd);
+            File withExtension = new File(p, cmd + ".exe");
+            if (withoutExtension.exists() || withExtension.exists()) {
+                pwshExists = true;
+                break;
+            }
+        }
+    }
 
     @Before
     public void setUp() throws Exception {
         listener = StreamTaskListener.fromStdout();
-        DockerContainer container = dockerPWSH.get();
-        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(
-            Domain
-                .global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(
-                CredentialsScope.GLOBAL, "test", null, "test", "test"))));
-        SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
-        sshLauncher.setJavaPath(PowerShellCoreFixture.PWSH_JAVA_LOCATION);
-        s = new DumbSlave("docker", "/home/test", sshLauncher);
-        j.jenkins.addNode(s);
-        j.waitOnline(s);
+        if (pwshExists) {
+            s = j.createOnlineSlave();
+        } else {
+            DockerContainer container = dockerPWSH.get();
+            SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(
+                Domain
+                    .global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(
+                    CredentialsScope.GLOBAL, "test", null, "test", "test"))));
+            SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
+            sshLauncher.setJavaPath(PowerShellCoreFixture.PWSH_JAVA_LOCATION);
+            s = new DumbSlave("docker", "/home/test", sshLauncher);
+            j.jenkins.addNode(s);
+            j.waitOnline(s);
+        }
         ws = s.getWorkspaceRoot().child("ws");
         launcher = s.createLauncher(listener);
     }
