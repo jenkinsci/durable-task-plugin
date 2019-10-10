@@ -85,7 +85,7 @@ public class PowershellScriptTest {
             if (!launcher.isUnix()) {
                 args.addAll(Arrays.asList("-ExecutionPolicy", "Bypass"));
             }
-            args.addAll(Arrays.asList("-Command", "& {Write-Output $PSVersionTable.PSVersion.Major}"));
+            args.addAll(Arrays.asList("-NoProfile" ,"-Command", "& {Write-Output $PSVersionTable.PSVersion.Major}"));
             Launcher.ProcStarter ps = launcher.launch().cmds(args).quiet(true);
             ps.readStdout();
             Proc proc = ps.start();

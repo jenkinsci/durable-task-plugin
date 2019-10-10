@@ -30,6 +30,8 @@ import hudson.Extension;
 import hudson.FilePath;
 import hudson.Plugin;
 import hudson.Launcher;
+import hudson.util.ListBoxModel;
+import hudson.util.ListBoxModel.Option;
 import jenkins.model.Jenkins;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,18 +44,29 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
+import org.kohsuke.stapler.DataBoundSetter;
 
 /**
  * Runs a Powershell script
  */
 public final class PowershellScript extends FileMonitoringTask {
     private final String script;
+    private String powershellBinary = "powershell";
     private boolean capturingOutput;
     
     @DataBoundConstructor public PowershellScript(String script) {
         this.script = script;
     }
-    
+
+    public String getPowershellBinary() {
+        return powershellBinary;
+    }
+
+    @DataBoundSetter
+    public void setPowershellBinary(String powershellBinary) {
+        this.powershellBinary = powershellBinary;
+    }
+
     public String getScript() {
         return script;
     }
@@ -82,9 +95,7 @@ public final class PowershellScript extends FileMonitoringTask {
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         }
-      
-        // Note: PowerShell core is now named pwsh. Workaround this issue on *nix systems by creating a symlink that maps 'powershell' to 'pwsh'.
-        String powershellBinary = "powershell";
+
         String powershellArgs;
         if (launcher.isUnix()) {
             powershellArgs = "-NoProfile -NonInteractive";
@@ -106,8 +117,8 @@ public final class PowershellScript extends FileMonitoringTask {
         // Copy the helper script from the resources directory into the workspace
         c.getPowerShellHelperFile(ws).copyFrom(getClass().getResource("powershellHelper.ps1"));
         
-        if (launcher.isUnix()) {
-            // There is no need to add a BOM with Open PowerShell
+        if (launcher.isUnix() || "pwsh".equals(powershellBinary)) {
+            // There is no need to add a BOM with Open PowerShell / PowerShell Core
             c.getPowerShellScriptFile(ws).write(scriptWithExit, "UTF-8");
             if (!capturingOutput) {
                 c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
@@ -169,6 +180,10 @@ public final class PowershellScript extends FileMonitoringTask {
 
         @Override public String getDisplayName() {
             return Messages.PowershellScript_powershell();
+        }
+
+        public ListBoxModel doFillPowershellBinary() {
+            return new ListBoxModel(new Option("powershell"), new Option("pwsh"));
         }
 
     }
