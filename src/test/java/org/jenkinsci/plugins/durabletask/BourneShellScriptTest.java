@@ -46,7 +46,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -57,6 +59,8 @@ import java.util.regex.Pattern;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.*;
+
+import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.test.acceptance.docker.Docker;
 import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
@@ -77,7 +81,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, ALPINE, CENTOS, UBUNTU, SLIM, NO_INIT
+    NATIVE, ALPINE, CENTOS, UBUNTU, SLIM, NO_INIT, UBUNTU_NO_BINARY
 }
 
 @RunWith(Parameterized.class)
@@ -122,6 +126,8 @@ public class BourneShellScriptTest {
             case NATIVE:
                 s = j.createOnlineSlave();
                 break;
+            case UBUNTU_NO_BINARY:
+                BourneShellScript.FORCE_SHELL_WRAPPER = true;
             case SLIM:
             case ALPINE:
             case CENTOS:
@@ -133,8 +139,7 @@ public class BourneShellScriptTest {
                 j.waitOnline(s);
                 break;
             default:
-                fail("Unknown enum value: " + platform);
-                break;
+                throw new AssertionError(platform);
         }
         ws = s.getWorkspaceRoot().child("ws");
         launcher = s.createLauncher(listener);
@@ -146,14 +151,14 @@ public class BourneShellScriptTest {
             case ALPINE:
             case CENTOS:
             case UBUNTU:
+            case UBUNTU_NO_BINARY:
                 return prepareDockerPlatforms();
             case NO_INIT:
                 return new DumbSlave("docker",
                             "/home/jenkins/agent",
                             new SimpleCommandLauncher("docker run -i --rm jenkins/slave:3.29-2 java -jar /usr/share/jenkins/slave.jar"));
             default:
-                fail("Unknown test platform: " + platform);
-                return null;
+                throw new AssertionError(platform);
         }
     }
 
@@ -172,11 +177,11 @@ public class BourneShellScriptTest {
                 container = dockerCentOS.get();
                 break;
             case UBUNTU:
+            case UBUNTU_NO_BINARY:
                 container = dockerUbuntu.get();
                 break;
             default:
-                fail("Unknown enum value: " + platform);
-                break;
+                throw new AssertionError(platform);
         }
         SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
         SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
@@ -188,6 +193,7 @@ public class BourneShellScriptTest {
         if (s != null) {
             j.jenkins.removeNode(s);
         }
+        BourneShellScript.FORCE_SHELL_WRAPPER = false;
     }
 
     @Test public void smokeTest() throws Exception {
@@ -198,6 +204,7 @@ public class BourneShellScriptTest {
                 break;
             case CENTOS:
             case UBUNTU:
+            case UBUNTU_NO_BINARY:
             case NO_INIT:
                 sleepSeconds = 10;
                 break;
@@ -217,7 +224,7 @@ public class BourneShellScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     @Test public void stop() throws Exception {
@@ -236,7 +243,7 @@ public class BourneShellScriptTest {
         assertTrue(log.contains("sleep 999"));
         assertTrue(log.contains("got SIG"));
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     @Test public void reboot() throws Exception {
@@ -260,7 +267,7 @@ public class BourneShellScriptTest {
         } finally {
             BourneShellScript.HEARTBEAT_CHECK_INTERVAL = orig;
         }
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     @Test public void justSlow() throws Exception {
@@ -269,7 +276,7 @@ public class BourneShellScriptTest {
         c.writeLog(ws, System.out);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
 
     @Issue("JENKINS-27152")
@@ -320,7 +327,7 @@ public class BourneShellScriptTest {
         assertEquals("result\n", output.take());
         assertEquals("[+ echo result]", lines.toString());
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
     }
     static class MockHandler extends Handler {
         final BlockingQueue<Integer> status;
@@ -395,6 +402,24 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
+    /**
+     * Make sure the golang binary does not output to stdout/stderr when running in non-daemon mode,
+     * otherwise binary will crash if Jenkins is terminated unexpectedly.
+     */
+    @Test public void noStdout() throws Exception {
+        assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        System.setProperty(BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "true");
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
+        StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
+        String script = String.format("echo hello world");
+        Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, stdoutListener);
+        awaitCompletion(c);
+        assertThat(baos.toString(), isEmptyString());
+        c.cleanup(ws);
+        System.clearProperty(BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS");
+    }
+
     @Issue("JENKINS-58290")
     @Test public void backgroundLaunch() throws IOException, InterruptedException {
         int sleepSeconds;
@@ -402,6 +427,7 @@ public class BourneShellScriptTest {
             case NATIVE:
             case CENTOS:
             case UBUNTU:
+            case UBUNTU_NO_BINARY:
             case NO_INIT:
                 sleepSeconds = 10;
                 break;
@@ -432,32 +458,81 @@ public class BourneShellScriptTest {
             }
             Thread.sleep(100);
         }
-        System.out.println("output: " + baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
-        assertThat(getZombies(), isEmptyString());
+        assertNoZombies();
+    }
+
+    @Test public void binaryCaching() throws Exception {
+        assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        String os;
+        switch (platform) {
+            case NATIVE:
+                if (Platform.isDarwin()) {
+                    os = "darwin";
+                } else {
+                    os = "unix";
+                }
+                break;
+            default:
+                os = "unix";
+        }
+
+        String version = j.getPluginManager().getPlugin("durable-task").getVersion();
+        version = StringUtils.substringBefore(version, "-");
+        String binaryName = "durable_task_monitor_" + version + "_" + os + "_64";
+        FilePath binaryPath = ws.getParent().getParent().child("caches/durable-task/" + binaryName);
+        assertFalse(binaryPath.exists());
+
+        BourneShellScript script = new BourneShellScript("echo hello");
+        EnvVars envVars = new EnvVars();
+        Controller c = script.launch(envVars, ws, launcher, listener);
+        awaitCompletion(c);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertTrue(binaryPath.exists());
+        Long timeCheck1 = binaryPath.lastModified();
+
+        c = script.launch(envVars, ws, launcher, listener);
+        awaitCompletion(c);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        Long timeCheck2 = binaryPath.lastModified();
+        assertEquals(timeCheck1, timeCheck2);
+
+        binaryPath.delete();
+        binaryPath.touch(Instant.now().toEpochMilli());
+        try {
+            c = script.launch(envVars, ws, launcher, listener);
+            fail("binary was copied over");
+        } catch (Exception e) {
+            assertThat(e, instanceOf(IOException.class));
+            assertThat(e.getMessage(), containsString("Cannot run program"));
+        }
     }
 
     /**
-     * Returns the first zombie process it finds. This method can only be used on tests that launch a script that executes
-     * a `sleep` call and where the end of the `sleep` function also indicates the end of the script.
-     * Additionally, this function cannot be run on the NATIVE platform as the testing conditions are too generic and may be
-     * triggered by some other, unrelated, process.
+     * Returns the first zombie process it finds.
      *
      * @return String `ps` line output of the zombie process found. Empty string otherwise.
      * @throws InterruptedException
      * @throws IOException
      */
-    private String getZombies() throws InterruptedException, IOException {
-        switch(platform) {
-            // debian slim image does not contain PS
+    private void assertNoZombies() throws InterruptedException, IOException {
+        String exitString = null;
+        String zombieString = null;
+        switch (platform) {
             case SLIM:
-            // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie. Just let this test pass.
+                // Debian slim does not have ps
             case NO_INIT:
-            // Run only on docker platforms as NATIVE `ps` output cannot guarantee it will detect processes correctly. Just let this test pass.
-            case NATIVE:
-                return "";
+                // (See JENKINS-58656) Running in a container with no init process is guaranteed to leave a zombie.
+                return;
+            case UBUNTU_NO_BINARY:
+                exitString = " sleep ";
+                zombieString = ".+ Z .+";
+                break;
+            default:
+                exitString = "sh -xe " + ws.getRemote();
+                zombieString = ".+Z[s|\\s]\\s*\\[durable.+";
         }
 
         String psFormat = setPsFormat();
@@ -465,17 +540,14 @@ public class BourneShellScriptTest {
         do {
             Thread.sleep(1000);
             psString = psOut(psFormat);
-        } while (psString.contains(" sleep "));
+        } while (psString.contains(exitString));
 
         // Give some time to see if binary becomes a zombie
         Thread.sleep(1000);
-        Pattern zombiePattern = Pattern.compile(".+ Z .+");
-        psString = psOut(psFormat);
-        Matcher zombieMatcher = zombiePattern.matcher(psString);
+        Pattern zombiePattern = Pattern.compile(zombieString);
+        Matcher zombieMatcher = zombiePattern.matcher(psOut(psFormat));
         if (zombieMatcher.find()) {
-            return zombieMatcher.group();
-        } else {
-            return "";
+            fail(zombieMatcher.group());
         }
     }
 
@@ -492,7 +564,7 @@ public class BourneShellScriptTest {
             psFormat = setPsFormat();
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        assertEquals(0, launcher.launch().cmds("ps", "-e", "-o", psFormat).stdout(new TeeOutputStream(baos, System.out)).join());
+        assertEquals(0, launcher.launch().cmds("ps", "-e", "-o", psFormat).stdout(baos).join());
         return baos.toString();
     }
 
