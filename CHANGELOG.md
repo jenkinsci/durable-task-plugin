@@ -3,16 +3,16 @@
 ### Version 1.31
 Oct 22, 2019
 
--   Update ssh-slaves ([PR-100](https://github.com/jenkinsci/durable-task-plugin/pull/100){.external-link})
+-   Update ssh-slaves ([PR \#100](https://github.com/jenkinsci/durable-task-plugin/pull/100))
 -   Do not fail tests when run on a machine without Docker installed.
-    ([PR-101](https://github.com/jenkinsci/durable-task-plugin/pull/101){.external-link})
+    ([PR \#101](https://github.com/jenkinsci/durable-task-plugin/pull/101))
 -   Improve watcher logging
-    ([PR-102](https://github.com/jenkinsci/durable-task-plugin/pull/102){.external-link})
+    ([PR \#102](https://github.com/jenkinsci/durable-task-plugin/pull/102))
 -   Refactor UNIX unit tests for greater test coverage
-    ([PR-103](https://github.com/jenkinsci/durable-task-plugin/pull/103){.external-link})
+    ([PR \#103](https://github.com/jenkinsci/durable-task-plugin/pull/103))
 -   Allow setting pwsh as Powershell executable
-    ([PR-112](https://github.com/jenkinsci/durable-task-plugin/pull/111){.external-link})
--   Bugfix: Use setsid instead of nohup
+    ([PR \#112](https://github.com/jenkinsci/durable-task-plugin/pull/111))
+-   Bugfix: Use setsid instead of nohup ([JENKINS-25503](https://issues.jenkins-ci.org/browse/JENKINS-25503))
     - For *NIX systems only, the shell wrapper has been replaced with a pre-compiled golang binary.
     - The binary launches the script under a new session to better survive unexpected Jenkins terminations.
     - Just like how the shell wrapper executes in the background (since 1.30), the script launcher
@@ -21,31 +21,30 @@ Oct 22, 2019
     - The binary itself is ~2.5MB per binary. There are 4 pre-compiled binaries (32 and 64bit versions
       for UNIX and DARWIN).
     - The memory footprint is ~800KB heavier than the shell wrapper.
-        - The two shell processes (610-640KB) and single sleep process (548KB) are replaced by
-          a single process (~2560KB)
+        - The two shell processes (610-640KB) and single sleep process (548KB) are replaced by a
+          single process (~2560KB)
 
 ### Version 1.30
 Jul 05, 2019
 
 -   Bugfix: Run the wrapper process for shell scripts in the background.
-    ([JENKINS-58290](https://issues.jenkins-ci.org/browse/JENKINS-58290){.external-link}). This
+    ([JENKINS-58290](https://issues.jenkins-ci.org/browse/JENKINS-58290)). This
     means that when the script exits, the wrapper process will be orphaned. In most cases, the
     orphaned process is cleaned up by the underlying OS (ie zombie-reaping). Special flags must
     be used to enable zombie-reaping in docker containers (--init) or kubernetes pods (shared
     process namespaces).
 -   Bugfix: Use `sh` to run shell scripts rather than attempting to
     use the absolute path to the default shell from the master on
-    agents. ([PR
-    95](https://github.com/jenkinsci/durable-task-plugin/pull/95){.external-link})
+    agents. ([PR \#95](https://github.com/jenkinsci/durable-task-plugin/pull/95))
 -   Bugfix: Make PowerShell exit codes propagate correctly. Fixes a
     regression from version 1.23
-    ([JENKINS-52884](https://issues.jenkins-ci.org/browse/JENKINS-52884){.external-link})
+    ([JENKINS-52884](https://issues.jenkins-ci.org/browse/JENKINS-52884))
 
 ### Version 1.29
 Jan 31, 2019
 
 -   Enhancement: Add support for z/OS Unix System Services to the `sh`
-    step. ([JENKINS-37341](https://issues.jenkins-ci.org/browse/JENKINS-37341){.external-link})
+    step. ([JENKINS-37341](https://issues.jenkins-ci.org/browse/JENKINS-37341))
 
 ### Version 1.28
 Nov 14, 2018
@@ -54,14 +53,13 @@ Nov 14, 2018
     for `sh` scripts. This means that Pipelines can now use relative
     names for interpreters accessible from the `PATH` environment
     variable.
-    ([JENKINS-50902](https://issues.jenkins-ci.org/browse/JENKINS-50902){.external-link})
+    ([JENKINS-50902](https://issues.jenkins-ci.org/browse/JENKINS-50902))
 
 ### Version 1.27
 Nov 01, 2018
 
 -   Do not print the working directory or the type of script being run
-    when a durable task starts. ([PR
-    \#83](https://github.com/jenkinsci/durable-task-plugin/pull/83){.external-link})
+    when a durable task starts. ([PR \#83](https://github.com/jenkinsci/durable-task-plugin/pull/83))
 -   Internal: Shut down thread pools when Jenkins shuts down. Should
     only affect other plugins using this plugin in their tests.
 
@@ -70,11 +68,11 @@ Sep 25, 2018
 
 -   Bugfix: Increase the default heartbeat interval used to detect dead
     processes from 15 seconds to 5 minutes
-    ([JENKINS-48300](https://issues.jenkins-ci.org/browse/JENKINS-48300){.external-link})
+    ([JENKINS-48300](https://issues.jenkins-ci.org/browse/JENKINS-48300))
 -   Developer: Define API for pushing durable task logs from build
     agents directly instead of having the Jenkins master pull logs from
     build agents
-    ([JENKINS-52165](https://issues.jenkins-ci.org/browse/JENKINS-52165){.external-link})
+    ([JENKINS-52165](https://issues.jenkins-ci.org/browse/JENKINS-52165))
 
 ### Version 1.25
 Aug 8, 2018
@@ -82,7 +80,7 @@ Aug 8, 2018
 -   Major bugfix: Fix regressions in 1.23 and 1.24 that caused build
     failures when running `sh` steps in minimal environments such as
     Alpine and Cygwin
-    ([JENKINS-52881](https://issues.jenkins-ci.org/browse/JENKINS-52881){.external-link})
+    ([JENKINS-52881](https://issues.jenkins-ci.org/browse/JENKINS-52881))
 
 ### Version 1.24
 Aug 7, 2018
@@ -90,10 +88,10 @@ Aug 7, 2018
 -   **(Warning: Fix is incomplete. Full fix is in version 1.25)** Major
     bugfix: Fix regression in 1.23 that caused build failures on
     Alpine-based build agents
-    ([JENKINS-52847](https://issues.jenkins-ci.org/browse/JENKINS-52847){.external-link}[)](https://issues.jenkins-ci.org/browse/JENKINS-52847){.external-link}
+    ([JENKINS-52847](https://issues.jenkins-ci.org/browse/JENKINS-52847))
 -   Developer: Define API for gathering command output in a local
     encoding
-    ([JEP-206](https://github.com/jenkinsci/jep/blob/master/jep/206/README.adoc){.external-link})
+    ([JEP-206](https://github.com/jenkinsci/jep/blob/master/jep/206/README.adoc))
 
 ### Version 1.23
 Jul 31, 2018
@@ -171,16 +169,10 @@ Nov 14, 2017
 This version (1.16) temporarily introduced a dependency on Java 8 which
 was reverted to Java 7 with version 1.17
 
--   [
-    JENKINS-47791](https://issues.jenkins-ci.org/browse/JENKINS-47791){.jira-issue-key} -
-    Getting issue details... STATUS Using a new system for determining
+-   [JENKINS-47791](https://issues.jenkins-ci.org/browse/JENKINS-47791): Using a new system for determining
     whether `sh` step processes are still alive, which should solve
     various robustness issues.
--   Fixed BOM issue with the `powershell` step, perhaps  [
-    JENKINS-46496](https://issues.jenkins-ci.org/browse/JENKINS-46496){.jira-issue-key} -
-    Getting issue details... STATUS .
-
-      
+-   [JENKINS-46496](https://issues.jenkins-ci.org/browse/JENKINS-46496): Fixed BOM issue with the `powershell` step, perhaps
 
 ### Version 1.15
 Oct 13, 2017
