@@ -1,5 +1,10 @@
 ## Changelog
 
+### Version 1.32
+PLACEHOLDER DATE, 2019
+
+- Migrate changelog from wiki to github, add README ([PR \#113](https://github.com/jenkinsci/durable-task-plugin/pull/113))
+
 ### Version 1.31
 Oct 22, 2019
 
