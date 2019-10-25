@@ -171,7 +171,7 @@ Nov 21, 2017
 ### Version 1.16
 Nov 14, 2017
 
-This version (1.16) temporarily introduced a dependency on Java 8 which
+> **WARNING**: This version (1.16) temporarily introduced a dependency on Java 8 which
 was reverted to Java 7 with version 1.17
 
 -   [JENKINS-47791](https://issues.jenkins-ci.org/browse/JENKINS-47791): Using a new system for determining
@@ -200,7 +200,7 @@ Jan 18 2017
 -   [JENKINS-40225](https://issues.jenkins-ci.org/browse/JENKINS-40225)
     Replace backslashes when on Cygwin to allow `sh` to be used.
 
-Users setting node (or global) environment variables like
+> **WARNING**: Users setting node (or global) environment variables like
 `PATH=/something:$PATH` will see Pipeline `sh` failures with this update
 unless you also update the [Pipeline Nodes and Processes
 Plugin](https://wiki.jenkins.io/display/JENKINS/Pipeline+Nodes+and+Processes+Plugin)
