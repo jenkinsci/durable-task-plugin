@@ -1,9 +1,15 @@
 ## Changelog
 
 ### Version 1.32
-PLACEHOLDER DATE, 2019
+Oct 28, 2019
 
 - Migrate changelog from wiki to github, add README ([PR \#113](https://github.com/jenkinsci/durable-task-plugin/pull/113))
+- Disable binary wrapper (introduced in 1.31) by default.
+    - This addresses the issues where the binary attempts to launch on agents where the cache dir is unavailable (namely containerized agents)
+      or agents running on uncommon architectures.
+      ([JENKINS-59903](https://issues.jenkins-ci.org/browse/JENKINS-59903), [JENKINS-59907](https://issues.jenkins-ci.org/browse/JENKINS-59907))
+    - To enable binary wrapper, pass the system property
+      `org.jenkinsci.plugins.durabletask.BourneShellScript.FORCE_SHELL_WRAPPER=false` to the Java command line used to start Jenkins.
 
 ### Version 1.31
 Oct 22, 2019
