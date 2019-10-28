@@ -36,11 +36,12 @@ import hudson.Util;
 import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
 import hudson.tasks.Shell;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,11 +52,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.io.File;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
-import hudson.remoting.VirtualChannel;
 import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.remoting.RoleChecker;
 import org.kohsuke.accmod.Restricted;
@@ -63,7 +62,6 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
-
 import jenkins.MasterToSlaveFileCallable;
 
 /**
@@ -97,7 +95,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
     }
 
-    private enum ArchType {_32, _64}
+    private enum ArchBits {_32, _64}
 
     /**
      * Whether to stream stdio from the wrapper script, which should normally not print any.
@@ -201,7 +199,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         List<String> launcherCmd;
         FilePath binary = nodeRoot.child(agentInfo.getBinaryPath());
         try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
-            if (FORCE_BINARY_WRAPPER && (binaryStream != null)) {
+            if (FORCE_BINARY_WRAPPER && (agentInfo.isX86()) && (binaryStream != null)) {
                 FilePath controlDir = c.controlDir(ws);
                 if (!agentInfo.isBinaryCached()) {
                     binary.copyFrom(binaryStream);
@@ -403,14 +401,16 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private static final class AgentInfo implements Serializable {
         private final OsType os;
-        private final ArchType arch;
+        private final ArchBits archBits;
         private final String binaryPath;
+        private boolean x86;
         private boolean binaryCached;
 
-        public AgentInfo(OsType os, ArchType arch, String binaryPath) {
+        public AgentInfo(OsType os, ArchBits archBits, boolean x86, String binaryPath) {
             this.os = os;
-            this.arch = arch;
+            this.archBits = archBits;
             this.binaryPath = binaryPath;
+            this.x86 = x86;
             this.binaryCached = false;
         }
 
@@ -418,8 +418,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             return os;
         }
 
-        public ArchType getArch() {
-            return arch;
+        public ArchBits getArchBits() {
+            return archBits;
         }
 
         public String getBinaryPath() {
@@ -428,6 +428,10 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         public void setBinaryAvailability(boolean isCached) {
             binaryCached = isCached;
+        }
+
+        public boolean isX86() {
+            return x86;
         }
 
         public boolean isBinaryCached() {
@@ -440,6 +444,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
         private String binaryVersion;
+        private boolean x86;
 
         GetAgentInfo(String pluginVersion) {
             this.binaryVersion = pluginVersion;
@@ -458,20 +463,27 @@ public final class BourneShellScript extends FileMonitoringTask {
                 os = OsType.UNIX; // Default Value
             }
 
-            // Note: This will only determine the architecture of the JVM. The result will be "32" or "64".
-            ArchType arch;
+            String arch = System.getProperty("os.arch");
+            if (arch.contains("86") || arch.contains("amd64")) {
+                x86 = true;
+            } else   {
+                x86 = false;
+            }
+
+            // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
+            ArchBits archBits;
             String bits = System.getProperty("sun.arch.data.model");
             if (bits.equals("64")) {
-                arch = ArchType._64;
+                archBits = ArchBits._64;
             } else {
-                arch = ArchType._32; // Default Value
+                archBits = ArchBits._32; // Default Value
             }
 
             Path cachePath = Paths.get(nodeRoot.toPath().toString(), CACHE_PATH);
             Files.createDirectories(cachePath);
-            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + arch;
+            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archBits;
             File binaryFile = new File(cachePath.toFile(), binaryName);
-            AgentInfo agentInfo = new AgentInfo(os, arch, binaryFile.toPath().toString());
+            AgentInfo agentInfo = new AgentInfo(os, archBits, x86, binaryFile.toPath().toString());
             agentInfo.setBinaryAvailability(binaryFile.exists());
             return agentInfo;
         }
