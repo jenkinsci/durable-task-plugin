@@ -38,8 +38,6 @@ import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.tasks.Shell;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -75,7 +73,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
     @Restricted(NoExternalUse.class)
-    public static boolean FORCE_SHELL_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".FORCE_SHELL_WRAPPER");
+    public static boolean FORCE_BINARY_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".FORCE_BINARY_WRAPPER");
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
@@ -203,7 +201,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         List<String> launcherCmd;
         FilePath binary = nodeRoot.child(agentInfo.getBinaryPath());
         try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
-            if ((binaryStream != null) && !FORCE_SHELL_WRAPPER) {
+            if (FORCE_BINARY_WRAPPER && (binaryStream != null)) {
                 FilePath controlDir = c.controlDir(ws);
                 if (!agentInfo.isBinaryCached()) {
                     binary.copyFrom(binaryStream);
