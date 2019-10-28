@@ -12,7 +12,7 @@ plugins.
 
 ## Documentation
 
-* [Changelog](https://github.com/jenkinsci/durable-task-plugin/CHANGELOG.md)
+* [Changelog](https://github.com/jenkinsci/durable-task-plugin/blob/master/CHANGELOG.md)
 * [Example](https://github.com/jenkinsci/workflow-durable-task-step-plugin)
 * [Blog post](https://web.archive.org/web/20141227025217/http://tupilabs.com/2014/06/13/durable-tasks-in-jenkins.html)
 
