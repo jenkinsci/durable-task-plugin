@@ -11,7 +11,8 @@ Oct 22, 2019
 > **WARNING**: This version (1.31) introduced a bug where scripts will not be able to launch on non-x86 platforms and
 > container-based agents that do not have access to the agent node's root directory.
  
->**NOTE**: To revert to previous release behavior, pass the environment variable FORCE_SHELL_WRAPPER=true.
+> **NOTE**: To revert to previous release behavior, pass the system property
+> `org.jenkinsci.plugins.durabletask.BourneShellScript.FORCE_SHELL_WRAPPER=true` to the Java command line used to start Jenkins.
 
 -   Update ssh-slaves ([PR \#100](https://github.com/jenkinsci/durable-task-plugin/pull/100))
 -   Do not fail tests when run on a machine without Docker installed.
