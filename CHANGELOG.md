@@ -9,7 +9,7 @@ Oct 28, 2019
       or agents running on uncommon architectures.
       ([JENKINS-59903](https://issues.jenkins-ci.org/browse/JENKINS-59903), [JENKINS-59907](https://issues.jenkins-ci.org/browse/JENKINS-59907))
     - To enable binary wrapper, pass the system property
-      `org.jenkinsci.plugins.durabletask.BourneShellScript.FORCE_SHELL_WRAPPER=false` to the Java command line used to start Jenkins.
+      `org.jenkinsci.plugins.durabletask.BourneShellScript.FORCE_BINARY_WRAPPER=true` to the Java command line used to start Jenkins.
 
 ### Version 1.31
 Oct 22, 2019
