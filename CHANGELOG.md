@@ -8,6 +8,9 @@ PLACEHOLDER DATE, 2019
 ### Version 1.31
 Oct 22, 2019
 
+> **WARNING**: This version (1.31) introduced a bug where the binary will not be able to launch the script
+> on non-x86 platforms and container-based agents that do not have access to the agent node's root directory.
+ 
 -   Update ssh-slaves ([PR \#100](https://github.com/jenkinsci/durable-task-plugin/pull/100))
 -   Do not fail tests when run on a machine without Docker installed.
     ([PR \#101](https://github.com/jenkinsci/durable-task-plugin/pull/101))
