@@ -194,29 +194,32 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        FilePath binary;
-        FilePath controlDir = c.controlDir(ws);
-        if (agentInfo.isCachingAvailable()) {
-            binary = nodeRoot.child(agentInfo.getBinaryPath());
-        } else {
-            binary = controlDir.child(agentInfo.getBinaryPath());
-        }
-        List<String> launcherCmd;
-        try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
-            if (FORCE_BINARY_WRAPPER && (agentInfo.isX86()) && (binaryStream != null)) {
-                if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
-                    binary.copyFrom(binaryStream);
-                    binary.chmod(0755);
-                }
-                launcherCmd = binaryLauncherCmd(c, ws, shell,
-                                                controlDir.getRemote(),
-                                                binary.getRemote(),
-                                                scriptPath,
-                                                cookieValue,
-                                                cookieVariable);
+        List<String> launcherCmd = null;
+        if (agentInfo.isX86() && (os == OsType.UNIX || os == OsType.DARWIN)) {
+            FilePath controlDir = c.controlDir(ws);
+            FilePath binary;
+            if (agentInfo.isCachingAvailable()) {
+                binary = nodeRoot.child(agentInfo.getBinaryPath());
             } else {
-                launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
+                binary = controlDir.child(agentInfo.getBinaryPath());
             }
+            try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
+                if (FORCE_BINARY_WRAPPER && (agentInfo.isX86()) && (binaryStream != null)) {
+                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
+                        binary.copyFrom(binaryStream);
+                        binary.chmod(0755);
+                    }
+                    launcherCmd = binaryLauncherCmd(c, ws, shell,
+                            controlDir.getRemote(),
+                            binary.getRemote(),
+                            scriptPath,
+                            cookieValue,
+                            cookieVariable);
+                }
+            }
+        }
+        if (launcherCmd == null) {
+            launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
         }
 
         LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
