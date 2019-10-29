@@ -1,20 +1,27 @@
 ## Changelog
 
+### Version 1.33
+Oct 29, 2019
+
+- Disable binary wrapper caching when there are inadequate permissions to access the cache dir (namely containerized instances).
+  ([JENKINS-59903](https://issues.jenkins-ci.org/browse/JENKINS-59903))
+- Do not use binary wrapper on non-x86 and FreeBSD architectures ([JENKINS-59907](https://issues.jenkins-ci.org/browse/JENKINS-59907))
+
 ### Version 1.32
 Oct 28, 2019
 
+> **WARNING**: The bugs introduced in 1.31 are still present (([JENKINS-59903](https://issues.jenkins-ci.org/browse/JENKINS-59903),
+> [JENKINS-59907](https://issues.jenkins-ci.org/browse/JENKINS-59907))
+
 - Migrate changelog from wiki to github, add README ([PR \#113](https://github.com/jenkinsci/durable-task-plugin/pull/113))
 - Disable binary wrapper (introduced in 1.31) by default.
-    - This addresses the issues where the binary attempts to launch on agents where the cache dir is unavailable (namely containerized agents)
-      or agents running on uncommon architectures.
-      ([JENKINS-59903](https://issues.jenkins-ci.org/browse/JENKINS-59903), [JENKINS-59907](https://issues.jenkins-ci.org/browse/JENKINS-59907))
     - To enable binary wrapper, pass the system property
       `org.jenkinsci.plugins.durabletask.BourneShellScript.FORCE_BINARY_WRAPPER=true` to the Java command line used to start Jenkins.
 
 ### Version 1.31
 Oct 22, 2019
 
-> **WARNING**: This version (1.31) introduced a bug where scripts will not be able to launch on non-x86 platforms and
+> **WARNING**: This version (1.31) introduced bugs where scripts will not be able to launch on non-x86 platforms and
 > container-based agents that do not have access to the agent node's root directory.
  
 > **NOTE**: To revert to previous release behavior, pass the system property
