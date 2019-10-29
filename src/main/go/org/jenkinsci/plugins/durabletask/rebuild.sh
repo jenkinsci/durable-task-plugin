@@ -1,5 +1,9 @@
 #! /bin/sh
 # Convenience script to rebuild golang binaries during development
+if [[ $1 -eq 0 ]] ; then
+    echo 'please provide a plugin version as an argument (ex: 1.32)'
+    exit 0
+fi
 set -x
 # maven plugin version
 VER=$1

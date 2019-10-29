@@ -36,11 +36,12 @@ import hudson.Util;
 import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
 import hudson.tasks.Shell;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.io.File;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,11 +52,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.io.File;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
-import hudson.remoting.VirtualChannel;
 import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.remoting.RoleChecker;
 import org.kohsuke.accmod.Restricted;
@@ -63,7 +62,6 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
-
 import jenkins.MasterToSlaveFileCallable;
 
 /**
@@ -86,6 +84,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         DARWIN("darwin"),
         UNIX("unix"),
         WINDOWS("windows"),
+        FREEBSD("freebsd"),
         ZOS("zos");
 
         private final String binaryName;
@@ -96,8 +95,6 @@ public final class BourneShellScript extends FileMonitoringTask {
             return binaryName;
         }
     }
-
-    private enum ArchType {_32, _64}
 
     /**
      * Whether to stream stdio from the wrapper script, which should normally not print any.
@@ -198,24 +195,32 @@ public final class BourneShellScript extends FileMonitoringTask {
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        List<String> launcherCmd;
-        FilePath binary = nodeRoot.child(agentInfo.getBinaryPath());
-        try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
-            if (FORCE_BINARY_WRAPPER && (binaryStream != null)) {
-                FilePath controlDir = c.controlDir(ws);
-                if (!agentInfo.isBinaryCached()) {
-                    binary.copyFrom(binaryStream);
-                    binary.chmod(0755);
-                }
-                launcherCmd = binaryLauncherCmd(c, ws, shell,
-                                                controlDir.getRemote(),
-                                                binary.getRemote(),
-                                                scriptPath,
-                                                cookieValue,
-                                                cookieVariable);
+        List<String> launcherCmd = null;
+        if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
+            FilePath controlDir = c.controlDir(ws);
+            FilePath binary;
+            if (agentInfo.isCachingAvailable()) {
+                binary = nodeRoot.child(agentInfo.getBinaryPath());
             } else {
-                launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
+                binary = controlDir.child(agentInfo.getBinaryPath());
             }
+            try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
+                if (binaryStream != null) {
+                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
+                        binary.copyFrom(binaryStream);
+                        binary.chmod(0755);
+                    }
+                    launcherCmd = binaryLauncherCmd(c, ws, shell,
+                            controlDir.getRemote(),
+                            binary.getRemote(),
+                            scriptPath,
+                            cookieValue,
+                            cookieVariable);
+                }
+            }
+        }
+        if (launcherCmd == null) {
+            launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
         }
 
         LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
@@ -402,24 +407,23 @@ public final class BourneShellScript extends FileMonitoringTask {
     }
 
     private static final class AgentInfo implements Serializable {
+        private static final long serialVersionUID = 7599995179651071957L;
         private final OsType os;
-        private final ArchType arch;
         private final String binaryPath;
+        private boolean binaryCompatible;
         private boolean binaryCached;
+        private boolean cachingAvailable;
 
-        public AgentInfo(OsType os, ArchType arch, String binaryPath) {
+        public AgentInfo(OsType os, boolean binaryCompatible, String binaryPath, boolean cachingAvailable) {
             this.os = os;
-            this.arch = arch;
             this.binaryPath = binaryPath;
+            this.binaryCompatible = binaryCompatible;
             this.binaryCached = false;
+            this.cachingAvailable = cachingAvailable;
         }
 
         public OsType getOs() {
             return os;
-        }
-
-        public ArchType getArch() {
-            return arch;
         }
 
         public String getBinaryPath() {
@@ -430,8 +434,16 @@ public final class BourneShellScript extends FileMonitoringTask {
             binaryCached = isCached;
         }
 
+        public boolean isBinaryCompatible() {
+            return binaryCompatible;
+        }
+
         public boolean isBinaryCached() {
             return binaryCached;
+        }
+
+        public boolean isCachingAvailable() {
+            return cachingAvailable;
         }
     }
 
@@ -440,6 +452,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
         private String binaryVersion;
+
+        private enum ArchBits {_32, _64}
 
         GetAgentInfo(String pluginVersion) {
             this.binaryVersion = pluginVersion;
@@ -454,25 +468,48 @@ public final class BourneShellScript extends FileMonitoringTask {
                 os = OsType.WINDOWS;
             } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
                 os = OsType.ZOS;
+            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("FreeBSD")) {
+                os = OsType.FREEBSD;
             } else {
                 os = OsType.UNIX; // Default Value
             }
 
-            // Note: This will only determine the architecture of the JVM. The result will be "32" or "64".
-            ArchType arch;
-            String bits = System.getProperty("sun.arch.data.model");
-            if (bits.equals("64")) {
-                arch = ArchType._64;
+            String arch = System.getProperty("os.arch");
+            boolean binaryCompatible;
+            if ((os != OsType.FREEBSD) && (arch.contains("86") || arch.contains("amd64"))) {
+                binaryCompatible = true;
             } else {
-                arch = ArchType._32; // Default Value
+                binaryCompatible = false;
             }
 
-            Path cachePath = Paths.get(nodeRoot.toPath().toString(), CACHE_PATH);
-            Files.createDirectories(cachePath);
-            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + arch;
-            File binaryFile = new File(cachePath.toFile(), binaryName);
-            AgentInfo agentInfo = new AgentInfo(os, arch, binaryFile.toPath().toString());
-            agentInfo.setBinaryAvailability(binaryFile.exists());
+            // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
+            ArchBits archBits;
+            String bits = System.getProperty("sun.arch.data.model");
+            if (bits.equals("64")) {
+                archBits = ArchBits._64;
+            } else {
+                archBits = ArchBits._32; // Default Value
+            }
+
+            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archBits;
+            String binaryPath;
+            boolean isCached;
+            boolean cachingAvailable;
+            try {
+                Path cachePath = Paths.get(nodeRoot.toPath().toString(), CACHE_PATH);
+                Files.createDirectories(cachePath);
+                File binaryFile = new File(cachePath.toFile(), binaryName);
+                binaryPath = binaryFile.toPath().toString();
+                isCached = binaryFile.exists();
+                cachingAvailable = true;
+            } catch (Exception e) {
+                // when the jenkins agent cache path is not accessible
+                binaryPath = binaryName;
+                isCached = false;
+                cachingAvailable = false;
+            }
+            AgentInfo agentInfo = new AgentInfo(os, binaryCompatible, binaryPath, cachingAvailable);
+            agentInfo.setBinaryAvailability(isCached);
             return agentInfo;
         }
 
