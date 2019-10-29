@@ -196,7 +196,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
         List<String> launcherCmd = null;
-        if (agentInfo.isBinaryCompatible()) {
+        if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
             FilePath controlDir = c.controlDir(ws);
             FilePath binary;
             if (agentInfo.isCachingAvailable()) {
@@ -205,7 +205,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 binary = controlDir.child(agentInfo.getBinaryPath());
             }
             try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
-                if (FORCE_BINARY_WRAPPER && (binaryStream != null)) {
+                if (binaryStream != null) {
                     if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
                         binary.copyFrom(binaryStream);
                         binary.chmod(0755);
