@@ -95,8 +95,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
     }
 
-    private enum ArchBits {_32, _64}
-
     /**
      * Whether to stream stdio from the wrapper script, which should normally not print any.
      * Copying output from the controller process consumes a Java thread, so we want to avoid it generally.
@@ -405,16 +403,15 @@ public final class BourneShellScript extends FileMonitoringTask {
     }
 
     private static final class AgentInfo implements Serializable {
+        private static final long serialVersionUID = 7599995179651071957L;
         private final OsType os;
-        private final ArchBits archBits;
         private final String binaryPath;
         private boolean x86;
         private boolean binaryCached;
         private boolean cachingAvailable;
 
-        public AgentInfo(OsType os, ArchBits archBits, boolean x86, String binaryPath, boolean cachingAvailable) {
+        public AgentInfo(OsType os, boolean x86, String binaryPath, boolean cachingAvailable) {
             this.os = os;
-            this.archBits = archBits;
             this.binaryPath = binaryPath;
             this.x86 = x86;
             this.binaryCached = false;
@@ -423,10 +420,6 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         public OsType getOs() {
             return os;
-        }
-
-        public ArchBits getArchBits() {
-            return archBits;
         }
 
         public String getBinaryPath() {
@@ -456,6 +449,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final String CACHE_PATH = "caches/durable-task/";
         private String binaryVersion;
         private boolean x86;
+
+        private enum ArchBits {_32, _64}
 
         GetAgentInfo(String pluginVersion) {
             this.binaryVersion = pluginVersion;
@@ -501,13 +496,13 @@ public final class BourneShellScript extends FileMonitoringTask {
                 binaryPath = binaryFile.toPath().toString();
                 isCached = binaryFile.exists();
                 cachingAvailable = true;
-            } catch (IOException | SecurityException e) {
+            } catch (Exception e) {
                 // when the jenkins agent cache path is not accessible
                 binaryPath = binaryName;
                 isCached = false;
                 cachingAvailable = false;
             }
-            AgentInfo agentInfo = new AgentInfo(os, archBits, x86, binaryPath, cachingAvailable);
+            AgentInfo agentInfo = new AgentInfo(os, x86, binaryPath, cachingAvailable);
             agentInfo.setBinaryAvailability(isCached);
             return agentInfo;
         }
