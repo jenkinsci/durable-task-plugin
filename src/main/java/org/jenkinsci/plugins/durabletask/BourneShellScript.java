@@ -84,6 +84,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         DARWIN("darwin"),
         UNIX("unix"),
         WINDOWS("windows"),
+        FREEBSD("freebsd"),
         ZOS("zos");
 
         private final String binaryName;
@@ -195,7 +196,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
         List<String> launcherCmd = null;
-        if (agentInfo.isX86() && (os == OsType.UNIX || os == OsType.DARWIN)) {
+        if (agentInfo.isBinaryCompatible()) {
             FilePath controlDir = c.controlDir(ws);
             FilePath binary;
             if (agentInfo.isCachingAvailable()) {
@@ -204,7 +205,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 binary = controlDir.child(agentInfo.getBinaryPath());
             }
             try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
-                if (FORCE_BINARY_WRAPPER && (agentInfo.isX86()) && (binaryStream != null)) {
+                if (FORCE_BINARY_WRAPPER && (binaryStream != null)) {
                     if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
                         binary.copyFrom(binaryStream);
                         binary.chmod(0755);
@@ -409,14 +410,14 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final long serialVersionUID = 7599995179651071957L;
         private final OsType os;
         private final String binaryPath;
-        private boolean x86;
+        private boolean binaryCompatible;
         private boolean binaryCached;
         private boolean cachingAvailable;
 
-        public AgentInfo(OsType os, boolean x86, String binaryPath, boolean cachingAvailable) {
+        public AgentInfo(OsType os, boolean binaryCompatible, String binaryPath, boolean cachingAvailable) {
             this.os = os;
             this.binaryPath = binaryPath;
-            this.x86 = x86;
+            this.binaryCompatible = binaryCompatible;
             this.binaryCached = false;
             this.cachingAvailable = cachingAvailable;
         }
@@ -433,8 +434,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             binaryCached = isCached;
         }
 
-        public boolean isX86() {
-            return x86;
+        public boolean isBinaryCompatible() {
+            return binaryCompatible;
         }
 
         public boolean isBinaryCached() {
@@ -451,7 +452,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
         private String binaryVersion;
-        private boolean x86;
 
         private enum ArchBits {_32, _64}
 
@@ -468,15 +468,18 @@ public final class BourneShellScript extends FileMonitoringTask {
                 os = OsType.WINDOWS;
             } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
                 os = OsType.ZOS;
+            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("FreeBSD")) {
+                os = OsType.FREEBSD;
             } else {
                 os = OsType.UNIX; // Default Value
             }
 
             String arch = System.getProperty("os.arch");
-            if (arch.contains("86") || arch.contains("amd64")) {
-                x86 = true;
-            } else   {
-                x86 = false;
+            boolean binaryCompatible;
+            if ((os != OsType.FREEBSD) && (arch.contains("86") || arch.contains("amd64"))) {
+                binaryCompatible = true;
+            } else {
+                binaryCompatible = false;
             }
 
             // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
@@ -505,7 +508,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 isCached = false;
                 cachingAvailable = false;
             }
-            AgentInfo agentInfo = new AgentInfo(os, x86, binaryPath, cachingAvailable);
+            AgentInfo agentInfo = new AgentInfo(os, binaryCompatible, binaryPath, cachingAvailable);
             agentInfo.setBinaryAvailability(isCached);
             return agentInfo;
         }
