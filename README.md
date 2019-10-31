@@ -2,6 +2,7 @@ Durable Task Plugin
 ===
 
 [![Jenkins Plugin](https://img.shields.io/jenkins/plugin/v/durable-task)](https://plugins.jenkins.io/durable-task)
+[![Changelog](https://img.shields.io/github/v/tag/jenkinsci/durable-task-plugin?label=changelog)](https://github.com/jenkinsci/durable-task-plugin/blob/master/CHANGELOG.md)
 [![Jenkins Plugin Installs](https://img.shields.io/jenkins/plugin/i/durable-task?color=blue)](https://plugins.jenkins.io/durable-task)
 
 Library offering an extension point for processes which can run outside
