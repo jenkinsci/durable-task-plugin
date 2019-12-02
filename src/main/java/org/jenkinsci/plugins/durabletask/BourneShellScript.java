@@ -24,44 +24,78 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
+import hudson.FilePath.FileCallable;
 import hudson.Launcher;
 import hudson.Platform;
+import hudson.PluginWrapper;
 import hudson.Util;
+import hudson.model.Computer;
+import hudson.model.Node;
 import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
 import hudson.tasks.Shell;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.io.File;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.io.File;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
-import hudson.remoting.VirtualChannel;
+import org.apache.commons.lang.StringUtils;
+import org.jenkinsci.remoting.RoleChecker;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
 import jenkins.MasterToSlaveFileCallable;
-import com.google.common.io.Files;
 
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
  */
 public final class BourneShellScript extends FileMonitoringTask {
 
-    private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
+    @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
+    @Restricted(NoExternalUse.class)
+    public static boolean FORCE_BINARY_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".FORCE_BINARY_WRAPPER");
 
-    private static enum OsType {DARWIN, UNIX, WINDOWS, ZOS}
+    private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
 
     private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
+
+    private enum OsType {
+        // NOTE: changes to these binary names must be mirrored in compile-binaries.sh and rebuild.sh
+        DARWIN("darwin"),
+        UNIX("unix"),
+        WINDOWS("windows"),
+        FREEBSD("freebsd"),
+        ZOS("zos");
+
+        private final String binaryName;
+        OsType(final String binaryName) {
+            this.binaryName = binaryName;
+        }
+        public String getNameForBinary() {
+            return binaryName;
+        }
+    }
+
     /**
      * Whether to stream stdio from the wrapper script, which should normally not print any.
      * Copying output from the controller process consumes a Java thread, so we want to avoid it generally.
@@ -94,7 +128,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     @DataBoundConstructor public BourneShellScript(String script) {
         this.script = Util.fixNull(script);
     }
-    
+
     public String getScript() {
         return script;
     }
@@ -107,7 +141,29 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
-        OsType os = ws.act(new getOsType());
+
+        Computer wsComputer = ws.toComputer();
+        if (wsComputer == null) {
+            throw new IOException("Unable to retrieve computer for workspace");
+        }
+        Node wsNode = wsComputer.getNode();
+        if (wsNode == null) {
+            throw new IOException("Unable to retrieve node for workspace");
+        }
+        FilePath nodeRoot = wsNode.getRootPath();
+        if (nodeRoot == null) {
+            throw new IOException("Unable to retrieve root path of node");
+        }
+        final Jenkins jenkins = Jenkins.get();
+
+        PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
+        if (durablePlugin == null) {
+            throw new IOException("Unable to find durable task plugin");
+        }
+        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
+        AgentInfo agentInfo = nodeRoot.act(new GetAgentInfo(pluginVersion));
+
+        OsType os = agentInfo.getOs();
         String scriptEncodingCharset = "UTF-8";
         if(os == OsType.ZOS) {
             Charset zOSSystemEncodingCharset = Charset.forName(ws.act(new getIBMzOsEncoding()));
@@ -117,75 +173,58 @@ public final class BourneShellScript extends FileMonitoringTask {
             }
             scriptEncodingCharset = zOSSystemEncodingCharset.name();
         }
-        
+
         ShellController c = new ShellController(ws,(os == OsType.ZOS));
         FilePath shf = c.getScriptFile(ws);
 
         shf.write(script, scriptEncodingCharset);
 
-        final Jenkins jenkins = Jenkins.get();
-        String interpreter = "";
+        String shell = null;
         if (!script.startsWith("#!")) {
-            String shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
+            shell = Jenkins.get().getDescriptorByType(Shell.DescriptorImpl.class).getShell();
             if (shell == null) {
                 // Do not use getShellOrDefault, as that assumes that the filesystem layout of the agent matches that seen from a possibly decorated launcher.
                 shell = "sh";
             }
-            interpreter = "'" + shell + "' -xe ";
         } else {
             shf.chmod(0755);
         }
 
         String scriptPath = shf.getRemote();
-        List<String> args = new ArrayList<>();
 
-        if (os != OsType.DARWIN) { // JENKINS-25848
-            args.add("nohup");
-        }
-        if (os == OsType.WINDOWS) { // JENKINS-40255
-            scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
-        }
-
-        envVars.put(cookieVariable, "please-do-not-kill-me");
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
-        String cmd;
-        FilePath logFile = c.getLogFile(ws);
-        FilePath resultFile = c.getResultFile(ws);
-        FilePath controlDir = c.controlDir(ws);
-        if (capturingOutput) {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                controlDir,
-                resultFile,
-                logFile,
-                cookieValue,
-                cookieVariable,
-                interpreter,
-                scriptPath,
-                c.getOutputFile(ws),
-                logFile,
-                resultFile, resultFile, resultFile);
-        } else {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                controlDir,
-                resultFile,
-                logFile,
-                cookieValue,
-                cookieVariable,
-                interpreter,
-                scriptPath,
-                logFile,
-                resultFile, resultFile, resultFile);
-        }
-        cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+        envVars.put(cookieVariable, "please-do-not-kill-me");
 
-        if (LAUNCH_DIAGNOSTICS) {
-            args.addAll(Arrays.asList("sh", "-c", cmd));
-        } else {
-            // JENKINS-58290: launch in the background. Also close stdout/err so docker-exec and the like do not wait.
-            args.addAll(Arrays.asList("sh", "-c", "(" + cmd + ") >&- 2>&- &"));
+        List<String> launcherCmd = null;
+        if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
+            FilePath controlDir = c.controlDir(ws);
+            FilePath binary;
+            if (agentInfo.isCachingAvailable()) {
+                binary = nodeRoot.child(agentInfo.getBinaryPath());
+            } else {
+                binary = controlDir.child(agentInfo.getBinaryPath());
+            }
+            try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
+                if (binaryStream != null) {
+                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
+                        binary.copyFrom(binaryStream);
+                        binary.chmod(0755);
+                    }
+                    launcherCmd = binaryLauncherCmd(c, ws, shell,
+                            controlDir.getRemote(),
+                            binary.getRemote(),
+                            scriptPath,
+                            cookieValue,
+                            cookieVariable);
+                }
+            }
         }
-        LOGGER.log(Level.FINE, "launching {0}", args);
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
+        if (launcherCmd == null) {
+            launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
+        }
+
+        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
+        Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
         if (LAUNCH_DIAGNOSTICS) {
             ps.stdout(listener);
         } else {
@@ -195,16 +234,100 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
+    @Nonnull
+    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, @Nullable String shell,
+                                           String controlDirPath, String binaryPath, String scriptPath,
+                                           String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+        String logFile = c.getLogFile(ws).getRemote();
+        String resultFile = c.getResultFile(ws).getRemote();
+        String outputFile = c.getOutputFile(ws).getRemote();
+
+        List<String> cmd = new ArrayList<>();
+        cmd.add(binaryPath);
+        cmd.add("-controldir=" + controlDirPath);
+        cmd.add("-result=" + resultFile);
+        cmd.add("-log=" + logFile);
+        cmd.add("-cookiename=" + cookieVariable);
+        cmd.add("-cookieval=" + cookieValue);
+        cmd.add("-script=" + scriptPath);
+        if (shell != null) {
+            cmd.add("-shell=" + shell);
+        }
+        if (capturingOutput) {
+            cmd.add("-output=" + outputFile);
+        }
+        if (!LAUNCH_DIAGNOSTICS) {
+            // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
+            cmd.add("-daemon");
+        }
+        return cmd;
+    }
+
+    @Nonnull
+    private List<String> scriptLauncherCmd(ShellController c, FilePath ws, @CheckForNull String shell,
+                                           OsType os, String scriptPath, String cookieValue,
+                                           String cookieVariable) throws IOException, InterruptedException {
+        String cmdString;
+        FilePath logFile = c.getLogFile(ws);
+        FilePath resultFile = c.getResultFile(ws);
+        FilePath controlDir = c.controlDir(ws);
+        String interpreter = "";
+
+        if ((shell != null) && !script.startsWith("#!")) {
+            interpreter = "'" + shell + "' -xe ";
+        }
+        if (os == OsType.WINDOWS) { // JENKINS-40255
+            scriptPath = scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
+        }
+        if (capturingOutput) {
+            cmdString = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                                      controlDir,
+                                      resultFile,
+                                      logFile,
+                                      cookieValue,
+                                      cookieVariable,
+                                      interpreter,
+                                      scriptPath,
+                                      c.getOutputFile(ws),
+                                      logFile,
+                                      resultFile, resultFile, resultFile);
+        } else {
+            cmdString = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                                      controlDir,
+                                      resultFile,
+                                      logFile,
+                                      cookieValue,
+                                      cookieVariable,
+                                      interpreter,
+                                      scriptPath,
+                                      logFile,
+                                      resultFile, resultFile, resultFile);
+        }
+
+        cmdString = cmdString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+        List<String> cmd = new ArrayList<>();
+        if (os != OsType.DARWIN) { // JENKINS-25848
+            cmd.add("nohup");
+        }
+        if (LAUNCH_DIAGNOSTICS) {
+            cmd.addAll(Arrays.asList("sh", "-c", cmdString));
+        } else {
+            // JENKINS-58290: launch in the background. Also close stdout/err so docker-exec and the like do not wait.
+            cmd.addAll(Arrays.asList("sh", "-c", "(" + cmdString + ") >&- 2>&- &"));
+        }
+        return cmd;
+    }
+
     /*package*/ static final class ShellController extends FileMonitoringController {
 
         /** Last time we checked the timestamp, in nanoseconds on the master. */
         private transient long lastCheck;
-        /** Last-observed modification time of {@link getLogFile} on remote computer, in milliseconds. */
+        /** Last-observed modification time of {@link FileMonitoringTask.FileMonitoringController#getLogFile(FilePath)} on remote computer, in milliseconds. */
         private transient long checkedTimestamp;
 
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */
         private final boolean isZos;
-        
+
         private ShellController(FilePath ws, boolean zOsFlag) throws IOException, InterruptedException {
             super(ws);
             this.isZos = zOsFlag;
@@ -283,19 +406,117 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     }
 
-    private static final class getOsType extends MasterToSlaveCallable<OsType,RuntimeException> {
-        @Override public OsType call() throws RuntimeException {
-            if (Platform.isDarwin()) {
-              return OsType.DARWIN;
-            } else if (Platform.current() == Platform.WINDOWS) {
-              return OsType.WINDOWS;
-            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
-              return OsType.ZOS;  
-            } else {
-              return OsType.UNIX; // Default Value
-            }
+    private static final class AgentInfo implements Serializable {
+        private static final long serialVersionUID = 7599995179651071957L;
+        private final OsType os;
+        private final String binaryPath;
+        private boolean binaryCompatible;
+        private boolean binaryCached;
+        private boolean cachingAvailable;
+
+        public AgentInfo(OsType os, boolean binaryCompatible, String binaryPath, boolean cachingAvailable) {
+            this.os = os;
+            this.binaryPath = binaryPath;
+            this.binaryCompatible = binaryCompatible;
+            this.binaryCached = false;
+            this.cachingAvailable = cachingAvailable;
         }
+
+        public OsType getOs() {
+            return os;
+        }
+
+        public String getBinaryPath() {
+            return binaryPath;
+        }
+
+        public void setBinaryAvailability(boolean isCached) {
+            binaryCached = isCached;
+        }
+
+        public boolean isBinaryCompatible() {
+            return binaryCompatible;
+        }
+
+        public boolean isBinaryCached() {
+            return binaryCached;
+        }
+
+        public boolean isCachingAvailable() {
+            return cachingAvailable;
+        }
+    }
+
+    private static final class GetAgentInfo implements FileCallable<AgentInfo> {
         private static final long serialVersionUID = 1L;
+        private static final String BINARY_PREFIX = "durable_task_monitor_";
+        private static final String CACHE_PATH = "caches/durable-task/";
+        private String binaryVersion;
+
+        private enum ArchBits {_32, _64}
+
+        GetAgentInfo(String pluginVersion) {
+            this.binaryVersion = pluginVersion;
+        }
+
+        @Override
+        public AgentInfo invoke(File nodeRoot, VirtualChannel virtualChannel) throws IOException, InterruptedException {
+            OsType os;
+            if (Platform.isDarwin()) {
+                os = OsType.DARWIN;
+            } else if (Platform.current() == Platform.WINDOWS) {
+                os = OsType.WINDOWS;
+            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
+                os = OsType.ZOS;
+            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("FreeBSD")) {
+                os = OsType.FREEBSD;
+            } else {
+                os = OsType.UNIX; // Default Value
+            }
+
+            String arch = System.getProperty("os.arch");
+            boolean binaryCompatible;
+            if ((os != OsType.FREEBSD) && (arch.contains("86") || arch.contains("amd64"))) {
+                binaryCompatible = true;
+            } else {
+                binaryCompatible = false;
+            }
+
+            // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
+            ArchBits archBits;
+            String bits = System.getProperty("sun.arch.data.model");
+            if (bits.equals("64")) {
+                archBits = ArchBits._64;
+            } else {
+                archBits = ArchBits._32; // Default Value
+            }
+
+            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archBits;
+            String binaryPath;
+            boolean isCached;
+            boolean cachingAvailable;
+            try {
+                Path cachePath = Paths.get(nodeRoot.toPath().toString(), CACHE_PATH);
+                Files.createDirectories(cachePath);
+                File binaryFile = new File(cachePath.toFile(), binaryName);
+                binaryPath = binaryFile.toPath().toString();
+                isCached = binaryFile.exists();
+                cachingAvailable = true;
+            } catch (Exception e) {
+                // when the jenkins agent cache path is not accessible
+                binaryPath = binaryName;
+                isCached = false;
+                cachingAvailable = false;
+            }
+            AgentInfo agentInfo = new AgentInfo(os, binaryCompatible, binaryPath, cachingAvailable);
+            agentInfo.setBinaryAvailability(isCached);
+            return agentInfo;
+        }
+
+        @Override
+        public void checkRoles(RoleChecker roleChecker) throws SecurityException {
+
+        }
     }
 
     private static final class getIBMzOsEncoding extends MasterToSlaveCallable<String,RuntimeException> {
@@ -317,7 +538,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
             if (f.exists() && f.length() > 0) {
                 try {
-                    String fileString = Files.readFirstLine(f, Charset.forName(charset));
+                    String fileString = com.google.common.io.Files.readFirstLine(f, Charset.forName(charset));
                     if (fileString == null || fileString.isEmpty()) {
                         return null;
                     } else {
