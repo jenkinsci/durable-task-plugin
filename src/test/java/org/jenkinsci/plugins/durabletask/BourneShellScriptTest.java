@@ -50,6 +50,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
@@ -88,7 +89,11 @@ enum TestPlatform {
 public class BourneShellScriptTest {
     @Parameters(name = "{index}: {0}")
     public static Object[] data() {
-        return TestPlatform.values();
+        if (Objects.equals(System.getenv().get("SKIP_BINARY_GENERATION"), "true")) {
+            return new TestPlatform[]{TestPlatform.NATIVE, TestPlatform.ALPINE, TestPlatform.CENTOS, TestPlatform.UBUNTU, TestPlatform.NO_INIT, TestPlatform.SLIM};
+        } else {
+            return TestPlatform.values();
+        }
     }
 
     @Rule public JenkinsRule j = new JenkinsRule();
@@ -466,7 +471,7 @@ public class BourneShellScriptTest {
     }
 
     @Test public void binaryCaching() throws Exception {
-        assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        assumeTrue(!Objects.equals(System.getenv().get("SKIP_BINARY_GENERATION"), "true") && !platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
         switch (platform) {
             case NATIVE:
