@@ -81,7 +81,6 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         ps.stdout(listener);
         */
         ps.readStdout().readStderr(); // TODO see BourneShellScript
-        ps.start();
         Proc p = ps.start();
         c.registerForCleanup(p.getStdout());
         c.registerForCleanup(p.getStderr());
