@@ -1,5 +1,5 @@
 #! /bin/sh
-set -x
+set -ex
 # maven plugin version
 VER=$1
 # path to the golang source
@@ -15,8 +15,3 @@ docker run -i --rm \
 docker rmi ${IMG_NAME}:${VER}
 mkdir -p ${DST}
 mv ${BIN_NAME}_* ${DST}/
-if [ $? -ne 0 ]
-then
-  echo "Binary generation failed. To skip binary generation, set the environment variable 'SKIP_BINARY_GENERATION=true'"
-  exit 1
-fi
