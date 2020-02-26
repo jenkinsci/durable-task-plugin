@@ -179,9 +179,9 @@ public abstract class FileMonitoringTask extends DurableTask {
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
-            FilePath tmpDir = WorkspaceList.tempDir(ws);
+            FilePath tmpDir = /* TODO pending JENKINS-61197 fix in baseline */ ws.getParent() != null ? WorkspaceList.tempDir(ws) : null;
             if (tmpDir != null) {
-                FilePath cd = cd.child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
+                FilePath cd = tmpDir.child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
                 cd.mkdirs();
                 controlDir = cd.getRemote();
             } else {
