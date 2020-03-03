@@ -87,12 +87,13 @@ enum TestPlatform {
 
 @RunWith(Parameterized.class)
 public class BourneShellScriptTest {
+    public static boolean TEST_BINARY = Boolean.getBoolean(BourneShellScriptTest.class.getName() + ".TEST_BINARY");
     @Parameters(name = "{index}: {0}")
     public static Object[] data() {
-        if (Objects.equals(System.getenv().get("SKIP_BINARY_GENERATION"), "true")) {
-            return new TestPlatform[]{TestPlatform.NATIVE, TestPlatform.ALPINE, TestPlatform.CENTOS, TestPlatform.UBUNTU, TestPlatform.NO_INIT, TestPlatform.SLIM};
-        } else {
+        if (TEST_BINARY) {
             return TestPlatform.values();
+        } else {
+            return new TestPlatform[]{TestPlatform.NATIVE, TestPlatform.ALPINE, TestPlatform.CENTOS, TestPlatform.UBUNTU, TestPlatform.NO_INIT, TestPlatform.SLIM};
         }
     }
 
@@ -471,7 +472,7 @@ public class BourneShellScriptTest {
     }
 
     @Test public void binaryCaching() throws Exception {
-        assumeTrue(!Objects.equals(System.getenv().get("SKIP_BINARY_GENERATION"), "true") && !platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        assumeTrue(TEST_BINARY && !platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
         switch (platform) {
             case NATIVE:
