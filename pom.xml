@@ -81,6 +81,26 @@
             <build>
                 <plugins>
                     <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>properties-maven-plugin</artifactId>
+                        <version>1.0.0</version>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>set-system-properties</goal>
+                                </goals>
+                                <configuration>
+                                    <properties>
+                                        <property>
+                                            <name>org.jenkinsci.plugins.durabletask.BourneShellScriptTest.TEST_BINARY</name>
+                                            <value>true</value>
+                                        </property>
+                                    </properties>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-jar-plugin</artifactId>
                         <version>3.1.2</version>
