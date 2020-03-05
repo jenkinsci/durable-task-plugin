@@ -52,6 +52,7 @@ public class PowerShellCoreScriptTest {
 
     @BeforeClass
     public static void pwshOrDocker() throws Exception {
+        BourneShellScriptTest.unix();
         checkPwsh();
         if (!pwshExists && new Docker().isAvailable()) {
             assumeDocker();
