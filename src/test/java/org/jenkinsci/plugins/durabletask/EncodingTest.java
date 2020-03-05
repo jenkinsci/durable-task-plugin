@@ -73,17 +73,14 @@ public class EncodingTest {
 
     @ClassRule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
-    @BeforeClass public static void unixAndDocker() throws Exception {
-        BourneShellScriptTest.unix();
-        BourneShellScriptTest.assumeDocker();
-    }
-
     private static DumbSlave s;
     private static StreamTaskListener listener;
     private static FilePath ws;
     private static Launcher launcher;
 
     @BeforeClass public static void setUp() throws Exception {
+        BourneShellScriptTest.unix();
+        BourneShellScriptTest.assumeDocker();
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
         JavaContainer container = dockerUbuntu.create();
