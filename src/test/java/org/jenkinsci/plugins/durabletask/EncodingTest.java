@@ -52,7 +52,6 @@ import static org.hamcrest.Matchers.containsString;
 import org.jenkinsci.test.acceptance.docker.DockerClassRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import org.junit.AfterClass;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -68,9 +67,9 @@ import org.jvnet.hudson.test.LoggerRule;
 @RunWith(Parameterized.class)
 public class EncodingTest {
 
-    @ClassRule public static JenkinsRule r = new JenkinsRule();
+    @Rule public static JenkinsRule r = new JenkinsRule();
 
-    @ClassRule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
+    @Rule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
     private static DumbSlave s;
     private static StreamTaskListener listener;
