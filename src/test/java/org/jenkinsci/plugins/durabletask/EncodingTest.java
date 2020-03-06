@@ -53,6 +53,7 @@ import org.jenkinsci.test.acceptance.docker.DockerClassRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import org.junit.AfterClass;
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -69,8 +70,6 @@ public class EncodingTest {
 
     @ClassRule public static JenkinsRule r = new JenkinsRule();
 
-    @ClassRule public static DockerClassRule<JavaContainer> dockerUbuntu = new DockerClassRule<>(JavaContainer.class);
-
     @ClassRule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
     @BeforeClass public static void unixAndDocker() throws Exception {
@@ -86,7 +85,7 @@ public class EncodingTest {
     @BeforeClass public static void setUp() throws Exception {
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
-        JavaContainer container = dockerUbuntu.create();
+        JavaContainer container = new DockerClassRule<>(JavaContainer.class).create();
         SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
         SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
         sshLauncher.setJvmOptions("-Dfile.encoding=ISO-8859-1");
