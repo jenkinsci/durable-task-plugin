@@ -52,6 +52,7 @@ import static org.hamcrest.Matchers.containsString;
 import org.jenkinsci.test.acceptance.docker.DockerClassRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import org.junit.AfterClass;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -67,8 +68,6 @@ import org.jvnet.hudson.test.LoggerRule;
 @RunWith(Parameterized.class)
 public class EncodingTest {
 
-    @Rule public JenkinsRule r = new JenkinsRule();
-
     @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
     private static DumbSlave s;
@@ -76,9 +75,13 @@ public class EncodingTest {
     private static FilePath ws;
     private static Launcher launcher;
 
-    @BeforeClass public static void setUp() throws Exception {
+    @BeforeClass public static void unixAndDocker() throws Exception {
         BourneShellScriptTest.unix();
         BourneShellScriptTest.assumeDocker();
+    }
+
+    @ClassRule public static void setUp() throws Exception {
+        JenkinsRule r = new JenkinsRule();
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
         JavaContainer container = new DockerClassRule<>(JavaContainer.class).create();
@@ -92,6 +95,7 @@ public class EncodingTest {
         ws = s.getWorkspaceRoot();
         launcher = s.createLauncher(listener);
     }
+
     private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
         @Override public String call() throws RuntimeException {
             return Charset.defaultCharset().name();
