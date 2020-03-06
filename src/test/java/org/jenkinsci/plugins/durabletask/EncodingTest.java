@@ -51,9 +51,8 @@ import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.containsString;
 import org.jenkinsci.test.acceptance.docker.DockerClassRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Before;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -70,6 +69,8 @@ import org.jvnet.hudson.test.LoggerRule;
 public class EncodingTest {
 
     @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
+    @Rule public JenkinsRule r = new JenkinsRule();
+    @Rule public DockerClassRule<JavaContainer> dockerUbuntu = new DockerClassRule<>(JavaContainer.class);
 
     private static DumbSlave s;
     private static StreamTaskListener listener;
@@ -82,10 +83,9 @@ public class EncodingTest {
     }
 
     @Before public void setUp() throws Exception {
-        JenkinsRule r = new JenkinsRule();
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
-        JavaContainer container = new DockerClassRule<>(JavaContainer.class).create();
+        JavaContainer container = dockerUbuntu.create();
         SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
         SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
         sshLauncher.setJvmOptions("-Dfile.encoding=ISO-8859-1");
@@ -103,7 +103,7 @@ public class EncodingTest {
         }
     }
 
-    @AfterClass public static void tearDown() throws Exception {
+    @After public void tearDown() throws Exception {
         s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
     }
 
