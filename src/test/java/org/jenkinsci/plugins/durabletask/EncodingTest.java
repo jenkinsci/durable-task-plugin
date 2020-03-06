@@ -81,7 +81,7 @@ public class EncodingTest {
         BourneShellScriptTest.assumeDocker();
     }
 
-    @Before public static void setUp() throws Exception {
+    @Before public void setUp() throws Exception {
         JenkinsRule r = new JenkinsRule();
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
