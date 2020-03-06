@@ -67,7 +67,7 @@ import org.jvnet.hudson.test.LoggerRule;
 @RunWith(Parameterized.class)
 public class EncodingTest {
 
-    @Rule public static JenkinsRule r = new JenkinsRule();
+    @Rule public JenkinsRule r = new JenkinsRule();
 
     @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
