@@ -52,6 +52,7 @@ import static org.hamcrest.Matchers.containsString;
 import org.jenkinsci.test.acceptance.docker.DockerClassRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import org.junit.AfterClass;
+import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -80,7 +81,7 @@ public class EncodingTest {
         BourneShellScriptTest.assumeDocker();
     }
 
-    @ClassRule public static void setUp() throws Exception {
+    @Before public static void setUp() throws Exception {
         JenkinsRule r = new JenkinsRule();
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
