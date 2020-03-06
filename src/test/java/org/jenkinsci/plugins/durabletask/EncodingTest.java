@@ -69,7 +69,7 @@ public class EncodingTest {
 
     @Rule public static JenkinsRule r = new JenkinsRule();
 
-    @Rule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
+    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
 
     private static DumbSlave s;
     private static StreamTaskListener listener;
