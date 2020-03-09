@@ -66,7 +66,6 @@ import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckForNull;
@@ -186,9 +185,9 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         /**
          * {@link #transcodingCharset} on the remote side when using {@link #writeLog}.
-         * May be a wrapper for null; initialized on demand.
+         * May be null; initialized on demand.
          */
-        private transient volatile AtomicReference<Charset> writeLogCs;
+        private transient volatile Charset writeLogCs;
 
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
@@ -202,20 +201,20 @@ public abstract class FileMonitoringTask extends DurableTask {
             if (writeLogCs == null) {
                 if (SYSTEM_DEFAULT_CHARSET.equals(charset)) {
                     String cs = workspace.act(new TranscodingCharsetForSystemDefault());
-                    writeLogCs = new AtomicReference<>(cs == null ? null : Charset.forName(cs));
+                    writeLogCs = cs == null ? null : Charset.forName(cs);
                 } else {
                     // Does not matter what system default charset on the remote side is, so save the Remoting call.
-                    writeLogCs = new AtomicReference<>(transcodingCharset(charset));
+                    writeLogCs = transcodingCharset(charset);
                 }
                 LOGGER.log(Level.FINE, "remote transcoding charset: {0}", writeLogCs);
             }
             FilePath log = getLogFile(workspace);
             OutputStream transcodedSink;
-            if (writeLogCs.get() == null) {
+            if (writeLogCs == null) {
                 transcodedSink = sink;
             } else {
                 // WriterOutputStream constructor taking Charset calls .replaceWith("?") which we do not want:
-                CharsetDecoder decoder = writeLogCs.get().newDecoder().onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE);
+                CharsetDecoder decoder = writeLogCs.newDecoder().onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE);
                 transcodedSink = new WriterOutputStream(new OutputStreamWriter(sink, StandardCharsets.UTF_8), decoder, 1024, true);
             }
             CountingOutputStream cos = new CountingOutputStream(transcodedSink);
