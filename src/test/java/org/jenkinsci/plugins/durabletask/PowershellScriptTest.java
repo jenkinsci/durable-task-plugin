@@ -28,6 +28,8 @@ import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Proc;
+import hudson.model.TaskListener;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -35,15 +37,12 @@ import java.io.IOException;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.containsString;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import org.junit.Assume;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
-import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import java.util.Properties;
 import java.util.*;
@@ -106,7 +105,7 @@ public class PowershellScriptTest {
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher));
+        assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher, TaskListener.NULL));
         assertThat(baos.toString(), containsString("Hello, World!"));
         c.cleanup(ws);
     }
@@ -118,7 +117,7 @@ public class PowershellScriptTest {
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
+        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, TaskListener.NULL));
         assertThat(baos.toString(), containsString("Success!"));
         c.cleanup(ws);
     }
@@ -130,7 +129,7 @@ public class PowershellScriptTest {
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertTrue(c.exitStatus(ws, launcher).intValue() != 0);
+        assertTrue(c.exitStatus(ws, launcher, TaskListener.NULL).intValue() != 0);
         assertThat(baos.toString(), containsString("Bogus error"));
         c.cleanup(ws);
     }
@@ -140,7 +139,7 @@ public class PowershellScriptTest {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        assertTrue(c.exitStatus(ws, launcher).intValue() == 0);
+        assertTrue(c.exitStatus(ws, launcher, TaskListener.NULL).intValue() == 0);
         c.cleanup(ws);
     }
     
@@ -216,7 +215,7 @@ public class PowershellScriptTest {
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(0, c.exitStatus(ws, launcher).intValue());
+        assertEquals(0, c.exitStatus(ws, launcher, TaskListener.NULL).intValue());
         assertThat(baos.toString(), containsString("VERBOSE: Hello, Verbose!"));
         assertThat(baos.toString(), containsString("WARNING: Hello, Warning!"));
         assertThat(baos.toString(), containsString("DEBUG: Hello, Debug!"));
@@ -229,7 +228,7 @@ public class PowershellScriptTest {
         while (c.exitStatus(newWs, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        assertEquals(0, c.exitStatus(newWs, launcher).intValue());
+        assertEquals(0, c.exitStatus(newWs, launcher, TaskListener.NULL).intValue());
         c.cleanup(ws);
     }
 
@@ -252,7 +251,7 @@ public class PowershellScriptTest {
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
-        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher));
+        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, TaskListener.NULL));
         String log = baos.toString("UTF-8");
         assertTrue(log, log.contains("Helló, Wõrld ®"));
         c.cleanup(ws);
@@ -263,7 +262,7 @@ public class PowershellScriptTest {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        assertEquals(Integer.valueOf(5), c.exitStatus(ws, launcher));
+        assertEquals(Integer.valueOf(5), c.exitStatus(ws, launcher, TaskListener.NULL));
         c.cleanup(ws);
     }
 }
