@@ -38,6 +38,8 @@ import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import hudson.util.StreamTaskListener;
+
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,13 +58,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckForNull;
@@ -73,6 +76,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.commons.io.output.WriterOutputStream;
+import org.jenkinsci.remoting.util.IOUtils;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -170,11 +174,20 @@ public abstract class FileMonitoringTask extends DurableTask {
             return charset;
         }
 
+        private transient List<Closeable> cleanupList;
+
+        void registerForCleanup(Closeable c) {
+            if (cleanupList == null) {
+                cleanupList = new LinkedList<>();
+            }
+            cleanupList.add(c);
+        }
+
         /**
          * {@link #transcodingCharset} on the remote side when using {@link #writeLog}.
-         * May be a wrapper for null; initialized on demand.
+         * May be null; initialized on demand.
          */
-        private transient volatile AtomicReference<Charset> writeLogCs;
+        private transient volatile Charset writeLogCs;
 
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
@@ -188,20 +201,20 @@ public abstract class FileMonitoringTask extends DurableTask {
             if (writeLogCs == null) {
                 if (SYSTEM_DEFAULT_CHARSET.equals(charset)) {
                     String cs = workspace.act(new TranscodingCharsetForSystemDefault());
-                    writeLogCs = new AtomicReference<>(cs == null ? null : Charset.forName(cs));
+                    writeLogCs = cs == null ? null : Charset.forName(cs);
                 } else {
                     // Does not matter what system default charset on the remote side is, so save the Remoting call.
-                    writeLogCs = new AtomicReference<>(transcodingCharset(charset));
+                    writeLogCs = transcodingCharset(charset);
                 }
                 LOGGER.log(Level.FINE, "remote transcoding charset: {0}", writeLogCs);
             }
             FilePath log = getLogFile(workspace);
             OutputStream transcodedSink;
-            if (writeLogCs.get() == null) {
+            if (writeLogCs == null) {
                 transcodedSink = sink;
             } else {
                 // WriterOutputStream constructor taking Charset calls .replaceWith("?") which we do not want:
-                CharsetDecoder decoder = writeLogCs.get().newDecoder().onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE);
+                CharsetDecoder decoder = writeLogCs.newDecoder().onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE);
                 transcodedSink = new WriterOutputStream(new OutputStreamWriter(sink, StandardCharsets.UTF_8), decoder, 1024, true);
             }
             CountingOutputStream cos = new CountingOutputStream(transcodedSink);
@@ -347,6 +360,9 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
             controlDir(workspace).deleteRecursive();
+            if (cleanupList != null) {
+                cleanupList.stream().forEach(IOUtils::closeQuietly);
+            }
         }
 
         /**
@@ -510,6 +526,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                 } else {
                     if (!controller.controlDir(workspace).isDirectory()) {
                         LOGGER.log(Level.WARNING, "giving up on watching nonexistent {0}", controller.controlDir);
+                        controller.cleanup(workspace);
                         return;
                     }
                     // Could use an adaptive timeout as in DurableTaskStep.Execution in polling mode,

@@ -29,6 +29,7 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.Proc;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -80,7 +81,10 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         ps.stdout(listener);
         */
         ps.readStdout().readStderr(); // TODO see BourneShellScript
-        ps.start();
+        Proc p = ps.start();
+        c.registerForCleanup(p.getStdout());
+        c.registerForCleanup(p.getStderr());
+
         return c;
     }
 

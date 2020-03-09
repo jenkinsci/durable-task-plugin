@@ -32,6 +32,7 @@ import hudson.FilePath.FileCallable;
 import hudson.Launcher;
 import hudson.Platform;
 import hudson.PluginWrapper;
+import hudson.Proc;
 import hudson.Util;
 import hudson.model.Computer;
 import hudson.model.Node;
@@ -227,10 +228,14 @@ public final class BourneShellScript extends FileMonitoringTask {
         Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
         if (LAUNCH_DIAGNOSTICS) {
             ps.stdout(listener);
+            ps.start();
         } else {
             ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
+            Proc p = ps.start();
+            // Make sure these stream will get closed later, to release their remote counterpart from the agent's ExportTable. See JENKINS-60960.
+            c.registerForCleanup(p.getStdout());
+            c.registerForCleanup(p.getStderr());
         }
-        ps.start();
         return c;
     }
 

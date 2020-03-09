@@ -28,6 +28,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
+import hudson.Proc;
 import hudson.Launcher;
 import hudson.util.ListBoxModel;
 import hudson.util.ListBoxModel.Option;
@@ -128,7 +129,9 @@ public final class PowershellScript extends FileMonitoringTask {
         
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         ps.readStdout().readStderr();
-        ps.start();
+        Proc p = ps.start();
+        c.registerForCleanup(p.getStdout());
+        c.registerForCleanup(p.getStderr());
 
         return c;
     }

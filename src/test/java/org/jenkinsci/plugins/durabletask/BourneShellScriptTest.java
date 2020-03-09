@@ -37,15 +37,20 @@ import hudson.Platform;
 import hudson.Proc;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
+import hudson.remoting.Channel;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.DumbSlave;
 import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
+import jenkins.security.MasterToSlaveCallable;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -226,6 +231,7 @@ public class BourneShellScriptTest {
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
         assertNoZombies();
+        assertNoProcessPipeInputStreamInRemoteExportTable();
     }
 
     @Test public void stop() throws Exception {
@@ -595,4 +601,39 @@ public class BourneShellScriptTest {
             Thread.sleep(100);
         }
     }
+
+    /**
+     * Check that the agent ExportTable does not retain references to ProcessPipeInputStream.
+     *
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    @Issue("JENKINS-60960")
+    private void assertNoProcessPipeInputStreamInRemoteExportTable()
+            throws IOException, InterruptedException {
+        VirtualChannel virtualChannel = launcher.getChannel();
+        if (virtualChannel instanceof Channel) {
+            @SuppressWarnings("resource")
+            Channel channel = (Channel) virtualChannel;
+            String remoteExportTable = channel.call(new DumpExportTableCallable());
+            if (remoteExportTable.contains("object=java.lang.UNIXProcess$ProcessPipeInputStream")) {
+                fail("remote ExportTable contains some java.lang.UNIXProcess$ProcessPipeInputStream objects\n"
+                        + remoteExportTable);
+            }
+        }
+    }
+
+    private static final class DumpExportTableCallable extends MasterToSlaveCallable<String, IOException> {
+        private static final long serialVersionUID = 1L;
+
+        @Override
+        public String call() throws IOException {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            Channel channel = getChannelOrFail();
+            channel.dumpExportTable(pw);
+            return sw.toString();
+        }
+    }
+
 }
