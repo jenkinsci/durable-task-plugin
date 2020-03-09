@@ -38,6 +38,8 @@ import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import hudson.util.StreamTaskListener;
+
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,6 +58,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -73,6 +77,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.commons.io.output.WriterOutputStream;
+import org.jenkinsci.remoting.util.IOUtils;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -168,6 +173,15 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         String getCharset() {
             return charset;
+        }
+
+        private transient List<Closeable> cleanupList;
+
+        void registerForCleanup(Closeable c) {
+            if (cleanupList == null) {
+                cleanupList = new LinkedList<>();
+            }
+            cleanupList.add(c);
         }
 
         /**
@@ -347,6 +361,9 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
             controlDir(workspace).deleteRecursive();
+            if (cleanupList != null) {
+                cleanupList.stream().forEach(IOUtils::closeQuietly);
+            }
         }
 
         /**
@@ -510,6 +527,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                 } else {
                     if (!controller.controlDir(workspace).isDirectory()) {
                         LOGGER.log(Level.WARNING, "giving up on watching nonexistent {0}", controller.controlDir);
+                        controller.cleanup(workspace);
                         return;
                     }
                     // Could use an adaptive timeout as in DurableTaskStep.Execution in polling mode,
