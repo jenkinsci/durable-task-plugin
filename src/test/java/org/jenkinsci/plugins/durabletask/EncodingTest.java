@@ -51,9 +51,8 @@ import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.containsString;
 import org.jenkinsci.test.acceptance.docker.DockerClassRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
+import org.junit.AfterClass;
+import org.junit.ClassRule;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -68,21 +67,19 @@ import org.jvnet.hudson.test.LoggerRule;
 @RunWith(Parameterized.class)
 public class EncodingTest {
 
-    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
-    @Rule public JenkinsRule r = new JenkinsRule();
-    @Rule public DockerClassRule<JavaContainer> dockerUbuntu = new DockerClassRule<>(JavaContainer.class);
+    @ClassRule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
+    @ClassRule public static JenkinsRule r = new JenkinsRule();
+    @ClassRule public static DockerClassRule<JavaContainer> dockerUbuntu = new DockerClassRule<>(JavaContainer.class);
 
     private static DumbSlave s;
     private static StreamTaskListener listener;
     private static FilePath ws;
     private static Launcher launcher;
 
-    @BeforeClass public static void unixAndDocker() throws Exception {
+    @BeforeClass public static void setUp() throws Exception {
+        s = null;
         BourneShellScriptTest.unix();
         BourneShellScriptTest.assumeDocker();
-    }
-
-    @Before public void setUp() throws Exception {
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
         JavaContainer container = dockerUbuntu.create();
@@ -103,8 +100,11 @@ public class EncodingTest {
         }
     }
 
-    @After public void tearDown() throws Exception {
-        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+    @AfterClass public static
+     void tearDown() throws Exception {
+        if (s != null) {
+            s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+        }
     }
 
     public static final class TestCase {
