@@ -74,32 +74,12 @@
             <id>generate-binaries-profile</id>
             <activation>
                 <property>
-                    <name>env.SKIP_BINARY_GENERATION</name>
+                    <name>env.SKIP_DURABLE_TASK_BINARY_GENERATION</name>
                     <value>!true</value>
                 </property>
             </activation>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>properties-maven-plugin</artifactId>
-                        <version>1.0.0</version>
-                        <executions>
-                            <execution>
-                                <goals>
-                                    <goal>set-system-properties</goal>
-                                </goals>
-                                <configuration>
-                                    <properties>
-                                        <property>
-                                            <name>org.jenkinsci.plugins.durabletask.BourneShellScriptTest.TEST_BINARY</name>
-                                            <value>true</value>
-                                        </property>
-                                    </properties>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-jar-plugin</artifactId>
