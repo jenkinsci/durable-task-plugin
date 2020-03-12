@@ -4,6 +4,7 @@
 Mar 10, 2020
 
 - Clean up deprecated code and unused imports ([PR-109](https://github.com/jenkinsci/durable-task-plugin/pull/109))
+- Remove utility function for tempDir and use implementation from core instead ([PR-110](https://github.com/jenkinsci/durable-task-plugin/pull/110))
 - Upgrade parent pom to 3.54 ([PR-119](https://github.com/jenkinsci/durable-task-plugin/pull/119))
 - Explicitly close `ProcessPipeInputStream` to prevent agent-side OOM ([JENKINS-60960](https://issues.jenkins-ci.org/browse/JENKINS-60960))
 - Make `generate-binaries` script return error. Refactor unit tests to support infra changes and to skip binary tests
