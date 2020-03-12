@@ -67,16 +67,9 @@ import org.jvnet.hudson.test.LoggerRule;
 @RunWith(Parameterized.class)
 public class EncodingTest {
 
-    @ClassRule public static JenkinsRule r = new JenkinsRule();
-
-    @ClassRule public static DockerClassRule<JavaContainer> dockerUbuntu = new DockerClassRule<>(JavaContainer.class);
-
     @ClassRule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
-
-    @BeforeClass public static void unixAndDocker() throws Exception {
-        BourneShellScriptTest.unix();
-        BourneShellScriptTest.assumeDocker();
-    }
+    @ClassRule public static JenkinsRule r = new JenkinsRule();
+    @ClassRule public static DockerClassRule<JavaContainer> dockerUbuntu = new DockerClassRule<>(JavaContainer.class);
 
     private static DumbSlave s;
     private static StreamTaskListener listener;
@@ -84,6 +77,9 @@ public class EncodingTest {
     private static Launcher launcher;
 
     @BeforeClass public static void setUp() throws Exception {
+        s = null;
+        BourneShellScriptTest.unix();
+        BourneShellScriptTest.assumeDocker();
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
         JavaContainer container = dockerUbuntu.create();
@@ -97,14 +93,18 @@ public class EncodingTest {
         ws = s.getWorkspaceRoot();
         launcher = s.createLauncher(listener);
     }
+
     private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
         @Override public String call() throws RuntimeException {
             return Charset.defaultCharset().name();
         }
     }
 
-    @AfterClass public static void tearDown() throws Exception {
-        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+    @AfterClass public static
+     void tearDown() throws Exception {
+        if (s != null) {
+            s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+        }
     }
 
     public static final class TestCase {

@@ -1,5 +1,5 @@
 #! /bin/sh
-set -x
+set -ex
 # maven plugin version
 VER=$1
 # path to the golang source
@@ -12,6 +12,6 @@ docker build --build-arg PLUGIN_VER=${VER} -t ${IMG_NAME}:${VER} .
 docker run -i --rm \
     --mount type=bind,src=${SRC},dst=/org/jenkinsci/plugins/durabletask \
     ${IMG_NAME}:${VER}
+docker rmi ${IMG_NAME}:${VER}
 mkdir -p ${DST}
 mv ${BIN_NAME}_* ${DST}/
-docker rmi ${IMG_NAME}:${VER}
