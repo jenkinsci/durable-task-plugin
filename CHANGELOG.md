@@ -1,5 +1,15 @@
 ## Changelog
 
+### Version 1.34
+Mar 10, 2020
+
+- Internal: Clean up deprecated code and unused imports ([PR-109](https://github.com/jenkinsci/durable-task-plugin/pull/109))
+- Internal: Remove utility function for tempDir and use implementation from core instead ([PR-110](https://github.com/jenkinsci/durable-task-plugin/pull/110))
+- Internal: Upgrade parent pom to 3.54 ([PR-119](https://github.com/jenkinsci/durable-task-plugin/pull/119))
+- Fix: Explicitly close `ProcessPipeInputStream` to prevent agent-side OOM ([JENKINS-60960](https://issues.jenkins-ci.org/browse/JENKINS-60960))
+- Internal: Make `generate-binaries` script return error. Refactor unit tests to support infra changes and to skip binary tests
+  when binary is not generated ([PR-121](https://github.com/jenkinsci/durable-task-plugin/pull/121))
+
 ### Version 1.33
 Oct 29, 2019
 
