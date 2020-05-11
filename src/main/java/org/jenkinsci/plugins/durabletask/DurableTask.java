@@ -29,6 +29,7 @@ import hudson.ExtensionPoint;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.AbstractDescribableImpl;
+import hudson.model.Run;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -43,6 +44,25 @@ import javax.annotation.Nonnull;
 public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> implements ExtensionPoint {
 
     private static final Logger LOGGER = Logger.getLogger(DurableTask.class.getName());
+
+    /**
+     * Optional information about the run that has triggered this task
+     */
+    protected transient Run<?, ?> run;
+
+    /**
+     * @since TODO
+     */
+    public void setRun(Run<?, ?> run) {
+        this.run = run;
+    }
+
+    /**
+     * @since TODO
+     */
+    public Run<?, ?> getRun() {
+        return run;
+    }
 
     @Override public DurableTaskDescriptor getDescriptor() {
         return (DurableTaskDescriptor) super.getDescriptor();

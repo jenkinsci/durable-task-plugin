@@ -32,6 +32,7 @@ import hudson.Launcher;
 import hudson.Proc;
 import hudson.model.TaskListener;
 import java.io.IOException;
+
 import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
@@ -75,6 +76,8 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         }
         c.getBatchFile1(ws).write(cmd, "UTF-8");
         c.getBatchFile2(ws).write(script, "UTF-8");
+
+        launcher.prepareFilterRules(getRun(), this);
 
         Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(escape(envVars)).pwd(ws).quiet(true);
         /* Too noisy, and consumes a thread:

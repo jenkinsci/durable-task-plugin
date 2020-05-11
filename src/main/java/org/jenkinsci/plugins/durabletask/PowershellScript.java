@@ -37,6 +37,7 @@ import java.util.Arrays;
 import java.util.List;
 import hudson.model.TaskListener;
 import java.io.IOException;
+
 import org.kohsuke.stapler.DataBoundConstructor;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
@@ -126,7 +127,9 @@ public final class PowershellScript extends FileMonitoringTask {
                 writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
             }
         }
-        
+
+        launcher.prepareFilterRules(getRun(), this);
+
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         ps.readStdout().readStderr();
         Proc p = ps.start();

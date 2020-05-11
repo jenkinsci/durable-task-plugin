@@ -72,6 +72,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.security.MasterToSlaveCallable;
+import jenkins.tasks.filters.EnvVarsFilterableBuilder;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.io.output.CountingOutputStream;
@@ -81,7 +82,7 @@ import org.jenkinsci.remoting.util.IOUtils;
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
  */
-public abstract class FileMonitoringTask extends DurableTask {
+public abstract class FileMonitoringTask extends DurableTask implements EnvVarsFilterableBuilder {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 

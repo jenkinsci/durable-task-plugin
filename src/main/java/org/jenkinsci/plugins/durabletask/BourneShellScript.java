@@ -225,6 +225,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
 
         LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
+
+        launcher.prepareFilterRules(getRun(), this);
+
         Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
         if (LAUNCH_DIAGNOSTICS) {
             ps.stdout(listener);
