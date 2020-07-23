@@ -1,8 +1,8 @@
 def builds = [:]
-builds['docker'] = { buildPlugin(platforms: ['docker']) }
-builds['windows'] = {
+builds['linux-with-docker-wrapper'] = { buildPlugin(platforms: ['docker']) }
+builds['windows-wrapper'] = {
     withEnv(['SKIP_DURABLE_TASK_BINARY_GENERATION=true']) {
-        buildPlugin(platforms: ['windows'])
+        buildPlugin(useAci: true, platforms: ['windows'])
     }
 }
 parallel builds
