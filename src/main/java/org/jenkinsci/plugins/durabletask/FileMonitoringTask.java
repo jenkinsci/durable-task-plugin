@@ -315,19 +315,26 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Like {@link #getOutput(FilePath, Launcher)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
          */
         protected byte[] getOutput(FilePath workspace) throws IOException, InterruptedException {
-            return getOutputFile(workspace).act(new MasterToSlaveFileCallable<byte[]>() {
-                @Override public byte[] invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
-                    byte[] buf = FileUtils.readFileToByteArray(f);
-                    ByteBuffer transcoded = maybeTranscode(buf, charset);
-                    if (transcoded == null) {
-                        return buf;
-                    } else {
-                        byte[] buf2 = new byte[transcoded.remaining()];
-                        transcoded.get(buf2);
-                        return buf2;
-                    }
+            return getOutputFile(workspace).act(new GetOutput(charset));
+        }
+
+        private static class GetOutput extends MasterToSlaveFileCallable<byte[]> {
+            private final String charset;
+            GetOutput(String charset) {
+                this.charset = charset;
+            }
+            @Override
+            public byte[] invoke(File file, VirtualChannel vc) throws IOException, InterruptedException {
+                byte[] buf = FileUtils.readFileToByteArray(file);
+                ByteBuffer transcoded = maybeTranscode(buf, charset);
+                if (transcoded == null) {
+                    return buf;
+                } else {
+                    byte[] buf2 = new byte[transcoded.remaining()];
+                    transcoded.get(buf2);
+                    return buf2;
                 }
-            });
+            }
         }
 
         /**
