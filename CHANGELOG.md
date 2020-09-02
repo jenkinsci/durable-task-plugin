@@ -58,16 +58,16 @@ Release date: 2019-10-22
 -   Allow setting pwsh as Powershell executable
     ([PR \#112](https://github.com/jenkinsci/durable-task-plugin/pull/111))
 -   Bugfix: Use setsid instead of nohup ([JENKINS-25503](https://issues.jenkins-ci.org/browse/JENKINS-25503))
-    - For *NIX systems only, the shell wrapper has been replaced with a pre-compiled golang binary.
+    - For \*NIX systems only, the shell wrapper has been replaced with a pre-compiled golang binary.
     - The binary launches the script under a new session to better survive unexpected Jenkins terminations.
     - Just like how the shell wrapper executes in the background (since 1.30), the script launcher
       is a daemonized process. The means that there is an expectation of orphaned-child cleanup
       (i.e. zombie-reaping) within the underlying environment.
-    - The binary itself is ~2.5MB per binary. There are 4 pre-compiled binaries (32 and 64bit versions
+    - The binary itself is \~2.5MB per binary. There are 4 pre-compiled binaries (32 and 64bit versions
       for UNIX and DARWIN).
-    - The memory footprint is ~800KB heavier than the shell wrapper.
+    - The memory footprint is \~800KB heavier than the shell wrapper.
         - The two shell processes (610-640KB) and single sleep process (548KB) are replaced by a
-          single process (~2560KB)
+          single process (\~2560KB)
 
 ### Version 1.30
 
