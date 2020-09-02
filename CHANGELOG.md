@@ -1,5 +1,12 @@
 ## Changelog
 
+### Version 1.35
+
+Release date: 2020-09-02
+
+- Fix: Convert `FileMonitoringTask$FileMonitoringController$1` to a named class to avoid log warnings related to serializing anonymous classes ([JENKINS-55145](https://issues.jenkins-ci.org/browse/JENKINS-55145))
+- Internal: Fix CI build on Windows ([PR 125](https://github.com/jenkinsci/durable-task-plugin/pull/125))
+
 ### Version 1.34
 Mar 10, 2020
 
