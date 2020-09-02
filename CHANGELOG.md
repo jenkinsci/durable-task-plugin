@@ -8,7 +8,8 @@ Release date: 2020-09-02
 - Internal: Fix CI build on Windows ([PR 125](https://github.com/jenkinsci/durable-task-plugin/pull/125))
 
 ### Version 1.34
-Mar 10, 2020
+
+Release date: 2020-03-10
 
 - Internal: Clean up deprecated code and unused imports ([PR-109](https://github.com/jenkinsci/durable-task-plugin/pull/109))
 - Internal: Remove utility function for tempDir and use implementation from core instead ([PR-110](https://github.com/jenkinsci/durable-task-plugin/pull/110))
@@ -18,14 +19,16 @@ Mar 10, 2020
   when binary is not generated ([PR-121](https://github.com/jenkinsci/durable-task-plugin/pull/121))
 
 ### Version 1.33
-Oct 29, 2019
+
+Release date: 2019-10-29
 
 - Disable binary wrapper caching when there are inadequate permissions to access the cache dir (namely containerized instances).
   ([JENKINS-59903](https://issues.jenkins-ci.org/browse/JENKINS-59903))
 - Do not use binary wrapper on non-x86 and FreeBSD architectures ([JENKINS-59907](https://issues.jenkins-ci.org/browse/JENKINS-59907))
 
 ### Version 1.32
-Oct 28, 2019
+
+Release date: 2019-10-28
 
 > **WARNING**: The bugs introduced in 1.31 are still present (([JENKINS-59903](https://issues.jenkins-ci.org/browse/JENKINS-59903),
 > [JENKINS-59907](https://issues.jenkins-ci.org/browse/JENKINS-59907))
@@ -36,7 +39,8 @@ Oct 28, 2019
       `org.jenkinsci.plugins.durabletask.BourneShellScript.FORCE_BINARY_WRAPPER=true` to the Java command line used to start Jenkins.
 
 ### Version 1.31
-Oct 22, 2019
+
+Release date: 2019-10-22
 
 > **WARNING**: This version (1.31) introduced bugs where scripts will not be able to launch on non-x86 platforms and
 > container-based agents that do not have access to the agent node's root directory.
@@ -66,7 +70,8 @@ Oct 22, 2019
           single process (~2560KB)
 
 ### Version 1.30
-Jul 05, 2019
+
+Release date: 2019-07-05
 
 -   Bugfix: Run the wrapper process for shell scripts in the background.
     ([JENKINS-58290](https://issues.jenkins-ci.org/browse/JENKINS-58290)). This
@@ -82,13 +87,15 @@ Jul 05, 2019
     ([JENKINS-52884](https://issues.jenkins-ci.org/browse/JENKINS-52884))
 
 ### Version 1.29
-Jan 31, 2019
+
+Release date: 2019-01-31
 
 -   Enhancement: Add support for z/OS Unix System Services to the `sh`
     step. ([JENKINS-37341](https://issues.jenkins-ci.org/browse/JENKINS-37341))
 
 ### Version 1.28
-Nov 14, 2018
+
+Release date: 2018-11-14
 
 -   Bugfix: Do not rely on a shebang line to select the interpreter
     for `sh` scripts. This means that Pipelines can now use relative
@@ -97,7 +104,8 @@ Nov 14, 2018
     ([JENKINS-50902](https://issues.jenkins-ci.org/browse/JENKINS-50902))
 
 ### Version 1.27
-Nov 01, 2018
+
+Release date: 2018-11-01
 
 -   Do not print the working directory or the type of script being run
     when a durable task starts. ([PR \#83](https://github.com/jenkinsci/durable-task-plugin/pull/83))
@@ -105,7 +113,8 @@ Nov 01, 2018
     only affect other plugins using this plugin in their tests.
 
 ### Version 1.26
-Sep 25, 2018
+
+Release date: 2018-09-25
 
 -   Bugfix: Increase the default heartbeat interval used to detect dead
     processes from 15 seconds to 5 minutes
@@ -116,7 +125,8 @@ Sep 25, 2018
     ([JENKINS-52165](https://issues.jenkins-ci.org/browse/JENKINS-52165))
 
 ### Version 1.25
-Aug 8, 2018
+
+Release date: 2018-08-08
 
 -   Major bugfix: Fix regressions in 1.23 and 1.24 that caused build
     failures when running `sh` steps in minimal environments such as
@@ -124,7 +134,8 @@ Aug 8, 2018
     ([JENKINS-52881](https://issues.jenkins-ci.org/browse/JENKINS-52881))
 
 ### Version 1.24
-Aug 7, 2018
+
+Release date: 2018-08-07
 
 -   **(Warning: Fix is incomplete. Full fix is in version 1.25)** Major
     bugfix: Fix regression in 1.23 that caused build failures on
@@ -135,7 +146,8 @@ Aug 7, 2018
     ([JEP-206](https://github.com/jenkinsci/jep/blob/master/jep/206/README.adoc))
 
 ### Version 1.23
-Jul 31, 2018
+
+Release date: 2018-07-31
 
 -   Major bugfix: properly count log content sent to avoid
     endlessly-repeating logs
@@ -149,13 +161,15 @@ Jul 31, 2018
 -   Admin: support incrementals
 
 ### Version 1.22
-Mar 13, 2018
+
+Release date: 2018-03-13
 
 -   Bugfix: Fix issues with Powershell error handling
     ([JENKINS-50029](https://issues.jenkins-ci.org/browse/JENKINS-50029))
 
 ### Version 1.21
-Mar 8, 2018
+
+Release date: 2018-03-08
 
 -   Bugfix: Resolves regression with Batch steps "hanging" on some
     Windows build agents
@@ -166,20 +180,23 @@ Mar 8, 2018
         jenkins-result.txt' - the batch step will complete normally
 
 ### Version 1.20
-Mar 7, 2018
+
+Release date: 2018-03-07
 
 -   Bugfix: Prevent PowerShell stdout pollution when using returnStdout
     ([JENKINS-49754](https://issues.jenkins-ci.org/browse/JENKINS-49754))
 
 ### Version 1.19
-Mar 6, 2018
+
+Release date: 2018-03-07
 
 -   Bugfix: Fix bogus DurableTask failures with "exit status code -1"
     due to non-atomic write of exit status code from processes
     ([JENKINS-25519](https://issues.jenkins-ci.org/browse/JENKINS-25519))
 
 ### Version 1.18
-Feb 16, 2018
+
+Release date: 2018-02-16
 
 -   **Major Bug Fixes to PowerShell step:**
     -   Incorrect exit
@@ -197,7 +214,8 @@ Feb 16, 2018
 -   Test fixes
 
 ### Version 1.17
-Nov 21, 2017
+
+Release date: 2017-11-21
 
 -   Version 1.16 accidentally declared a Java dependency of 8+, despite
     being otherwise compatible with Jenkins 2.7.x+ which run on Java 7.
@@ -205,7 +223,8 @@ Nov 21, 2017
 -   Internal: improved resilience of Docker-based test suites.
 
 ### Version 1.16
-Nov 14, 2017
+
+Release date: 2017-11-14
 
 > **WARNING**: This version (1.16) temporarily introduced a dependency on Java 8 which
 was reverted to Java 7 with version 1.17
@@ -216,19 +235,22 @@ was reverted to Java 7 with version 1.17
 -   [JENKINS-46496](https://issues.jenkins-ci.org/browse/JENKINS-46496): Fixed BOM issue with the `powershell` step, perhaps
 
 ### Version 1.15
-Oct 13, 2017
+
+Release date: 2017-10-13
 
 -   Apply a timeout to checking when processes are started, so that we
     can't hang indefinitely
 
 ### Version 1.14
-Jun 15 2017
+
+Release date: 2017-06-15
 
 -   JENKINS-34581 Powershell support.
 -   JENKINS-43639 File descriptor leak.
 
 ### Version 1.13
-Jan 18 2017
+
+Release date: 2017-01-18
 
 -   [JENKINS-40734](https://issues.jenkins-ci.org/browse/JENKINS-40734)
     Environment variable values containing `$` were not correctly passed
@@ -246,25 +268,29 @@ Anyway you are advised to use the syntax `PATH+ANYKEY=/something`, as
 documented in inline help.
 
 ### Version 1.12
-Jul 28 2016
+
+Release date: 2016-07-28
 
 -   Infrastructure for
     [JENKINS-26133](https://issues.jenkins-ci.org/browse/JENKINS-26133).
 
 ### Version 1.11
-Jun 29 2016
+
+Release date: 2016-06-29
 
 -   Infrastructure for
     [JENKINS-31842](https://issues.jenkins-ci.org/browse/JENKINS-31842).
 
 ### Version 1.10
-May 19 2016
+
+Release date: 2016-05-19
 
 -   [JENKINS-34150](https://issues.jenkins-ci.org/browse/JENKINS-34150)
     `bat` hangs under some conditions.
 
 ### Version 1.9
-Mar 24 2016
+
+Release date: 2016-03-24
 
 -   [JENKINS-32701](https://issues.jenkins-ci.org/browse/JENKINS-32701)
     Handle percent signs in the working directory for batch scripts, for
@@ -272,7 +298,8 @@ Mar 24 2016
     a `/` in its name.
 
 ### Version 1.8
-Mar 03 2016
+
+Release date: 2016-03-03
 
 -   [JENKINS-27152](https://issues.jenkins-ci.org/browse/JENKINS-27152)
     Store control directory outside of the workspace.
@@ -282,13 +309,15 @@ Mar 03 2016
     Refinement of fix in 1.4.
 
 ### Version 1.8-beta-1
-Jan 19 2016
+
+Release date: 2016-01-19
 
 -   [JENKINS-32264](https://issues.jenkins-ci.org/browse/JENKINS-32264)
     Linux-only process liveness check broke usage on FreeBSD.
 
 ### Version 1.7
-Dec 03 2015
+
+Release date: 2015-12-03
 
 -   [JENKINS-27152](https://issues.jenkins-ci.org/browse/JENKINS-27152)
     Not a fix, but use a more predictable control directory name.
@@ -296,43 +325,50 @@ Dec 03 2015
     Handle batch scripts that `exit` without `/b`.
 
 ### Version 1.6
-Aug 04 2015
+
+Release date: 2015-04-08
 
 -   Do not kill a one-shot agent merely because a flyweight task
     happened to run on it (rather than on master as usual). Works around
     a bug in the Multibranch API plugin.
 
 ### Version 1.5
-May 04 2015
+
+Release date: 2015-05-04
 
 -   Requires Jenkins 1.565.3+.
 -   Richer API for launching and stopping processes.
 
 ### Version 1.4
-Mar 06 2015
+
+Release date: 2015-03-06
 
 -   [JENKINS-25678](https://issues.jenkins-ci.org/browse/JENKINS-25678)
     Space-in-path bug affecting Windows builds.
 
 ### Version 1.3
-Feb 02 2015
+
+Release date: 2015-02-02
 
 -   Continuing to try to fix deadlocks.
 
 ### Version 1.2
-Jan 13 2015
+
+Release date: 2015-01-13
 
 -   [JENKINS-26380](https://issues.jenkins-ci.org/browse/JENKINS-26380)
     Occasional deadlocks when running against Jenkins 1.592+.
 
 ### Version 1.1
-Dec 05 2014
+
+Release date: 2014-12-05
 
 -   [JENKINS-25848](https://issues.jenkins-ci.org/browse/JENKINS-25848)
     Failure to run shell tasks on some Mac OS X installations.
 
 ### Version 1.0
-Nov 25 2014
+
+Release date: 2014-11-25
 
 -   [JENKINS-25727](https://issues.jenkins-ci.org/browse/JENKINS-25727)
     Race condition causing spurious -1 exit codes, especially for
@@ -341,14 +377,16 @@ Nov 25 2014
 -   Avoid allocating a useless thread on the agent while running a task.
 
 ### Version 0.7
-Oct 10 2014
+
+Release date: 2014-10-10
 
 -   [JENKINS-25727](https://issues.jenkins-ci.org/browse/JENKINS-25727)
     Better reliability of liveness checker when short-lived scripts are
     being run. (Amended in 1.0.)
 
 ### Version 0.6
-Oct 08 2014
+
+Release date: 2014-10-08
 
 -   [JENKINS-22249](https://issues.jenkins-ci.org/browse/JENKINS-22249)
     Detect if the wrapper shell script is dead, for example because the
@@ -356,13 +394,15 @@ Oct 08 2014
 -   Efficiency improvements in log copying.
 
 ### Version 0.5
-Sep 24 2014
+
+Release date: 2014-09-24
 
 -   New APIs `ContinuableExecutable` and `OnceRetentionStrategy`.
 -   Moved `ContinuedTask` into a subpackage.
 
 ### Version 0.4
-Aug 27 2014
+
+Release date: 2014-08-27
 
 -   New API: <https://trello.com/c/JKJFUWXo/33-prioritizedtask>
 -   Better error handling.
@@ -370,12 +410,14 @@ Aug 27 2014
     Print nicer output when running on newer versions of Jenkins.
 
 ### Version 0.3
-Jul 22 2014
+
+Release date: 2014-07-22
 
 -   Supporting `java.io.Serializable`.
 
 ### Version 0.2
-May 29 2014
+
+Release date: 2014-05-29
 
 -   [JENKINS-22248](https://issues.jenkins-ci.org/browse/JENKINS-22248)
     Allow multiple scripts to run in the same workspace concurrently.
@@ -384,6 +426,7 @@ May 29 2014
 -   Start the shell with `-xe` (echo commands, fail on error).
 
 ### Version 0.1
-Mar 18 2014
+
+Release date: 2014-03-18
 
 -   Initial release.
