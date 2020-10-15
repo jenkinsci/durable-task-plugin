@@ -474,7 +474,7 @@ public class BourneShellScriptTest {
     }
 
     @Test public void binaryCaching() throws Exception {
-        assumeTrue(!Objects.equals(System.getenv().get("SKIP_DURABLE_TASK_BINARY_GENERATION"), "true") && !platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
         switch (platform) {
             case NATIVE:
