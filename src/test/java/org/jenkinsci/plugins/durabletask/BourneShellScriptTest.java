@@ -95,11 +95,7 @@ public class BourneShellScriptTest {
     public static boolean TEST_BINARY = Boolean.getBoolean(BourneShellScriptTest.class.getName() + ".TEST_BINARY");
     @Parameters(name = "{index}: {0}")
     public static Object[] data() {
-        if (Objects.equals(System.getenv().get("SKIP_DURABLE_TASK_BINARY_GENERATION"), "true")) {
-            return new TestPlatform[]{TestPlatform.NATIVE, TestPlatform.ALPINE, TestPlatform.CENTOS, TestPlatform.UBUNTU, TestPlatform.NO_INIT, TestPlatform.SLIM};
-        } else {
-            return TestPlatform.values();
-        }
+        return TestPlatform.values();
     }
 
     @Rule public JenkinsRule j = new JenkinsRule();

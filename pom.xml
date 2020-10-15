@@ -69,15 +69,6 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-    <profiles>
-        <profile>
-            <id>generate-binaries-profile</id>
-            <activation>
-                <property>
-                    <name>env.SKIP_DURABLE_TASK_BINARY_GENERATION</name>
-                    <value>!true</value>
-                </property>
-            </activation>
             <build>
                 <plugins>
                     <plugin>
@@ -118,6 +109,4 @@
                     </plugin>
                 </plugins>
             </build>
-        </profile>
-    </profiles>
 </project>

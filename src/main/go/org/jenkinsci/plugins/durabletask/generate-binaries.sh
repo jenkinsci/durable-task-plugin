@@ -1,5 +1,18 @@
 #! /bin/sh
 set -ex
+
+if docker -v
+then
+    true
+elif [ -n "$JENKINS_URL" ]
+then
+    echo No Docker but in CI, skipping native image generation
+    exit 0
+else
+    echo You must have Docker to fully build this plugin
+    exit 1
+fi
+
 # maven plugin version
 VER=$1
 # path to the golang source
