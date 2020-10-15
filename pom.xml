@@ -69,21 +69,17 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+    <profiles>
+        <profile>
+            <id>generate-binaries-profile</id>
+            <activation>
+                <property> <!-- Permit native image generation to be skipped only in CI on Windows -->
+                    <name>env.USERPROFILE</name>
+                    <value>!C:\Users\jenkins</value>
+                </property>
+            </activation>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-help-plugin</artifactId>
-                        <version>2.2</version>
-                        <executions>
-                            <execution>
-                                <phase>validate</phase>
-                                <goals>
-                                    <goal>system</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-jar-plugin</artifactId>
@@ -122,4 +118,6 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+    </profiles>
 </project>
