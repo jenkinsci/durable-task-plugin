@@ -416,7 +416,7 @@ public class BourneShellScriptTest {
      * otherwise binary will crash if Jenkins is terminated unexpectedly.
      */
     @Test public void noStdout() throws Exception {
-        assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        assumeFalse(platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         System.setProperty(BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "true");
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
@@ -474,7 +474,7 @@ public class BourneShellScriptTest {
     }
 
     @Test public void binaryCaching() throws Exception {
-        assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        assumeFalse(platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
         switch (platform) {
             case NATIVE:
