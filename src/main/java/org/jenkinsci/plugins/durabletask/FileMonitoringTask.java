@@ -95,6 +95,8 @@ public abstract class FileMonitoringTask extends DurableTask {
      */
     private @CheckForNull String charset;
 
+    protected String outputFile;
+
     private static String cookieFor(FilePath workspace) {
         return "durable-" + Util.getDigestOf(workspace.getRemote());
     }
@@ -167,6 +169,8 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         private long lastLocation;
 
+        protected String outputFile;
+
         /** @see FileMonitoringTask#charset */
         private @CheckForNull String charset;
 
@@ -199,6 +203,13 @@ public abstract class FileMonitoringTask extends DurableTask {
                 controlDir = cd.getRemote();
             } else {
                 controlDir = null;
+            }
+        }
+
+        protected FileMonitoringController(FilePath ws, String outputFile) throws IOException, InterruptedException {
+            this(ws);
+            if (outputFile != null) {
+                this.outputFile = ws.child(outputFile).getRemote();
             }
         }
 
@@ -407,7 +418,11 @@ public abstract class FileMonitoringTask extends DurableTask {
          * File in which the stdout/stderr (or, if {@link #captureOutput} is called, just stderr) is written.
          */
         public FilePath getLogFile(FilePath workspace) throws IOException, InterruptedException {
-            return controlDir(workspace).child("jenkins-log.txt");
+            if (outputFile != null) {
+                return workspace.toComputer().getNode().createPath(outputFile);
+            } else {
+                return controlDir(workspace).child("jenkins-log.txt");
+            }
         }
 
         /**

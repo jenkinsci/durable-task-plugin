@@ -71,10 +71,15 @@ public final class PowershellScript extends FileMonitoringTask {
         capturingOutput = true;
     }
 
+    @Override
+    public void storeOutput(String outputFile) {
+        this.outputFile = outputFile;
+    }
+
     @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         List<String> args = new ArrayList<String>();
-        PowershellController c = new PowershellController(ws);
+        PowershellController c = new PowershellController(ws, outputFile);
         
         String cmd;
         if (capturingOutput) {
@@ -157,6 +162,10 @@ public final class PowershellScript extends FileMonitoringTask {
     private static final class PowershellController extends FileMonitoringController {
         private PowershellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
+        }
+
+        private PowershellController(FilePath ws, String outputFile) throws IOException, InterruptedException {
+            super(ws, outputFile);
         }
         
         public FilePath getPowerShellScriptFile(FilePath ws) throws IOException, InterruptedException {

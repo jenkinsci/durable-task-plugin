@@ -201,6 +201,25 @@ public class PowershellScriptTest {
         }
         c.cleanup(ws);
     }
+
+    @Test public void storeOutput() throws Exception {
+        DurableTask task = new PowershellScript("Write-Output \"Success\"");
+        task.storeOutput("test.log");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() == 0);
+        FilePath logFile = ws.child("test.log");
+        if (launcher.isUnix()) {
+            assertEquals("Success\n", logFile.readToString());
+        } else {
+            assertEquals("Success\r\n", logFile.readToString());
+        }
+        c.cleanup(ws);
+    }
     
     @Test public void specialStreams() throws Exception {
         DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
