@@ -121,14 +121,14 @@ public class WindowsBatchScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), is(equalTo("42\n")));
+        assertThat(baos.toString(), is(equalTo("42\r\n")));
         FilePath logFile = ws.child("test.log");
-        assertThat(logFile.readToString(), is(equalTo("42\n")));
+        assertThat(logFile.readToString(), is(equalTo("42\r\n")));
         c.cleanup(ws);
     }
 
     @Test public void storeCaptureOutput() throws Exception {
-        DurableTask task = new WindowsBatchScript("echo 42");
+        DurableTask task = new WindowsBatchScript("@echo 42 & @echo 84 1>&2");
         task.storeOutput("test.log");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
@@ -136,10 +136,10 @@ public class WindowsBatchScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        assertThat(baos.toString(), is(equalTo("+ echo 42\n")));
+        assertThat(baos.toString(), is(equalTo("84 \r\n")));
         FilePath logFile = ws.child("test.log");
-        assertThat(logFile.readToString(), is(equalTo("+ echo 42\n")));
-        assertEquals("42\n", new String(c.getOutput(ws, launcher)));
+        assertThat(logFile.readToString(), is(equalTo("84 \r\n")));
+        assertEquals("42 \r\n", new String(c.getOutput(ws, launcher)));
         c.cleanup(ws);
     }
 

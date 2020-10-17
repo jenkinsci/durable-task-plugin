@@ -419,7 +419,7 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         public FilePath getLogFile(FilePath workspace) throws IOException, InterruptedException {
             if (outputFile != null) {
-                return workspace.toComputer().getNode().createPath(outputFile);
+                return new FilePath(workspace.getChannel(), outputFile);
             } else {
                 return controlDir(workspace).child("jenkins-log.txt");
             }
