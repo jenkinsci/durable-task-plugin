@@ -48,6 +48,7 @@ import org.kohsuke.stapler.DataBoundSetter;
 public final class PowershellScript extends FileMonitoringTask {
     private final String script;
     private String powershellBinary = "powershell";
+    private boolean loadProfile;
     private boolean capturingOutput;
     
     @DataBoundConstructor public PowershellScript(String script) {
@@ -61,6 +62,15 @@ public final class PowershellScript extends FileMonitoringTask {
     @DataBoundSetter
     public void setPowershellBinary(String powershellBinary) {
         this.powershellBinary = powershellBinary;
+    }
+
+    public boolean isLoadProfile() {
+        return loadProfile;
+    }
+
+    @DataBoundSetter
+    public void setLoadProfile(boolean loadProfile) {
+        this.loadProfile = loadProfile;
     }
 
     public String getScript() {
@@ -94,9 +104,12 @@ public final class PowershellScript extends FileMonitoringTask {
 
         String powershellArgs;
         if (launcher.isUnix()) {
-            powershellArgs = "-NoProfile -NonInteractive";
+            powershellArgs = "-NonInteractive";
         } else {
-            powershellArgs = "-NoProfile -NonInteractive -ExecutionPolicy Bypass";
+            powershellArgs = "-NonInteractive -ExecutionPolicy Bypass";
+        }
+        if (!loadProfile) {
+            powershellArgs = "-NoProfile " + powershellArgs;
         }
         args.add(powershellBinary);
         args.addAll(Arrays.asList(powershellArgs.split(" ")));
