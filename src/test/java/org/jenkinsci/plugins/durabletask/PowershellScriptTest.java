@@ -265,4 +265,23 @@ public class PowershellScriptTest {
         assertEquals(Integer.valueOf(5), c.exitStatus(ws, launcher, TaskListener.NULL));
         c.cleanup(ws);
     }
+
+    @Test public void checkProfile() throws Exception {
+        PowershellScript s = new PowershellScript("if ((Get-CimInstance Win32_Process -Filter \"ProcessId = $PID\").CommandLine.split(\" \").Contains(\"-NoProfile\")) { exit 0; } else { exit 1; } ");
+
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        c.cleanup(ws);
+
+        s.setLoadProfile(true);
+        c = s.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        assertEquals(1, c.exitStatus(ws, launcher, listener).intValue());
+        c.cleanup(ws);
+    }
 }
