@@ -142,6 +142,53 @@ public class PowershellScriptTest {
         assertTrue(c.exitStatus(ws, launcher, TaskListener.NULL).intValue() == 0);
         c.cleanup(ws);
     }
+
+    @Test public void invocationCommandNotExistError() throws Exception {
+        Controller c = new PowershellScript("Get-VerbDoesNotExist").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        assertThat(baos.toString(), containsString("Get-VerbDoesNotExist"));
+        c.cleanup(ws);
+    }
+
+    @Test public void invocationParameterNotExistError() throws Exception {
+        Controller c = new PowershellScript("Get-Date -PARAMDOESNOTEXIST").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        assertThat(baos.toString(), containsString("parameter cannot be found"));
+        c.cleanup(ws);
+    }
+
+    @Test public void invocationParameterBindingError() throws Exception {
+        Controller c = new PowershellScript("Get-Command -CommandType DOESNOTEXIST").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        assertThat(baos.toString(), containsString("Cannot bind parameter"));
+        c.cleanup(ws);
+    }
+
+    @Test public void invocationParameterValidationError() throws Exception {
+        Controller c = new PowershellScript("Get-Date -Month 15").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        c.cleanup(ws);
+    }
     
     @Test public void explicitThrow() throws Exception {
         DurableTask task = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");

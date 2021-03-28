@@ -159,6 +159,62 @@ public class PowerShellCoreScriptTest {
         c.cleanup(ws);
     }
 
+    @Test public void invocationCommandNotExistError() throws Exception {
+        PowershellScript s = new PowershellScript("Get-VerbDoesNotExist");
+        s.setPowershellBinary("pwsh");
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        assertThat(baos.toString(), containsString("Get-VerbDoesNotExist"));
+        c.cleanup(ws);
+    }
+
+    @Test public void invocationParameterNotExistError() throws Exception {
+        PowershellScript s = new PowershellScript("Get-Date -PARAMDOESNOTEXIST");
+        s.setPowershellBinary("pwsh");
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        assertThat(baos.toString(), containsString("parameter cannot be found"));
+        c.cleanup(ws);
+    }
+
+    @Test public void invocationParameterBindingError() throws Exception {
+        PowershellScript s = new PowershellScript("Get-Command -CommandType DOESNOTEXIST");
+        s.setPowershellBinary("pwsh");
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        assertThat(baos.toString(), containsString("Cannot bind parameter"));
+        c.cleanup(ws);
+    }
+
+    @Test public void invocationParameterValidationError() throws Exception {
+        PowershellScript s = new PowershellScript("Get-Date -Month 13");
+        s.setPowershellBinary("pwsh");
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        assertThat(baos.toString(), containsString("Cannot validate argument"));
+        c.cleanup(ws);
+    }
+
     @Test public void explicitThrow() throws Exception {
         PowershellScript s = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");
         s.setPowershellBinary("pwsh");
