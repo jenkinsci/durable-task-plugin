@@ -138,6 +138,11 @@ public final class BourneShellScript extends FileMonitoringTask {
         capturingOutput = true;
     }
 
+    @Override
+    public void storeOutput(String outputFile) {
+        this.outputFile = outputFile;
+    }
+
     @Override protected FileMonitoringController launchWithCookie(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
@@ -175,7 +180,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             scriptEncodingCharset = zOSSystemEncodingCharset.name();
         }
 
-        ShellController c = new ShellController(ws,(os == OsType.ZOS));
+        ShellController c = new ShellController(ws, outputFile, (os == OsType.ZOS));
         FilePath shf = c.getScriptFile(ws);
 
         shf.write(script, scriptEncodingCharset);
@@ -333,8 +338,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */
         private final boolean isZos;
 
-        private ShellController(FilePath ws, boolean zOsFlag) throws IOException, InterruptedException {
-            super(ws);
+        private ShellController(FilePath ws, String outputFile, boolean zOsFlag) throws IOException, InterruptedException {
+            super(ws, outputFile);
             this.isZos = zOsFlag;
         }
 

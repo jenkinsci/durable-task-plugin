@@ -317,6 +317,36 @@ public class BourneShellScriptTest {
         c.cleanup(ws);
     }
 
+    @Test public void storeOutput() throws Exception {
+        DurableTask task = new BourneShellScript("echo 42");
+        task.storeOutput("test.log");
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), is(equalTo("+ echo 42\n42\n")));
+        FilePath logFile = ws.child("test.log");
+        assertThat(logFile.readToString(), is(equalTo("+ echo 42\n42\n")));
+        c.cleanup(ws);
+    }
+
+    @Test public void storeCaptureOutput() throws Exception {
+        DurableTask task = new BourneShellScript("echo 42");
+        task.storeOutput("test.log");
+        task.captureOutput();
+        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        assertThat(baos.toString(), is(equalTo("+ echo 42\n")));
+        FilePath logFile = ws.child("test.log");
+        assertThat(logFile.readToString(), is(equalTo("+ echo 42\n")));
+        assertEquals("42\n", new String(c.getOutput(ws, launcher)));
+        c.cleanup(ws);
+    }
+
     @Issue("JENKINS-38381")
     @Test public void watch() throws Exception {
         DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");

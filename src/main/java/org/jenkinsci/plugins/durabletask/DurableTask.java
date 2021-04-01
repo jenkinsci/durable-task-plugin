@@ -70,6 +70,10 @@ public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> i
         throw new UnsupportedOperationException("Capturing of output is not implemented in " + getClass().getName());
     }
 
+    public void storeOutput(String outputFile) throws UnsupportedOperationException {
+        throw new UnsupportedOperationException("Storing output to file is not implemented in " + getClass().getName());
+    }
+
     /**
      * Requests that a specified charset be used to transcode process output.
      * The encoding of {@link Controller#writeLog} and {@link Controller#getOutput} is then presumed to be UTF-8.

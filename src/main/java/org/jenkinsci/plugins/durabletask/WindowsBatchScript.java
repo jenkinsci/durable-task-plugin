@@ -53,12 +53,17 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         capturingOutput = true;
     }
 
+    @Override
+    public void storeOutput(String outputFile) {
+        this.outputFile = outputFile;
+    }
+
     @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         if (launcher.isUnix()) {
             throw new IOException("Batch scripts can only be run on Windows nodes");
         }
-        BatchController c = new BatchController(ws);
+        BatchController c = new BatchController(ws, outputFile);
 
         String cmd;
         if (capturingOutput) {
@@ -95,6 +100,10 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     private static final class BatchController extends FileMonitoringController {
         private BatchController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
+        }
+
+        private BatchController(FilePath ws, String outputFile) throws IOException, InterruptedException {
+            super(ws, outputFile);
         }
 
         public FilePath getBatchFile1(FilePath ws) throws IOException, InterruptedException {
