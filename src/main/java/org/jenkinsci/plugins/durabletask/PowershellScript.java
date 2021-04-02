@@ -50,7 +50,7 @@ public final class PowershellScript extends FileMonitoringTask {
     private String powershellBinary = "powershell";
     private boolean loadProfile;
     private boolean capturingOutput;
-    
+
     @DataBoundConstructor public PowershellScript(String script) {
         this.script = script;
     }
@@ -85,10 +85,10 @@ public final class PowershellScript extends FileMonitoringTask {
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         List<String> args = new ArrayList<String>();
         PowershellController c = new PowershellController(ws);
-        
+
         String cmd;
         if (capturingOutput) {
-            cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -OutputFile '%s' -LogFile '%s' -ResultFile '%s' -CaptureOutput;", 
+            cmd = String.format(". '%s'; Execute-AndWriteOutput -MainScript '%s' -OutputFile '%s' -LogFile '%s' -ResultFile '%s' -CaptureOutput;",
                 quote(c.getPowerShellHelperFile(ws)),
                 quote(c.getPowerShellScriptFile(ws)),
                 quote(c.getOutputFile(ws)),
@@ -114,18 +114,32 @@ public final class PowershellScript extends FileMonitoringTask {
         args.add(powershellBinary);
         args.addAll(Arrays.asList(powershellArgs.split(" ")));
         args.addAll(Arrays.asList("-Command", cmd));
-        
+
         String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
                                              "param()\r\n" +
                                              "& %s %s -Command '& ''%s''; exit $LASTEXITCODE;';\r\n" +
                                              "exit $LASTEXITCODE;", powershellBinary, powershellArgs, quote(quote(c.getPowerShellScriptFile(ws))));
-     
+
         // Add an explicit exit to the end of the script so that exit codes are propagated
-        String scriptWithExit = script + "\r\nexit $LASTEXITCODE;";
-        
+        // Fix https://issues.jenkins.io/browse/JENKINS-59529?jql=text%20~%20%22powershell%22
+        // Wrap script in try/catch in order to propagate PowerShell errors like: command/script not recognized,
+        // parameter not found, parameter validation failed, etc. In PowerShell, $LASTEXITCODE applies **only** to the
+        // invocation of native apps and is not set when built-in PowerShell commands or script invocation fails.
+        // While you **could** prepend your script with "$ErrorActionPreference = 'Stop'; <script>" to get the step
+        // to fail on a PowerShell error, that is not discoverable resulting in issues like 59529 being submitted.
+        // The problem with setting $ErrorActionPreference before the script is that value propagates into the script
+        // which may not be what the user wants.
+        // One consequence of leaving the "exit $LASTEXITCODE" is if the last native command in a script exits with
+        // a non-zero exit code, the step will fail. That may sound obvious but most PowerShell scripters are not used
+        // to that. PowerShell doesn't have the equivalent of "set -e" yet. However, in the context of a build system,
+        // I believe we should err on the side of false negatives instead of false positives. If a scripter doesn't
+        // want a non-zero exit code to fail the step, they can do the following (PS >= v7) to reset $LASTEXITCODE:
+        // whoami -f || $($global:LASTEXITCODE = 0)
+        String scriptWithExit = "try { " + script + " } catch { throw }\r\nexit $LASTEXITCODE";
+
         // Copy the helper script from the resources directory into the workspace
         c.getPowerShellHelperFile(ws).copyFrom(getClass().getResource("powershellHelper.ps1"));
-        
+
         if (launcher.isUnix() || "pwsh".equals(powershellBinary)) {
             // There is no need to add a BOM with Open PowerShell / PowerShell Core
             c.getPowerShellScriptFile(ws).write(scriptWithExit, "UTF-8");
@@ -139,7 +153,7 @@ public final class PowershellScript extends FileMonitoringTask {
                 writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
             }
         }
-        
+
         Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
         ps.readStdout().readStderr();
         Proc p = ps.start();
@@ -148,7 +162,7 @@ public final class PowershellScript extends FileMonitoringTask {
 
         return c;
     }
-    
+
     private static String quote(FilePath f) {
         return quote(f.getRemote());
     }
@@ -156,7 +170,7 @@ public final class PowershellScript extends FileMonitoringTask {
     private static String quote(String f) {
         return f.replace("'", "''");
     }
-    
+
     // In order for PowerShell to properly read a script that contains unicode characters the script should have a BOM, but there is no built in support for
     // writing UTF-8 with BOM in Java.  This code writes a UTF-8 BOM before writing the file contents.
     private static void writeWithBom(FilePath f, String contents) throws IOException, InterruptedException {
@@ -171,15 +185,15 @@ public final class PowershellScript extends FileMonitoringTask {
         private PowershellController(FilePath ws) throws IOException, InterruptedException {
             super(ws);
         }
-        
+
         public FilePath getPowerShellScriptFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellScript.ps1");
         }
-        
+
         public FilePath getPowerShellHelperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellHelper.ps1");
         }
-        
+
         public FilePath getPowerShellWrapperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellWrapper.ps1");
         }
