@@ -30,14 +30,19 @@ import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Proc;
+import hudson.model.Computer;
 import hudson.model.TaskListener;
 import java.io.IOException;
+import java.util.logging.Logger;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
  * Runs a Windows batch script.
  */
 public final class WindowsBatchScript extends FileMonitoringTask {
+
+    private final static Logger LOGGER = Logger.getLogger(WindowsBatchScript.class.getName());
+    
     private final String script;
     private boolean capturingOutput;
 
@@ -76,7 +81,12 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         c.getBatchFile1(ws).write(cmd, "UTF-8");
         c.getBatchFile2(ws).write(script, "UTF-8");
 
-        Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(escape(envVars)).pwd(ws).quiet(true);
+        LOGGER.fine(() -> {
+            Computer computer = ws.toComputer();
+            String computerName = (computer == null) ? "unknown" : (computer.getName() + ":" + computer.getDisplayName());
+            return "Attempting to launch durable batch script on " + computerName + " with environment " + envVars.toString();
+        });
+        Launcher.ProcStarter ps = launcher.launch().cmds("cmd.exe", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(escape(envVars)).pwd(ws).quiet(true);
         /* Too noisy, and consumes a thread:
         ps.stdout(listener);
         */
