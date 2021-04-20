@@ -24,7 +24,7 @@
         <changelist>-SNAPSHOT</changelist>
         <jenkins.version>2.150.1</jenkins.version>
         <java.level>8</java.level>
-        <binary.src>src/main/go/org/jenkinsci/plugins/durabletask</binary.src>
+        <durable-task-binary.version>1.0-SNAPSHOT</durable-task-binary.version>
     </properties>
 
     <repositories>
@@ -48,6 +48,11 @@
     </scm>
     <dependencies>
         <dependency>
+            <groupId>org.jenkins-ci.plugins</groupId>
+            <artifactId>durable-task-binary</artifactId>
+            <version>${durable-task-binary.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.jenkins-ci.test</groupId>
             <artifactId>docker-fixtures</artifactId>
             <version>1.8</version>
@@ -69,55 +74,35 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-    <profiles>
-        <profile>
-            <id>generate-binaries-profile</id>
-            <activation>
-                <property>
-                    <name>env.SKIP_DURABLE_TASK_BINARY_GENERATION</name>
-                    <value>!true</value>
-                </property>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-jar-plugin</artifactId>
-                        <version>3.1.2</version>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.1.2</version>
+                <executions>
+                    <execution>
+                        <id>extract-binaries</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>unpack-dependencies</goal>
+                        </goals>
                         <configuration>
-                            <archive>
-                                <manifest>
-                                    <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
-                                    <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-                                </manifest>
-                            </archive>
+                            <includeArtifactIds>durable-task-binary</includeArtifactIds>
+                            <includes>durable_task_monitor_*</includes>
+                            <outputDirectory>${project.build.directory}/classes/org/jenkinsci/plugins/durabletask</outputDirectory>
+                            <fileMappers>
+                                <org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
+                                    <pattern>${durable-task-binary.version}</pattern>
+                                    <replacement>${revision}</replacement>
+                                </org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
+                            </fileMappers>
+                            <overWriteReleases>false</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
                         </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>exec-maven-plugin</artifactId>
-                        <version>1.6.0</version>
-                        <configuration>
-                            <executable>${binary.src}/generate-binaries.sh</executable>
-                            <workingDirectory>${binary.src}</workingDirectory>
-                            <arguments>
-                                <argument>${revision}</argument>
-                                <argument>${project.basedir}/${binary.src}</argument>
-                                <argument>${project.build.directory}/classes/org/jenkinsci/plugins/durabletask</argument>
-                            </arguments>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <id>docker-generate-binaries</id>
-                                <phase>generate-resources</phase>
-                                <goals>
-                                    <goal>exec</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
