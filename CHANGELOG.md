@@ -1,5 +1,12 @@
 ## Changelog
 
+### Version 1.36
+
+Release date: 2021-05-04
+
+- Fix: PowerShell command invocation errors will now fail at the pipeline step ([JENKINS-59529](https://issues.jenkins.io/browse/JENKINS-59529))
+- Add an option to load the PowerShell profile ([PR 130](https://github.com/jenkinsci/durable-task-plugin/pull/130))
+
 ### Version 1.35
 
 Release date: 2020-09-02
