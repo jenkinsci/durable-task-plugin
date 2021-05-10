@@ -159,6 +159,20 @@ public class PowerShellCoreScriptTest {
         c.cleanup(ws);
     }
 
+    @Test public void parseError() throws Exception {
+        PowershellScript s = new PowershellScript("Write-Output \"Hello, World!");
+        s.setPowershellBinary("pwsh");
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener) != 0);
+        assertThat(baos.toString(), containsString("string is missing the terminator"));
+        c.cleanup(ws);
+    }
+
     @Test public void invocationCommandNotExistError() throws Exception {
         PowershellScript s = new PowershellScript("Get-VerbDoesNotExist");
         s.setPowershellBinary("pwsh");
@@ -212,6 +226,19 @@ public class PowerShellCoreScriptTest {
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
         assertThat(baos.toString(), containsString("Cannot validate argument"));
+        c.cleanup(ws);
+    }
+
+    @Test public void cmdletBindingScriptDoesNotError() throws Exception {
+        PowershellScript s = new PowershellScript("[CmdletBinding()]param([Parameter()][string]$Param1) \"Param1 = $Param1\"");
+        s.setPowershellBinary("pwsh");
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() == 0);
         c.cleanup(ws);
     }
 
