@@ -486,6 +486,14 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else {
                 binaryCompatible = false;
             }
+            String archString = "";
+            if (os == OsType.DARWIN) {
+                if (arch.contains("aarch") || arch.contains("arm")) {
+                    archString = "_arm";
+                } else {
+                    archString = "_amd"; // Default Value
+                }
+            }
 
             // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
             ArchBits archBits;
@@ -496,7 +504,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 archBits = ArchBits._32; // Default Value
             }
 
-            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archBits;
+            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archString + archBits;
             String binaryPath;
             boolean isCached;
             boolean cachingAvailable;
