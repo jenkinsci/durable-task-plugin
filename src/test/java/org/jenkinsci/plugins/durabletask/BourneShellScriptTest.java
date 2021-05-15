@@ -228,6 +228,8 @@ public class BourneShellScriptTest {
                 throw new AssertionError(platform);
         }
 
+        String arch = System.getProperty("os.arch");
+        System.out.println("arch: " + arch);
         String script = String.format("echo hello world; sleep %s", sleepSeconds);
         Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
@@ -480,21 +482,37 @@ public class BourneShellScriptTest {
     @Test public void binaryCaching() throws Exception {
         assumeTrue(!Objects.equals(System.getenv().get("SKIP_DURABLE_TASK_BINARY_GENERATION"), "true") && !platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
+        String arch = System.getProperty("os.arch");
+        String bits = System.getProperty("sun.arch.data.model");
+        String archType;
+        String archBits;
+        if (bits.equals("64")) {
+            archBits = "_64";
+        } else {
+            archBits = "_32";
+        }
         switch (platform) {
             case NATIVE:
                 if (Platform.isDarwin()) {
                     os = "darwin";
+                    if (arch.contains("aarch") || arch.contains("arm")) {
+                        archType = "_arm";
+                    } else {
+                        archType = "_amd";
+                    }
                 } else {
-                    os = "unix";
+                    os = "linux";
+                    archType = "";
                 }
                 break;
             default:
-                os = "unix";
+                os = "linux";
+                archType = "";
         }
 
         String version = j.getPluginManager().getPlugin("durable-task").getVersion();
         version = StringUtils.substringBefore(version, "-");
-        String binaryName = "durable_task_monitor_" + version + "_" + os + "_64";
+        String binaryName = "durable_task_monitor_" + version + "_" + os + archType + archBits;
         FilePath binaryPath = ws.getParent().getParent().child("caches/durable-task/" + binaryName);
         assertFalse(binaryPath.exists());
 

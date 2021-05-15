@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nonnull;
+
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.lang.StringUtils;
@@ -81,9 +82,9 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
 
     private enum OsType {
-        // NOTE: changes to these binary names must be mirrored in compile-binaries.sh and rebuild.sh
+        // NOTE: changes to these binary names must be mirrored in lib-durable-task
         DARWIN("darwin"),
-        UNIX("unix"),
+        LINUX("linux"),
         WINDOWS("windows"),
         FREEBSD("freebsd"),
         ZOS("zos");
@@ -459,6 +460,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         private String binaryVersion;
 
         private enum ArchBits {_32, _64}
+        private enum ArchType {_amd, _arm}
 
         GetAgentInfo(String pluginVersion) {
             this.binaryVersion = pluginVersion;
@@ -476,7 +478,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("FreeBSD")) {
                 os = OsType.FREEBSD;
             } else {
-                os = OsType.UNIX; // Default Value
+                os = OsType.LINUX; // Default Value
             }
 
             String arch = System.getProperty("os.arch");
@@ -486,12 +488,12 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else {
                 binaryCompatible = false;
             }
-            String archString = "";
+            String archType = "";
             if (os == OsType.DARWIN) {
                 if (arch.contains("aarch") || arch.contains("arm")) {
-                    archString = "_arm";
+                    archType = ArchType._arm.toString();
                 } else {
-                    archString = "_amd"; // Default Value
+                    archType = ArchType._amd.toString(); // Default Value
                 }
             }
 
@@ -504,7 +506,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 archBits = ArchBits._32; // Default Value
             }
 
-            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archString + archBits;
+            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archType + archBits;
             String binaryPath;
             boolean isCached;
             boolean cachingAvailable;
