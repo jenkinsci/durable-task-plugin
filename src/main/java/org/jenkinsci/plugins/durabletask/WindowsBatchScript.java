@@ -62,13 +62,13 @@ public final class WindowsBatchScript extends FileMonitoringTask {
 
         String cmd;
         if (capturingOutput) {
-            cmd = String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2> \"%s\"\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+            cmd = String.format("@echo off \r\ncmd /c call \"%s\" > \"%s\" 2> \"%s\"\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
                 quote(c.getBatchFile2(ws)),
                 quote(c.getOutputFile(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));
         } else {
-            cmd = String.format("@echo off \r\ncmd /c \"\"%s\"\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+            cmd = String.format("@echo off \r\ncmd /c call \"%s\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
                 quote(c.getBatchFile2(ws)),
                 quote(c.getLogFile(ws)),
                 quote(c.getResultFile(ws)));

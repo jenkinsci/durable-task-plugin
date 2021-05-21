@@ -105,6 +105,17 @@ public class WindowsBatchScriptTest {
         c.cleanup(ws);
     }
 
+    @Test public void exitBCommandAfterError() throws Exception {
+        Controller c = new WindowsBatchScript("cmd /c exit 42\r\nexit /b").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(42, c.exitStatus(ws, launcher, listener).intValue());
+        c.cleanup(ws);
+    }
+
     @Issue("JENKINS-26133")
     @Test public void output() throws Exception {
         DurableTask task = new WindowsBatchScript("@echo 42"); // http://stackoverflow.com/a/8486061/12916
