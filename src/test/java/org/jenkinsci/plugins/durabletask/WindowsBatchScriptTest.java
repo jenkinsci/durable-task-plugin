@@ -40,6 +40,7 @@ import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
+import java.util.Arrays;
 
 public class WindowsBatchScriptTest {
 
@@ -129,6 +130,37 @@ public class WindowsBatchScriptTest {
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
+        c.cleanup(ws);
+    }
+
+    @Test public void scriptAffectedByLineEndings() throws Exception {
+        char[] pad254 = new char[254];
+        char[] pad231 = new char[231];
+        Arrays.fill(pad254, '#');
+        Arrays.fill(pad231, '#');
+        // script is found on https://www.dostips.com/forum/viewtopic.php?f=3&t=8988#p58860
+        String script =
+            "@echo off\n" +
+            "goto :zwei\n" +
+            ":" + new String(pad254) + "\n" +
+            ":" + new String(pad254) + "\n" +
+            ":" + new String(pad254) + "\n" +
+            ":" + new String(pad231) + "\n" +
+            "\n" +
+            ":eins\n" +
+            "ECHO eins\n" +
+            "goto :eof\n" +
+            "\n" +
+            ":zwei\n" +
+            "echo zwei\n" +
+            "goto :eins\n";
+        Controller c = new WindowsBatchScript(script).launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
     }
 

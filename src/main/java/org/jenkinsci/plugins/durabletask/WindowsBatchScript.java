@@ -33,6 +33,7 @@ import hudson.Proc;
 import hudson.model.TaskListener;
 import java.io.IOException;
 import org.kohsuke.stapler.DataBoundConstructor;
+import hudson.util.LineEndingConversion;
 
 /**
  * Runs a Windows batch script.
@@ -42,7 +43,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     private boolean capturingOutput;
 
     @DataBoundConstructor public WindowsBatchScript(String script) {
-        this.script = script;
+        this.script = LineEndingConversion.convertEOL(script, LineEndingConversion.EOLType.Windows);
     }
     
     public String getScript() {
