@@ -473,6 +473,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final long serialVersionUID = 1L;
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
+        // Version makes sure we don't use an out-of-date cached binary
         private String binaryVersion;
 
         GetAgentInfo(String pluginVersion) {
