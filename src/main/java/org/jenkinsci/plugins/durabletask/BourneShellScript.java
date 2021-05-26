@@ -417,7 +417,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final long serialVersionUID = 7599995179651071957L;
         private final OsType os;
         private final String binaryPath;
-        private String architecture;
+        private final String architecture;
         private boolean binaryCompatible;
         private boolean binaryCached;
         private boolean cachingAvailable;
@@ -429,15 +429,6 @@ public final class BourneShellScript extends FileMonitoringTask {
             this.binaryCompatible = binaryCompatible;
             this.binaryCached = false;
             this.cachingAvailable = cachingAvailable;
-        }
-
-        // Avoid deserialization issues with newly added fields
-        private Object readResolve() {
-            if (architecture == null || architecture.isEmpty()) {
-                String[] splits = binaryPath.split("_");
-                architecture = splits[splits.length - 1];
-            }
-            return this;
         }
 
         public OsType getOs() {
