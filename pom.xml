@@ -24,7 +24,6 @@
         <changelist>-SNAPSHOT</changelist>
         <jenkins.version>2.150.1</jenkins.version>
         <java.level>8</java.level>
-        <lib-durable-task.version>1.0</lib-durable-task.version>
     </properties>
 
     <repositories>
@@ -50,7 +49,7 @@
         <dependency>
             <groupId>io.jenkins.plugins</groupId>
             <artifactId>lib-durable-task</artifactId>
-            <version>${lib-durable-task.version}</version>
+            <version>23.v4a2176a89153</version>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.test</groupId>
@@ -74,35 +73,4 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.1.2</version>
-                <executions>
-                    <execution>
-                        <id>extract-binaries</id>
-                        <phase>process-resources</phase>
-                        <goals>
-                            <goal>unpack-dependencies</goal>
-                        </goals>
-                        <configuration>
-                            <includeArtifactIds>lib-durable-task</includeArtifactIds>
-                            <includes>durable_task_monitor_*</includes>
-                            <outputDirectory>${project.build.directory}/classes/org/jenkinsci/plugins/durabletask</outputDirectory>
-                            <fileMappers>
-                                <org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
-                                    <pattern>${lib-durable-task.version}</pattern>
-                                    <replacement>${revision}</replacement>
-                                </org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
-                            </fileMappers>
-                            <overWriteReleases>false</overWriteReleases>
-                            <overWriteSnapshots>true</overWriteSnapshots>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>

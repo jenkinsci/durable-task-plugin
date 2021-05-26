@@ -475,37 +475,36 @@ public class BourneShellScriptTest {
     @Test public void binaryCaching() throws Exception {
         assumeFalse(platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
+        String architecture;
         String arch = System.getProperty("os.arch");
-        String bits = System.getProperty("sun.arch.data.model");
-        String archType;
-        String archBits;
-        if (bits.equals("64")) {
-            archBits = "_64";
-        } else {
-            archBits = "_32";
-        }
         switch (platform) {
             case NATIVE:
                 if (Platform.isDarwin()) {
                     os = "darwin";
                     if (arch.contains("aarch") || arch.contains("arm")) {
-                        archType = "_arm";
+                        architecture = "arm";
                     } else {
-                        archType = "_amd";
+                        architecture = "amd";
                     }
                 } else {
                     os = "linux";
-                    archType = "";
+                    architecture = "";
                 }
                 break;
             default:
                 os = "linux";
-                archType = "";
+                architecture = "";
+        }
+        String bits = System.getProperty("sun.arch.data.model");
+        if (bits.equals("64")) {
+            architecture += "64";
+        } else {
+            architecture += "32";
         }
 
         String version = j.getPluginManager().getPlugin("durable-task").getVersion();
         version = StringUtils.substringBefore(version, "-");
-        String binaryName = "durable_task_monitor_" + version + "_" + os + archType + archBits;
+        String binaryName = "durable_task_monitor_" + version + "_" + os + "_" + architecture;
         FilePath binaryPath = ws.getParent().getParent().child("caches/durable-task/" + binaryName);
         assertFalse(binaryPath.exists());
 

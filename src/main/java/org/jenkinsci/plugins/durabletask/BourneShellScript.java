@@ -206,7 +206,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else {
                 binary = controlDir.child(agentInfo.getBinaryPath());
             }
-            try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
+            String resourcePath = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_" + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture();
+            try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
                 if (binaryStream != null) {
                     if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
                         binary.copyFrom(binaryStream);
@@ -416,20 +417,35 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final long serialVersionUID = 7599995179651071957L;
         private final OsType os;
         private final String binaryPath;
+        private String architecture;
         private boolean binaryCompatible;
         private boolean binaryCached;
         private boolean cachingAvailable;
 
-        public AgentInfo(OsType os, boolean binaryCompatible, String binaryPath, boolean cachingAvailable) {
+        public AgentInfo(OsType os, String architecture, boolean binaryCompatible, String binaryPath, boolean cachingAvailable) {
             this.os = os;
+            this.architecture = architecture;
             this.binaryPath = binaryPath;
             this.binaryCompatible = binaryCompatible;
             this.binaryCached = false;
             this.cachingAvailable = cachingAvailable;
         }
 
+        // Avoid deserialization issues with newly added fields
+        private Object readResolve() {
+            if (architecture == null || architecture.isEmpty()) {
+                String[] splits = binaryPath.split("_");
+                architecture = splits[splits.length - 1];
+            }
+            return this;
+        }
+
         public OsType getOs() {
             return os;
+        }
+
+        public String getArchitecture() {
+            return architecture;
         }
 
         public String getBinaryPath() {
@@ -458,9 +474,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
         private String binaryVersion;
-
-        private enum ArchBits {_32, _64}
-        private enum ArchType {_amd, _arm}
 
         GetAgentInfo(String pluginVersion) {
             this.binaryVersion = pluginVersion;
@@ -491,22 +504,21 @@ public final class BourneShellScript extends FileMonitoringTask {
             String archType = "";
             if (os == OsType.DARWIN) {
                 if (arch.contains("aarch") || arch.contains("arm")) {
-                    archType = ArchType._arm.toString();
+                    archType = "arm";
                 } else {
-                    archType = ArchType._amd.toString(); // Default Value
+                    archType = "amd"; // Default Value
                 }
             }
 
             // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
-            ArchBits archBits;
             String bits = System.getProperty("sun.arch.data.model");
             if (bits.equals("64")) {
-                archBits = ArchBits._64;
+                archType += "64";
             } else {
-                archBits = ArchBits._32; // Default Value
+                archType += "32"; // Default Value
             }
 
-            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archType + archBits;
+            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + "_" + archType;
             String binaryPath;
             boolean isCached;
             boolean cachingAvailable;
@@ -523,7 +535,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 isCached = false;
                 cachingAvailable = false;
             }
-            AgentInfo agentInfo = new AgentInfo(os, binaryCompatible, binaryPath, cachingAvailable);
+            AgentInfo agentInfo = new AgentInfo(os, archType, binaryCompatible, binaryPath, cachingAvailable);
             agentInfo.setBinaryAvailability(isCached);
             return agentInfo;
         }
