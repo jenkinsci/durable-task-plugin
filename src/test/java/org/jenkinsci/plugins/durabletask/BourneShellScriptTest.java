@@ -222,7 +222,6 @@ public class BourneShellScriptTest {
                 throw new AssertionError(platform);
         }
 
-        String arch = System.getProperty("os.arch");
         String script = String.format("echo hello world; sleep %s", sleepSeconds);
         Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
@@ -476,12 +475,12 @@ public class BourneShellScriptTest {
         assumeFalse(platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
         String architecture;
-        String arch = System.getProperty("os.arch");
         switch (platform) {
             case NATIVE:
                 if (Platform.isDarwin()) {
                     os = "darwin";
-                    if (arch.contains("aarch") || arch.contains("arm")) {
+                    String macArch = System.getProperty("os.arch");
+                    if (macArch.contains("aarch") || macArch.contains("arm")) {
                         architecture = "arm";
                     } else {
                         architecture = "amd";
