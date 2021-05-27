@@ -115,16 +115,12 @@ public final class PowershellScript extends FileMonitoringTask {
         args.addAll(Arrays.asList(powershellArgs.split(" ")));
         args.addAll(Arrays.asList("-Command", cmd));
 
-        String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
-                                             "param()\r\n" +
-                                             "& %s %s -Command '& ''%s''; exit $LASTEXITCODE;';\r\n" +
-                                             "exit $LASTEXITCODE;", powershellBinary, powershellArgs, quote(quote(c.getPowerShellScriptFile(ws))));
-
-        // Add an explicit exit to the end of the script so that exit codes are propagated
-        // Fix https://issues.jenkins.io/browse/JENKINS-59529?jql=text%20~%20%22powershell%22
-        // Wrap script in try/catch in order to propagate PowerShell errors like: command/script not recognized,
-        // parameter not found, parameter validation failed, etc. In PowerShell, $LASTEXITCODE applies **only** to the
-        // invocation of native apps and is not set when built-in PowerShell commands or script invocation fails.
+        // Fix https://issues.jenkins.io/browse/JENKINS-59529
+        // Fix https://issues.jenkins.io/browse/JENKINS-65597
+        // Wrap invocation of powershellScript.ps1 in a try/catch in order to propagate PowerShell errors like:
+        // command/script not recognized, parameter not found, parameter validation failed, parse errors, etc. In
+        // PowerShell, $LASTEXITCODE applies **only** to the invocation of native apps and is not set when built-in
+        // PowerShell commands or script invocation fails.
         // While you **could** prepend your script with "$ErrorActionPreference = 'Stop'; <script>" to get the step
         // to fail on a PowerShell error, that is not discoverable resulting in issues like 59529 being submitted.
         // The problem with setting $ErrorActionPreference before the script is that value propagates into the script
@@ -135,7 +131,13 @@ public final class PowershellScript extends FileMonitoringTask {
         // I believe we should err on the side of false negatives instead of false positives. If a scripter doesn't
         // want a non-zero exit code to fail the step, they can do the following (PS >= v7) to reset $LASTEXITCODE:
         // whoami -f || $($global:LASTEXITCODE = 0)
-        String scriptWithExit = "try { " + script + " } catch { throw }\r\nexit $LASTEXITCODE";
+        String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
+                                             "param()\r\n" +
+                                             "& %s %s -Command '& {try {& ''%s''} catch {throw}; exit $LASTEXITCODE}'\r\n" +
+                                             "exit $LASTEXITCODE", powershellBinary, powershellArgs, quote(quote(c.getPowerShellScriptFile(ws))));
+
+        // Add an explicit exit to the end of the script so that exit codes are propagated
+        String scriptWithExit = script + "\r\nexit $LASTEXITCODE";
 
         // Copy the helper script from the resources directory into the workspace
         c.getPowerShellHelperFile(ws).copyFrom(getClass().getResource("powershellHelper.ps1"));

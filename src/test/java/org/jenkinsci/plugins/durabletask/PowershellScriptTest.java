@@ -49,14 +49,14 @@ import java.util.*;
 import org.apache.commons.io.IOUtils;
 import org.junit.AssumptionViolatedException;
 
-public class PowershellScriptTest {	
+public class PowershellScriptTest {
     @Rule public JenkinsRule j = new JenkinsRule();
 
     private StreamTaskListener listener;
     private FilePath ws;
     private Launcher launcher;
     private int psVersion;
-    
+
     @Before public void vars() throws IOException, InterruptedException {
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
@@ -77,7 +77,7 @@ public class PowershellScriptTest {
             }
         }
         Assume.assumeTrue("This test should only run if powershell is available", powershellExists == true);
-        
+
         // Assume Powershell major version is at least 3
         if (powershellExists == true) {
             List<String> args = new ArrayList<>(Collections.singleton(cmd));
@@ -109,7 +109,7 @@ public class PowershellScriptTest {
         assertThat(baos.toString(), containsString("Hello, World!"));
         c.cleanup(ws);
     }
-    
+
     @Test public void implicitExit() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Success!\";").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher, listener) == null) {
@@ -121,7 +121,7 @@ public class PowershellScriptTest {
         assertThat(baos.toString(), containsString("Success!"));
         c.cleanup(ws);
     }
-    
+
     @Test public void implicitError() throws Exception {
         Controller c = new PowershellScript("$ErrorActionPreference = 'Stop'; Write-Error \"Bogus error\"").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher, listener) == null) {
@@ -133,13 +133,25 @@ public class PowershellScriptTest {
         assertThat(baos.toString(), containsString("Bogus error"));
         c.cleanup(ws);
     }
-    
+
     @Test public void implicitErrorNegativeTest() throws Exception {
         Controller c = new PowershellScript("$ErrorActionPreference = 'SilentlyContinue'; Write-Error \"Bogus error\"").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
         assertTrue(c.exitStatus(ws, launcher, TaskListener.NULL).intValue() == 0);
+        c.cleanup(ws);
+    }
+
+    @Test public void parseError() throws Exception {
+        Controller c = new PowershellScript("Write-Output \"Hello, World!").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
+        assertThat(baos.toString(), containsString("string is missing the terminator"));
         c.cleanup(ws);
     }
 
@@ -189,7 +201,18 @@ public class PowershellScriptTest {
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
         c.cleanup(ws);
     }
-    
+
+    @Test public void cmdletBindingScriptDoesNotError() throws Exception {
+        Controller c = new PowershellScript("[CmdletBinding()]param([Parameter()][string]$Param1) \"Param1 = $Param1\"").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertTrue(c.exitStatus(ws, launcher, listener).intValue() == 0);
+        c.cleanup(ws);
+    }
+
     @Test public void explicitThrow() throws Exception {
         DurableTask task = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");
         task.captureOutput();
@@ -208,7 +231,7 @@ public class PowershellScriptTest {
         }
         c.cleanup(ws);
     }
-    
+
     @Test public void implicitThrow() throws Exception {
         DurableTask task = new PowershellScript("$ErrorActionPreference = 'Stop'; My-BogusCmdlet;");
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
@@ -221,7 +244,7 @@ public class PowershellScriptTest {
         assertThat(baos.toString(), containsString("My-BogusCmdlet"));
         c.cleanup(ws);
     }
-    
+
     @Test public void noStdoutPollution() throws Exception {
         DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
                                                 "$WarningPreference = \"Continue\"; " +
@@ -248,7 +271,7 @@ public class PowershellScriptTest {
         }
         c.cleanup(ws);
     }
-    
+
     @Test public void specialStreams() throws Exception {
         DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
                                                 "$WarningPreference = \"Continue\"; " +
@@ -290,7 +313,7 @@ public class PowershellScriptTest {
         assertThat(baos.toString(), containsString("envvar=power$hell"));
         c.cleanup(ws);
     }
-    
+
     @Test public void unicodeChars() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Helló, Wõrld ®\";").launch(new EnvVars(), ws, launcher, listener);
         while (c.exitStatus(ws, launcher, listener) == null) {
