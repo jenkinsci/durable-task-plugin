@@ -76,17 +76,18 @@ public class WindowsBatchScriptTest {
     }
 
     private void testWithPath(String path) throws Exception {
-        Controller c = new WindowsBatchScript("echo hello world").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
+        FilePath wsWithPath = ws.child(path);
+        Controller c = new WindowsBatchScript("echo hello world").launch(new EnvVars(), wsWithPath, launcher, listener);
+        while (c.exitStatus(wsWithPath, launcher, listener) == null) {
             Thread.sleep(100);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws, baos);
-        assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, listener));
+        c.writeLog(wsWithPath, baos);
+        assertEquals(Integer.valueOf(0), c.exitStatus(wsWithPath, launcher, listener));
         String log = baos.toString();
         System.err.print(log);
         assertTrue(log, log.contains("hello world"));
-        c.cleanup(ws);
+        c.cleanup(wsWithPath);
     }
 
     @Issue("JENKINS-27419")
@@ -102,6 +103,17 @@ public class WindowsBatchScriptTest {
         assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher, listener));
         String log = baos.toString();
         assertTrue(log, log.contains("hello world"));
+        c.cleanup(ws);
+    }
+
+    @Test public void exitBCommandAfterError() throws Exception {
+        Controller c = new WindowsBatchScript("cmd /c exit 42\r\nexit /b").launch(new EnvVars(), ws, launcher, listener);
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(42, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
     }
 
