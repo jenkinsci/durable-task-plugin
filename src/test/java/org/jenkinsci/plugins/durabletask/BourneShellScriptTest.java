@@ -55,7 +55,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Collections;
-import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
@@ -92,14 +91,9 @@ enum TestPlatform {
 
 @RunWith(Parameterized.class)
 public class BourneShellScriptTest {
-    public static boolean TEST_BINARY = Boolean.getBoolean(BourneShellScriptTest.class.getName() + ".TEST_BINARY");
     @Parameters(name = "{index}: {0}")
     public static Object[] data() {
-        if (Objects.equals(System.getenv().get("SKIP_DURABLE_TASK_BINARY_GENERATION"), "true")) {
-            return new TestPlatform[]{TestPlatform.NATIVE, TestPlatform.ALPINE, TestPlatform.CENTOS, TestPlatform.UBUNTU, TestPlatform.NO_INIT, TestPlatform.SLIM};
-        } else {
-            return TestPlatform.values();
-        }
+        return TestPlatform.values();
     }
 
     @Rule public JenkinsRule j = new JenkinsRule();
@@ -478,23 +472,38 @@ public class BourneShellScriptTest {
     }
 
     @Test public void binaryCaching() throws Exception {
-        assumeTrue(!Objects.equals(System.getenv().get("SKIP_DURABLE_TASK_BINARY_GENERATION"), "true") && !platform.equals(TestPlatform.UBUNTU_NO_BINARY));
+        assumeFalse(platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
+        String architecture;
         switch (platform) {
             case NATIVE:
                 if (Platform.isDarwin()) {
                     os = "darwin";
+                    String macArch = System.getProperty("os.arch");
+                    if (macArch.contains("aarch") || macArch.contains("arm")) {
+                        architecture = "arm";
+                    } else {
+                        architecture = "amd";
+                    }
                 } else {
-                    os = "unix";
+                    os = "linux";
+                    architecture = "";
                 }
                 break;
             default:
-                os = "unix";
+                os = "linux";
+                architecture = "";
+        }
+        String bits = System.getProperty("sun.arch.data.model");
+        if (bits.equals("64")) {
+            architecture += "64";
+        } else {
+            architecture += "32";
         }
 
         String version = j.getPluginManager().getPlugin("durable-task").getVersion();
         version = StringUtils.substringBefore(version, "-");
-        String binaryName = "durable_task_monitor_" + version + "_" + os + "_64";
+        String binaryName = "durable_task_monitor_" + version + "_" + os + "_" + architecture;
         FilePath binaryPath = ws.getParent().getParent().child("caches/durable-task/" + binaryName);
         assertFalse(binaryPath.exists());
 

@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nonnull;
+
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.lang.StringUtils;
@@ -81,9 +82,9 @@ public final class BourneShellScript extends FileMonitoringTask {
     private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
 
     private enum OsType {
-        // NOTE: changes to these binary names must be mirrored in compile-binaries.sh and rebuild.sh
+        // NOTE: changes to these binary names must be mirrored in lib-durable-task
         DARWIN("darwin"),
-        UNIX("unix"),
+        LINUX("linux"),
         WINDOWS("windows"),
         FREEBSD("freebsd"),
         ZOS("zos");
@@ -205,7 +206,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else {
                 binary = controlDir.child(agentInfo.getBinaryPath());
             }
-            try (InputStream binaryStream = DurableTask.class.getResourceAsStream(binary.getName())) {
+            String resourcePath = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_" + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture();
+            try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
                 if (binaryStream != null) {
                     if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
                         binary.copyFrom(binaryStream);
@@ -415,12 +417,14 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final long serialVersionUID = 7599995179651071957L;
         private final OsType os;
         private final String binaryPath;
+        private final String architecture;
         private boolean binaryCompatible;
         private boolean binaryCached;
         private boolean cachingAvailable;
 
-        public AgentInfo(OsType os, boolean binaryCompatible, String binaryPath, boolean cachingAvailable) {
+        public AgentInfo(OsType os, String architecture, boolean binaryCompatible, String binaryPath, boolean cachingAvailable) {
             this.os = os;
+            this.architecture = architecture;
             this.binaryPath = binaryPath;
             this.binaryCompatible = binaryCompatible;
             this.binaryCached = false;
@@ -429,6 +433,10 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         public OsType getOs() {
             return os;
+        }
+
+        public String getArchitecture() {
+            return architecture;
         }
 
         public String getBinaryPath() {
@@ -456,9 +464,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         private static final long serialVersionUID = 1L;
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
+        // Version makes sure we don't use an out-of-date cached binary
         private String binaryVersion;
-
-        private enum ArchBits {_32, _64}
 
         GetAgentInfo(String pluginVersion) {
             this.binaryVersion = pluginVersion;
@@ -476,7 +483,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("FreeBSD")) {
                 os = OsType.FREEBSD;
             } else {
-                os = OsType.UNIX; // Default Value
+                os = OsType.LINUX; // Default Value
             }
 
             String arch = System.getProperty("os.arch");
@@ -486,17 +493,24 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else {
                 binaryCompatible = false;
             }
-
-            // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
-            ArchBits archBits;
-            String bits = System.getProperty("sun.arch.data.model");
-            if (bits.equals("64")) {
-                archBits = ArchBits._64;
-            } else {
-                archBits = ArchBits._32; // Default Value
+            String archType = "";
+            if (os == OsType.DARWIN) {
+                if (arch.contains("aarch") || arch.contains("arm")) {
+                    archType = "arm";
+                } else {
+                    archType = "amd"; // Default Value
+                }
             }
 
-            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + archBits;
+            // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
+            String bits = System.getProperty("sun.arch.data.model");
+            if (bits.equals("64")) {
+                archType += "64";
+            } else {
+                archType += "32"; // Default Value
+            }
+
+            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + "_" + archType;
             String binaryPath;
             boolean isCached;
             boolean cachingAvailable;
@@ -513,7 +527,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 isCached = false;
                 cachingAvailable = false;
             }
-            AgentInfo agentInfo = new AgentInfo(os, binaryCompatible, binaryPath, cachingAvailable);
+            AgentInfo agentInfo = new AgentInfo(os, archType, binaryCompatible, binaryPath, cachingAvailable);
             agentInfo.setBinaryAvailability(isCached);
             return agentInfo;
         }
