@@ -1,5 +1,7 @@
 ## Changelog
 
+* For newer versions, see [GitHub Releases](https://github.com/jenkinsci/durable-task-plugin/releases)
+
 ### Version 1.36
 
 Release date: 2021-05-04
