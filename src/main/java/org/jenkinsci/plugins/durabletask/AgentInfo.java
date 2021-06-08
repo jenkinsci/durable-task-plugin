@@ -22,12 +22,12 @@ public final class AgentInfo implements Serializable {
     private boolean cachingAvailable;
 
     public enum OsType {
-        // NOTE: changes to these binary names must be mirrored in lib-durable-task
         DARWIN("darwin"),
         LINUX("linux"),
-        WINDOWS("windows"),
+        WINDOWS("win"),
         FREEBSD("freebsd"),
-        ZOS("zos");
+        ZOS("zos"),
+        UNKNOWN("unknown");
 
         private final String binaryName;
         OsType(final String binaryName) {
@@ -79,6 +79,7 @@ public final class AgentInfo implements Serializable {
         private static final long serialVersionUID = 1L;
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
+        private static final String NOT_SUPPORTED = "NOT_SUPPORTED";
         // Version makes sure we don't use an out-of-date cached binary
         private String binaryVersion;
 
@@ -93,36 +94,46 @@ public final class AgentInfo implements Serializable {
                 os = OsType.DARWIN;
             } else if (Platform.current() == Platform.WINDOWS) {
                 os = OsType.WINDOWS;
-            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
-                os = OsType.ZOS;
-            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("FreeBSD")) {
-                os = OsType.FREEBSD;
+            } else if (Platform.current() == Platform.UNIX) {
+                String osName = System.getProperty("os.name");
+                if (osName.equals("linux")) {
+                    os = OsType.LINUX;
+                } else if (osName.equals("z/OS")) {
+                    os = OsType.ZOS;
+                } else if (osName.equals("FreeBSD")) {
+                    os = OsType.FREEBSD;
+                } else {
+                    os = OsType.UNKNOWN;
+                }
             } else {
-                os = OsType.LINUX; // Default Value
+                os = OsType.UNKNOWN;
             }
 
             String arch = System.getProperty("os.arch");
-            boolean binaryCompatible;
-            if ((os != OsType.FREEBSD) && (arch.contains("86") || arch.contains("amd64"))) {
-                binaryCompatible = true;
-            } else {
-                binaryCompatible = false;
-            }
             String archType = "";
             if (os == OsType.DARWIN) {
                 if (arch.contains("aarch") || arch.contains("arm")) {
                     archType = "arm";
-                } else {
+                } else if (arch.contains("amd")) {
                     archType = "amd"; // Default Value
+                } else {
+                    archType = NOT_SUPPORTED;
                 }
             }
 
             // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
             String bits = System.getProperty("sun.arch.data.model");
-            if (bits.equals("64")) {
-                archType += "64";
+            if (bits.equals("64") || bits.equals("32")) {
+                archType += bits;
             } else {
-                archType += "32"; // Default Value
+                archType += NOT_SUPPORTED;
+            }
+
+            boolean binaryCompatible;
+            if ((os == OsType.DARWIN) || (os == OsType.LINUX) || (os == OsType.WINDOWS) && !archType.contains(NOT_SUPPORTED)) {
+                binaryCompatible = true;
+            } else {
+                binaryCompatible = false;
             }
 
             String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + "_" + archType;
