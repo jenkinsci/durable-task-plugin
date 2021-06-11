@@ -30,6 +30,8 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
 import hudson.init.Terminator;
+import hudson.model.Computer;
+import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
 import hudson.remoting.DaemonThreadFactory;
@@ -86,6 +88,8 @@ public abstract class FileMonitoringTask extends DurableTask {
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
     private static final String COOKIE = "JENKINS_SERVER_COOKIE";
+
+    protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
     /** Value of {@link #charset} used to mean the node’s system default. */
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
@@ -146,6 +150,23 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
         return m;
     }
+
+    protected FilePath getNodeRoot(FilePath workspace) throws IOException {
+        Computer computer = workspace.toComputer();
+        if (computer == null) {
+            throw new IOException("Unable to retrieve computer for workspace");
+        }
+        Node node = computer.getNode();
+        if (node == null) {
+            throw new IOException("Unable to retrieve node for workspace");
+        }
+        FilePath nodeRoot = node.getRootPath();
+        if (nodeRoot == null) {
+            throw new IOException("Unable to retrieve root path of node");
+        }
+        return nodeRoot;
+    }
+
 
     /**
      * Tails a log file and watches for an exit status file.

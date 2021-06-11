@@ -121,7 +121,7 @@ public final class AgentInfo implements Serializable {
                 }
             }
 
-            // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
+            // Note: This will only determine the architecture bits of the JVM.
             String bits = System.getProperty("sun.arch.data.model");
             if (bits.equals("64") || bits.equals("32")) {
                 archType += bits;
@@ -136,7 +136,12 @@ public final class AgentInfo implements Serializable {
                 binaryCompatible = false;
             }
 
-            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + "_" + archType;
+            String extension = "";
+            if (os == OsType.WINDOWS) {
+                extension = ".exe";
+            }
+
+            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + "_" + archType + extension;
             String binaryPath;
             boolean isCached;
             boolean cachingAvailable;

@@ -32,8 +32,6 @@ import hudson.Launcher;
 import hudson.PluginWrapper;
 import hudson.Proc;
 import hudson.Util;
-import hudson.model.Computer;
-import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
 import hudson.tasks.Shell;
@@ -121,18 +119,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
 
-        Computer wsComputer = ws.toComputer();
-        if (wsComputer == null) {
-            throw new IOException("Unable to retrieve computer for workspace");
-        }
-        Node wsNode = wsComputer.getNode();
-        if (wsNode == null) {
-            throw new IOException("Unable to retrieve node for workspace");
-        }
-        FilePath nodeRoot = wsNode.getRootPath();
-        if (nodeRoot == null) {
-            throw new IOException("Unable to retrieve root path of node");
-        }
+        FilePath nodeRoot = getNodeRoot(ws);
         final Jenkins jenkins = Jenkins.get();
 
         PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
@@ -183,7 +170,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             } else {
                 binary = controlDir.child(agentInfo.getBinaryPath());
             }
-            String resourcePath = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_" + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture();
+            String resourcePath = BINARY_RESOURCE_PREFIX + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture();
             try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
                 if (binaryStream != null) {
                     if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
@@ -243,6 +230,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (!LAUNCH_DIAGNOSTICS) {
             // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
             cmd.add("-daemon");
+        } else {
+            cmd.add("-debug");
         }
         return cmd;
     }

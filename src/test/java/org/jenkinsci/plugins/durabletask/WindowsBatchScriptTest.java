@@ -81,6 +81,7 @@ public class WindowsBatchScriptTest {
         while (c.exitStatus(wsWithPath, launcher, listener) == null) {
             Thread.sleep(100);
         }
+        Thread.sleep(3000); // Need pause or else cleanup will fail due to AccessDeniedException when deleting binary
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(wsWithPath, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(wsWithPath, launcher, listener));
