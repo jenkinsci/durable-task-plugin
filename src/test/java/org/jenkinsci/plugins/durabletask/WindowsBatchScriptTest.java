@@ -57,6 +57,7 @@ public class WindowsBatchScriptTest {
     private Launcher launcher;
 
     @Before public void vars() {
+        WindowsBatchScript.FORCE_BINARY_WRAPPER = true;
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
