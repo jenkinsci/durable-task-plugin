@@ -79,7 +79,7 @@ public final class AgentInfo implements Serializable {
         private static final long serialVersionUID = 1L;
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
-        private static final String NOT_SUPPORTED = "NOT_SUPPORTED";
+        private static final String NOT_SUPPORTED = "NOTSUPPORTED";
         // Version makes sure we don't use an out-of-date cached binary
         private String binaryVersion;
 
@@ -94,19 +94,17 @@ public final class AgentInfo implements Serializable {
                 os = OsType.DARWIN;
             } else if (Platform.current() == Platform.WINDOWS) {
                 os = OsType.WINDOWS;
-            } else if (Platform.current() == Platform.UNIX) {
+            } else {
                 String osName = System.getProperty("os.name");
-                if (osName.equals("linux")) {
+                if (osName.equalsIgnoreCase("linux")) {
                     os = OsType.LINUX;
-                } else if (osName.equals("z/OS")) {
+                } else if (osName.equalsIgnoreCase("z/OS")) {
                     os = OsType.ZOS;
-                } else if (osName.equals("FreeBSD")) {
+                } else if (osName.equalsIgnoreCase("FreeBSD")) {
                     os = OsType.FREEBSD;
                 } else {
                     os = OsType.UNKNOWN;
                 }
-            } else {
-                os = OsType.UNKNOWN;
             }
 
             String arch = System.getProperty("os.arch");
@@ -114,8 +112,8 @@ public final class AgentInfo implements Serializable {
             if (os == OsType.DARWIN) {
                 if (arch.contains("aarch") || arch.contains("arm")) {
                     archType = "arm";
-                } else if (arch.contains("amd")) {
-                    archType = "amd"; // Default Value
+                } else if (arch.contains("amd") || arch.contains("x86")) {
+                    archType = "amd";
                 } else {
                     archType = NOT_SUPPORTED;
                 }

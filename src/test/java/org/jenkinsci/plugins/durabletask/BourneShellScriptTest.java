@@ -482,8 +482,10 @@ public class BourneShellScriptTest {
                     String macArch = System.getProperty("os.arch");
                     if (macArch.contains("aarch") || macArch.contains("arm")) {
                         architecture = "arm";
-                    } else {
+                    } else if (macArch.contains("amd") || macArch.contains("x86")) {
                         architecture = "amd";
+                    } else {
+                        architecture = "NOTSUPPORTED";
                     }
                 } else {
                     os = "linux";
