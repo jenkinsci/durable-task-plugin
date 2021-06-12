@@ -89,7 +89,6 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         AgentInfo agentInfo = nodeRoot.act(new AgentInfo.GetAgentInfo(pluginVersion));
         BatchController c = new BatchController(ws);
 
-        // launcher -daemon=true -shell=powershell -script=test.ps1 -log=logging.txt -result=result.txt -controldir=. -output=output.txt -debug
         List<String> launcherCmd = null;
         if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
             FilePath controlDir = c.controlDir(ws);
@@ -114,8 +113,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
             launcherCmd = scriptLauncherCmd(c, ws);
         }
 
-//        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
-        LOGGER.log(Level.INFO, "launching {0}", launcherCmd);
+        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
         Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
 
         /* Too noisy, and consumes a thread:
