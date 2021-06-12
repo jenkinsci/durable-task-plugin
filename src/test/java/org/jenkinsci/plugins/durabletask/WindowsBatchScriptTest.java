@@ -169,7 +169,7 @@ public class WindowsBatchScriptTest {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        Thread.sleep(1000); // Need pause or else cleanup is attempted before processes are completed
+        Thread.sleep(3000); // Need pause or else cleanup is attempted before processes are completed
     }
 
 }
