@@ -58,6 +58,9 @@ public class PowershellScriptTest {
     private int psVersion;
 
     @Before public void vars() throws IOException, InterruptedException {
+        PowershellScript.FORCE_BINARY_WRAPPER = true;
+        // TODO: REMOVE
+        System.setProperty(PowershellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "true");
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
@@ -100,9 +103,7 @@ public class PowershellScriptTest {
 
     @Test public void explicitExit() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Hello, World!\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher, TaskListener.NULL));
@@ -112,9 +113,7 @@ public class PowershellScriptTest {
 
     @Test public void implicitExit() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Success!\";").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, TaskListener.NULL));
@@ -124,9 +123,7 @@ public class PowershellScriptTest {
 
     @Test public void implicitError() throws Exception {
         Controller c = new PowershellScript("$ErrorActionPreference = 'Stop'; Write-Error \"Bogus error\"").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, TaskListener.NULL).intValue() != 0);
@@ -136,18 +133,14 @@ public class PowershellScriptTest {
 
     @Test public void implicitErrorNegativeTest() throws Exception {
         Controller c = new PowershellScript("$ErrorActionPreference = 'SilentlyContinue'; Write-Error \"Bogus error\"").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         assertTrue(c.exitStatus(ws, launcher, TaskListener.NULL).intValue() == 0);
         c.cleanup(ws);
     }
 
     @Test public void parseError() throws Exception {
         Controller c = new PowershellScript("Write-Output \"Hello, World!").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
@@ -157,9 +150,7 @@ public class PowershellScriptTest {
 
     @Test public void invocationCommandNotExistError() throws Exception {
         Controller c = new PowershellScript("Get-VerbDoesNotExist").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
@@ -169,9 +160,7 @@ public class PowershellScriptTest {
 
     @Test public void invocationParameterNotExistError() throws Exception {
         Controller c = new PowershellScript("Get-Date -PARAMDOESNOTEXIST").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
@@ -181,9 +170,7 @@ public class PowershellScriptTest {
 
     @Test public void invocationParameterBindingError() throws Exception {
         Controller c = new PowershellScript("Get-Command -CommandType DOESNOTEXIST").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
@@ -193,9 +180,7 @@ public class PowershellScriptTest {
 
     @Test public void invocationParameterValidationError() throws Exception {
         Controller c = new PowershellScript("Get-Date -Month 15").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
@@ -204,9 +189,7 @@ public class PowershellScriptTest {
 
     @Test public void cmdletBindingScriptDoesNotError() throws Exception {
         Controller c = new PowershellScript("[CmdletBinding()]param([Parameter()][string]$Param1) \"Param1 = $Param1\"").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() == 0);
@@ -217,9 +200,7 @@ public class PowershellScriptTest {
         DurableTask task = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
@@ -235,9 +216,7 @@ public class PowershellScriptTest {
     @Test public void implicitThrow() throws Exception {
         DurableTask task = new PowershellScript("$ErrorActionPreference = 'Stop'; My-BogusCmdlet;");
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() != 0);
@@ -246,6 +225,8 @@ public class PowershellScriptTest {
     }
 
     @Test public void noStdoutPollution() throws Exception {
+        // TODO temporary
+        System.setProperty(PowershellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "false");
         DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
                                                 "$WarningPreference = \"Continue\"; " +
                                                 "$DebugPreference = \"Continue\"; " +
@@ -255,9 +236,7 @@ public class PowershellScriptTest {
                                                 "Write-Output \"Success\"");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener).intValue() == 0);
@@ -270,6 +249,8 @@ public class PowershellScriptTest {
             assertEquals("Success\r\n", new String(c.getOutput(ws, launcher)));
         }
         c.cleanup(ws);
+        // TODO temporary
+        System.setProperty(PowershellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "true");
     }
 
     @Test public void specialStreams() throws Exception {
@@ -280,9 +261,7 @@ public class PowershellScriptTest {
                                                 "Write-Warning \"Hello, Warning!\"; " +
                                                 "Write-Debug \"Hello, Debug!\";");
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, TaskListener.NULL).intValue());
@@ -295,18 +274,14 @@ public class PowershellScriptTest {
     @Test public void spacesInWorkspace() throws Exception {
         final FilePath newWs = new FilePath(ws, "subdirectory with spaces");
         Controller c = new PowershellScript("Write-Host 'Running in a workspace with spaces in the path'").launch(new EnvVars(), newWs, launcher, listener);
-        while (c.exitStatus(newWs, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         assertEquals(0, c.exitStatus(newWs, launcher, TaskListener.NULL).intValue());
         c.cleanup(ws);
     }
 
     @Test public void echoEnvVar() throws Exception {
         Controller c = new PowershellScript("echo envvar=$env:MYVAR").launch(new EnvVars("MYVAR", "power$hell"), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -315,10 +290,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void unicodeChars() throws Exception {
+//        PowershellScript.FORCE_BINARY_WRAPPER = false;
         Controller c = new PowershellScript("Write-Output \"Helló, Wõrld ®\";").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, TaskListener.NULL));
@@ -329,9 +303,7 @@ public class PowershellScriptTest {
 
     @Test public void correctExitCode() throws Exception {
         Controller c = new PowershellScript("exit 5;").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         assertEquals(Integer.valueOf(5), c.exitStatus(ws, launcher, TaskListener.NULL));
         c.cleanup(ws);
     }
@@ -340,18 +312,21 @@ public class PowershellScriptTest {
         PowershellScript s = new PowershellScript("if ((Get-CimInstance Win32_Process -Filter \"ProcessId = $PID\").CommandLine.split(\" \").Contains(\"-NoProfile\")) { exit 0; } else { exit 1; } ");
 
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
 
         s.setLoadProfile(true);
         c = s.launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        assertEquals(1, c.exitStatus(ws, launcher, listener).intValue());
+        c.cleanup(ws);
+    }
+
+    private void awaitCompletion(Controller c) throws IOException, InterruptedException {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        assertEquals(1, c.exitStatus(ws, launcher, listener).intValue());
-        c.cleanup(ws);
+        Thread.sleep(5000); // Need pause or else cleanup is attempted before processes are completed
     }
 }

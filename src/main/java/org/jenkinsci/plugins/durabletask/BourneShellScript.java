@@ -79,6 +79,8 @@ public final class BourneShellScript extends FileMonitoringTask {
      * If requested, we can do this to assist in diagnosis.
      * (For example, if we are unable to write to a workspace due to permissions,
      * we would want to see that error message.)
+     *
+     * For the binary wrapper, this enables the debug flag.
      */
     @SuppressWarnings("FieldMayBeFinal")
     // TODO use SystemProperties if and when unrestricted
@@ -227,9 +229,15 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd.add("-output=" + outputFile);
         }
-        if (!LAUNCH_DIAGNOSTICS) {
-            // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
-            cmd.add("-daemon");
+        // TODO: Reminder to test
+//        if (!LAUNCH_DIAGNOSTICS) {
+//            // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
+//            cmd.add("-daemon");
+//        }
+        // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
+        cmd.add("-daemon");
+        if (LAUNCH_DIAGNOSTICS) {
+            cmd.add("-debug");
         }
         return cmd;
     }

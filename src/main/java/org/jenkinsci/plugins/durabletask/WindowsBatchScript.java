@@ -60,6 +60,14 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     private final String script;
     private boolean capturingOutput;
     private static final Logger LOGGER = Logger.getLogger(WindowsBatchScript.class.getName());
+    private static final String LAUNCH_DIAGNOSTICS_PROP = WindowsBatchScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
+
+    /**
+     * Used by the binary wrapper, this enables the debug flag.
+     */
+    @SuppressWarnings("FieldMayBeFinal")
+    // TODO use SystemProperties if and when unrestricted
+    private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
 
     @DataBoundConstructor public WindowsBatchScript(String script) {
         this.script = LineEndingConversion.convertEOL(script, LineEndingConversion.EOLType.Windows);
@@ -144,8 +152,9 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd.add("-output=" + outputFile);
         }
-        // TODO: REMOVE
-        cmd.add("-debug");
+        if (LAUNCH_DIAGNOSTICS) {
+            cmd.add("-debug");
+        }
         return cmd;
     }
 
