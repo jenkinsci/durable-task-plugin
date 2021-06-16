@@ -62,8 +62,6 @@ public final class PowershellScript extends FileMonitoringTask {
     private String powershellBinary = "powershell";
     private boolean loadProfile;
     private boolean capturingOutput;
-    /* Byte-Order-Mark for UTF8 files. Powershell does not properly recognize UTF8 files without a BOM */
-    private static final String BOM = "\ufeff";
     private static final Logger LOGGER = Logger.getLogger(PowershellScript.class.getName());
     private static final String LAUNCH_DIAGNOSTICS_PROP = PowershellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
 
@@ -141,40 +139,25 @@ public final class PowershellScript extends FileMonitoringTask {
                     if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
                         binary.copyFrom(binaryStream);
                     }
-                    String scriptWrapper = String.format("%s[CmdletBinding()]\r\n" +
-                            "param()\r\n" +
-                            "& %s %s -Command '[Console]::OutputEncoding = [Text.Encoding]::UTF8; & {try {& ''%s''} catch {throw}; exit $LASTEXITCODE} '\r\n" +
-                            "exit $LASTEXITCODE", BOM, powershellBinary, String.join(" ", powershellArgs), c.getPowerShellScriptFile(ws).getRemote());
+                    String scriptWrapper = generateScriptWrapper(true, powershellBinary, powershellArgs, c.getPowerShellScriptFile(ws));
 
                     launcherCmd = binaryLauncherCmd(c, ws, controlDir.getRemote(), binary.getRemote(), c.getPowerShellWrapperFile(ws).getRemote(), powershellArgs);
-                    c.getPowerShellScriptFile(ws).write(BOM + script, "UTF-8");
-                    c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
+                    if (launcher.isUnix() || "pwsh".equals(powershellBinary)) {
+                        // There is no need to add a BOM with Open PowerShell / PowerShell Core
+                        c.getPowerShellScriptFile(ws).write(script, "UTF-8");
+                        c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
+                    } else {
+                        // Write the Windows PowerShell scripts out with a UTF8 BOM
+                        writeWithBom(c.getPowerShellScriptFile(ws), script);
+                        writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
+                    }
                 }
             }
         }
         if (launcherCmd == null) {
             launcherCmd = scriptLauncherCmd(c, ws, powershellArgs);
 
-            // Fix https://issues.jenkins.io/browse/JENKINS-59529
-            // Fix https://issues.jenkins.io/browse/JENKINS-65597
-            // Wrap invocation of powershellScript.ps1 in a try/catch in order to propagate PowerShell errors like:
-            // command/script not recognized, parameter not found, parameter validation failed, parse errors, etc. In
-            // PowerShell, $LASTEXITCODE applies **only** to the invocation of native apps and is not set when built-in
-            // PowerShell commands or script invocation fails.
-            // While you **could** prepend your script with "$ErrorActionPreference = 'Stop'; <script>" to get the step
-            // to fail on a PowerShell error, that is not discoverable resulting in issues like 59529 being submitted.
-            // The problem with setting $ErrorActionPreference before the script is that value propagates into the script
-            // which may not be what the user wants.
-            // One consequence of leaving the "exit $LASTEXITCODE" is if the last native command in a script exits with
-            // a non-zero exit code, the step will fail. That may sound obvious but most PowerShell scripters are not used
-            // to that. PowerShell doesn't have the equivalent of "set -e" yet. However, in the context of a build system,
-            // I believe we should err on the side of false negatives instead of false positives. If a scripter doesn't
-            // want a non-zero exit code to fail the step, they can do the following (PS >= v7) to reset $LASTEXITCODE:
-            // whoami -f || $($global:LASTEXITCODE = 0)
-            String scriptWrapper = String.format("[CmdletBinding()]\r\n" +
-                    "param()\r\n" +
-                    "& %s %s -Command '& {try {& ''%s''} catch {throw}; exit $LASTEXITCODE}'\r\n" +
-                    "exit $LASTEXITCODE", powershellBinary, powershellArgs, quote(quote(c.getPowerShellScriptFile(ws))));
+            String scriptWrapper = generateScriptWrapper(true, powershellBinary, powershellArgs, c.getPowerShellScriptFile(ws));
 
             // Add an explicit exit to the end of the script so that exit codes are propagated
             String scriptWithExit = script + "\r\nexit $LASTEXITCODE";
@@ -210,23 +193,17 @@ public final class PowershellScript extends FileMonitoringTask {
         return c;
     }
 
-    // TODO: REMOVE
-    // launcher -daemon=true -executable=powershell -args="-NoProfile,-NonInteractive,-ExecutionPolicy,Bypass,-File,path with space\test.ps1" -log=logging.txt -result=result.txt -controldir=. -output=output.txt -debug
     @Nonnull
     private List<String> binaryLauncherCmd(PowershellController c, FilePath ws, String controlDirPath, String binaryPath, String scriptPath, List<String> powershellArgs) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
         String outputFile = c.getOutputFile(ws).getRemote();
 
-        // TODO: convert powershell args to string with comma
-        String argPrefix = String.join(",", powershellArgs);
         List<String> cmd = new ArrayList<>();
         cmd.add(binaryPath);
         cmd.add("-daemon");
         cmd.add("-executable=powershell");
-//        cmd.add("-args=-NoProfile,-NonInteractive,-ExecutionPolicy,Bypass,-Command,\\\"" + scriptPath + "\\\"");
-        // Use -File for launching the wrapper to simplify the quoting
-        cmd.add("-args=-NoProfile,-NonInteractive,-ExecutionPolicy,Bypass,-File," + scriptPath);
+        cmd.add(String.format("-args=%s,-File,%s", String.join(",", powershellArgs), scriptPath));
         cmd.add("-controldir=" + controlDirPath);
         cmd.add("-result=" + resultFile);
         cmd.add("-log=" + logFile);
@@ -262,6 +239,47 @@ public final class PowershellScript extends FileMonitoringTask {
         args.addAll(Arrays.asList("-Command", cmd));
 
         return args;
+    }
+
+    /**
+     * Fix https://issues.jenkins.io/browse/JENKINS-59529
+     * Fix https://issues.jenkins.io/browse/JENKINS-65597
+     * Wrap invocation of powershellScript.ps1 in a try/catch in order to propagate PowerShell errors like:
+     * command/script not recognized, parameter not found, parameter validation failed, parse errors, etc. In
+     * PowerShell, $LASTEXITCODE applies **only** to the invocation of native apps and is not set when built-in
+     * PowerShell commands or script invocation fails.
+     * While you **could** prepend your script with "$ErrorActionPreference = 'Stop'; <script>" to get the step
+     * to fail on a PowerShell error, that is not discoverable resulting in issues like 59529 being submitted.
+     * The problem with setting $ErrorActionPreference before the script is that value propagates into the script
+     * which may not be what the user wants.
+     * One consequence of leaving the "exit $LASTEXITCODE" is if the last native command in a script exits with
+     * a non-zero exit code, the step will fail. That may sound obvious but most PowerShell scripters are not used
+     * to that. PowerShell doesn't have the equivalent of "set -e" yet. However, in the context of a build system,
+     * I believe we should err on the side of false negatives instead of false positives. If a scripter doesn't
+     * want a non-zero exit code to fail the step, they can do the following (PS >= v7) to reset $LASTEXITCODE:
+     * whoami -f || $($global:LASTEXITCODE = 0)
+     *
+     */
+    private static String generateScriptWrapper(boolean binaryLaunched ,String powershellBinary, List<String> powershellArgs, FilePath powerShellScriptFile) {
+        String scriptWrapper;
+        if (binaryLaunched) {
+            scriptWrapper = String.format(
+                    "[CmdletBinding()]\r\n" +
+                    "param()\r\n" +
+                    "& %s %s -Command '[Console]::OutputEncoding = [Text.Encoding]::UTF8; & {try {& ''%s''} catch {throw}; exit $LASTEXITCODE} '\r\n" +
+                    "exit $LASTEXITCODE",
+                    powershellBinary, String.join(" ", powershellArgs), powerShellScriptFile.getRemote());
+
+        } else {
+            scriptWrapper = String.format(
+                    "[CmdletBinding()]\r\n" +
+                    "param()\r\n" +
+                    "& %s %s -Command '& {try {& ''%s''} catch {throw}; exit $LASTEXITCODE}'\r\n" +
+                    "exit $LASTEXITCODE",
+                    powershellBinary, powershellArgs, quote(quote(powerShellScriptFile)));
+        }
+
+        return scriptWrapper;
     }
 
     private static String quote(FilePath f) {
