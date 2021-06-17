@@ -139,17 +139,14 @@ public final class PowershellScript extends FileMonitoringTask {
                     if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
                         binary.copyFrom(binaryStream);
                     }
-                    String scriptWrapper = generateScriptWrapper(true, powershellBinary, powershellArgs, c.getPowerShellScriptFile(ws));
 
-                    launcherCmd = binaryLauncherCmd(c, ws, controlDir.getRemote(), binary.getRemote(), c.getPowerShellWrapperFile(ws).getRemote(), powershellArgs);
+                    launcherCmd = binaryLauncherCmd(c, ws, controlDir.getRemote(), binary.getRemote(), c.getPowerShellScriptFile(ws).getRemote(), powershellArgs);
                     if (launcher.isUnix() || "pwsh".equals(powershellBinary)) {
                         // There is no need to add a BOM with Open PowerShell / PowerShell Core
                         c.getPowerShellScriptFile(ws).write(script, "UTF-8");
-                        c.getPowerShellWrapperFile(ws).write(scriptWrapper, "UTF-8");
                     } else {
                         // Write the Windows PowerShell scripts out with a UTF8 BOM
                         writeWithBom(c.getPowerShellScriptFile(ws), script);
-                        writeWithBom(c.getPowerShellWrapperFile(ws), scriptWrapper);
                     }
                 }
             }
@@ -157,7 +154,7 @@ public final class PowershellScript extends FileMonitoringTask {
         if (launcherCmd == null) {
             launcherCmd = scriptLauncherCmd(c, ws, powershellArgs);
 
-            String scriptWrapper = generateScriptWrapper(true, powershellBinary, powershellArgs, c.getPowerShellScriptFile(ws));
+            String scriptWrapper = generateScriptWrapper(powershellBinary, powershellArgs, c.getPowerShellScriptFile(ws));
 
             // Add an explicit exit to the end of the script so that exit codes are propagated
             String scriptWithExit = script + "\r\nexit $LASTEXITCODE";
@@ -203,7 +200,7 @@ public final class PowershellScript extends FileMonitoringTask {
         cmd.add(binaryPath);
         cmd.add("-daemon");
         cmd.add("-executable=powershell");
-        cmd.add(String.format("-args=%s,-File,%s", String.join(",", powershellArgs), scriptPath));
+        cmd.add(String.format("-args=%s,-Command,%s", String.join(",", powershellArgs), generateCommandWrapper(scriptPath)));
         cmd.add("-controldir=" + controlDirPath);
         cmd.add("-result=" + resultFile);
         cmd.add("-log=" + logFile);
@@ -260,26 +257,24 @@ public final class PowershellScript extends FileMonitoringTask {
      * whoami -f || $($global:LASTEXITCODE = 0)
      *
      */
-    private static String generateScriptWrapper(boolean binaryLaunched ,String powershellBinary, List<String> powershellArgs, FilePath powerShellScriptFile) {
-        String scriptWrapper;
-        if (binaryLaunched) {
-            scriptWrapper = String.format(
-                    "[CmdletBinding()]\r\n" +
-                    "param()\r\n" +
-                    "& %s %s -Command '[Console]::OutputEncoding = [Text.Encoding]::UTF8; & {try {& ''%s''} catch {throw}; exit $LASTEXITCODE} '\r\n" +
-                    "exit $LASTEXITCODE",
-                    powershellBinary, String.join(" ", powershellArgs), powerShellScriptFile.getRemote());
+    private static String generateScriptWrapper(String powershellBinary, List<String> powershellArgs, FilePath powerShellScriptFile) {
+        return String.format(
+                "[CmdletBinding()]\r\n" +
+                "param()\r\n" +
+                "& %s %s -Command '& {try {& ''%s''} catch {throw}; exit $LASTEXITCODE}'\r\n" +
+                "exit $LASTEXITCODE",
+                powershellBinary, powershellArgs, quote(quote(powerShellScriptFile)));
+    }
 
-        } else {
-            scriptWrapper = String.format(
-                    "[CmdletBinding()]\r\n" +
-                    "param()\r\n" +
-                    "& %s %s -Command '& {try {& ''%s''} catch {throw}; exit $LASTEXITCODE}'\r\n" +
-                    "exit $LASTEXITCODE",
-                    powershellBinary, powershellArgs, quote(quote(powerShellScriptFile)));
-        }
-
-        return scriptWrapper;
+    /**
+     * Same motivation as {@link PowershellScript#generateScriptWrapper(String, List, FilePath)}, only for the binary-based launcher
+     */
+    private static String generateCommandWrapper(String scriptPath) {
+        return String.format(
+                    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; " +
+                    "& {try {& \\\"%s\\\"} catch {throw}; " +
+                    "exit $LASTEXITCODE}",
+                    scriptPath);
     }
 
     private static String quote(FilePath f) {
