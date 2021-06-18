@@ -229,11 +229,6 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd.add("-output=" + outputFile);
         }
-        // TODO: Reminder to test
-//        if (!LAUNCH_DIAGNOSTICS) {
-//            // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
-//            cmd.add("-daemon");
-//        }
         // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
         cmd.add("-daemon");
         if (LAUNCH_DIAGNOSTICS) {
