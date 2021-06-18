@@ -225,8 +225,8 @@ public class PowershellScriptTest {
     }
 
     @Test public void noStdoutPollution() throws Exception {
-        // TODO temporary
-        System.setProperty(PowershellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "false");
+        // TODO? Binary wrapper does not allow redirection of non-success streams to the logger
+        PowershellScript.FORCE_BINARY_WRAPPER = false;
         DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
                                                 "$WarningPreference = \"Continue\"; " +
                                                 "$DebugPreference = \"Continue\"; " +
@@ -249,8 +249,7 @@ public class PowershellScriptTest {
             assertEquals("Success\r\n", new String(c.getOutput(ws, launcher)));
         }
         c.cleanup(ws);
-        // TODO temporary
-        System.setProperty(PowershellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "true");
+        PowershellScript.FORCE_BINARY_WRAPPER = true;
     }
 
     @Test public void specialStreams() throws Exception {
@@ -290,7 +289,6 @@ public class PowershellScriptTest {
     }
 
     @Test public void unicodeChars() throws Exception {
-//        PowershellScript.FORCE_BINARY_WRAPPER = false;
         Controller c = new PowershellScript("Write-Output \"Helló, Wõrld ®\";").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -327,6 +325,6 @@ public class PowershellScriptTest {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        Thread.sleep(5000); // Need pause or else cleanup is attempted before processes are completed
+        Thread.sleep(3000); // Pause allows slower systems to exit binary before cleanup is attempted
     }
 }
