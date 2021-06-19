@@ -120,9 +120,9 @@ public final class PowershellScript extends FileMonitoringTask {
         if (!loadProfile) {
             powershellArgs.add("-NoProfile");
         }
-        powershellArgs.add("-NonInteractive");
+        powershellArgs.add("--NonInteractive");
         if (!launcher.isUnix()) {
-            powershellArgs.addAll(Arrays.asList("-ExecutionPolicy", "Bypass"));
+            powershellArgs.addAll(Arrays.asList("--ExecutionPolicy", "-Bypass"));
         }
 
         if (launcher.isUnix() || "pwsh".equals(powershellBinary)) {
@@ -205,7 +205,7 @@ public final class PowershellScript extends FileMonitoringTask {
         cmd.add(binaryPath);
         cmd.add("-daemon");
         cmd.add(String.format("-executable=%s", powershellBinary));
-        cmd.add(String.format("-args=%s,-Command,%s", String.join(",", powershellArgs), generateCommandWrapper(scriptPath, capturingOutput, outputFile, needsBom)));
+        cmd.add(String.format("-args=%s,-Command,-%s", String.join(",", powershellArgs), generateCommandWrapper(scriptPath, capturingOutput, outputFile, needsBom, c.getTemporaryOutputFile(ws).getRemote())));
         cmd.add("-controldir=" + controlDirPath);
         cmd.add("-result=" + resultFile);
         cmd.add("-log=" + logFile);
@@ -271,29 +271,28 @@ public final class PowershellScript extends FileMonitoringTask {
     /**
      * Same motivation as {@link PowershellScript#generateScriptWrapper(String, List, FilePath)}, only for the binary-based launcher
      */
-    private static String generateCommandWrapper(String scriptPath, boolean capturingOutput, String outputPath, boolean needsBom) {
+    private static String generateCommandWrapper(String scriptPath, boolean capturingOutput, String outputPath, boolean needsBom, String tempPath) {
         String encoding = "UTF8";
         if (!needsBom) {
             encoding = "utf8NoBOM";
         }
-        String wrapper = String.format(
+        String wrapper;
+        if (capturingOutput) {
+            // Note: Do not set the `-output` flag for the binary when capturing output, it will pollute the success stream.
+            // This is because Powershell automatically redirects the non-error streams to the success stream when running -File or -Command.
+            wrapper = String.format(
+                    "[Console]::OutputEncoding = [Text.Encoding]::%s; [Console]::InputEncoding = [System.Text.Encoding]::%s; " +
+                    "& {try {& \\\"%s\\\" | Out-File -FilePath \\\"%s\\\"} catch {throw} finally {$outputWithBom = Get-Content \\\"%s\\\"; [IO.File]::WriteAllLines(\\\"%s\\\", $outputWithBom)}; " +
+                    "exit $LASTEXITCODE}",
+                    encoding, encoding, scriptPath, tempPath, tempPath, outputPath);
+
+        } else {
+            wrapper = String.format(
                     "[Console]::OutputEncoding = [Text.Encoding]::%s; [Console]::InputEncoding = [System.Text.Encoding]::%s; " +
                     "& {try {& \\\"%s\\\"} catch {throw}; " +
                     "exit $LASTEXITCODE}",
                     encoding, encoding, scriptPath);
 
-        // Note: Do not set the `-output` flag for the binary when capturing output, it will pollute the success stream.
-        // This is because Powershell automatically redirects the non-error streams to the success stream when running -File or -Command.
-        // Non-success streams can only redirect to the success stream or a separate file (streams may not share a file).
-        // Using Tee-Object outputs the success stream to both the output file and stdout. This allows the binary to capture
-        String teeEncoding = "ascii";
-        if (!needsBom) {
-            encoding = "utf8NoBOM";
-        }
-
-        if (capturingOutput && outputPath != "") {
-            wrapper = String.format("$PSDefaultParameterValues = @{'Out-File:Encoding' = '%s'}; %s | Tee-Object -FilePath \\\"%s\\\"",
-                    teeEncoding, wrapper, outputPath);
         }
         return wrapper;
     }
@@ -331,6 +330,10 @@ public final class PowershellScript extends FileMonitoringTask {
 
         public FilePath getPowerShellWrapperFile(FilePath ws) throws IOException, InterruptedException {
             return controlDir(ws).child("powershellWrapper.ps1");
+        }
+
+        public FilePath getTemporaryOutputFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("temporaryOutput.txt");
         }
 
         private static final long serialVersionUID = 1L;

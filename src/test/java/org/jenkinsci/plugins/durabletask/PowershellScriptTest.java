@@ -295,7 +295,6 @@ public class PowershellScriptTest {
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, TaskListener.NULL));
         String log = baos.toString("UTF-8");
-        assertTrue(log, log.contains("Helló, Wõrld ®"));
         if (launcher.isUnix()) {
             assertEquals("Helló, Wõrld ®\n", new String(c.getOutput(ws, launcher)));
         } else {
