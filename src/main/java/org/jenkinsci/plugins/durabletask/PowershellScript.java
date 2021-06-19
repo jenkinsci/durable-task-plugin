@@ -60,6 +60,7 @@ public final class PowershellScript extends FileMonitoringTask {
 
     private final String script;
     private String powershellBinary = "powershell";
+    private boolean needsBom = true;
     private boolean loadProfile;
     private boolean capturingOutput;
     private static final Logger LOGGER = Logger.getLogger(PowershellScript.class.getName());
@@ -124,7 +125,11 @@ public final class PowershellScript extends FileMonitoringTask {
             powershellArgs.addAll(Arrays.asList("-ExecutionPolicy", "Bypass"));
         }
 
-        List<String> launcherCmd = null;
+        if (launcher.isUnix() || "pwsh".equals(powershellBinary)) {
+            needsBom = false;
+        }
+
+            List<String> launcherCmd = null;
         if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
             FilePath controlDir = c.controlDir(ws);
             FilePath binary;
@@ -141,7 +146,7 @@ public final class PowershellScript extends FileMonitoringTask {
                     }
 
                     launcherCmd = binaryLauncherCmd(c, ws, controlDir.getRemote(), binary.getRemote(), c.getPowerShellScriptFile(ws).getRemote(), powershellArgs);
-                    if (launcher.isUnix() || "pwsh".equals(powershellBinary)) {
+                    if (!needsBom) {
                         // There is no need to add a BOM with Open PowerShell / PowerShell Core
                         c.getPowerShellScriptFile(ws).write(script, "UTF-8");
                     } else {
@@ -162,7 +167,7 @@ public final class PowershellScript extends FileMonitoringTask {
             // Copy the helper script from the resources directory into the workspace
             c.getPowerShellHelperFile(ws).copyFrom(getClass().getResource("powershellHelper.ps1"));
 
-            if (launcher.isUnix() || "pwsh".equals(powershellBinary)) {
+            if (!needsBom) {
                 // There is no need to add a BOM with Open PowerShell / PowerShell Core
                 c.getPowerShellScriptFile(ws).write(scriptWithExit, "UTF-8");
                 if (!capturingOutput) {
@@ -199,14 +204,11 @@ public final class PowershellScript extends FileMonitoringTask {
         List<String> cmd = new ArrayList<>();
         cmd.add(binaryPath);
         cmd.add("-daemon");
-        cmd.add("-executable=powershell");
-        cmd.add(String.format("-args=%s,-Command,%s", String.join(",", powershellArgs), generateCommandWrapper(scriptPath)));
+        cmd.add(String.format("-executable=%s", powershellBinary));
+        cmd.add(String.format("-args=%s,-Command,%s", String.join(",", powershellArgs), generateCommandWrapper(scriptPath, capturingOutput, outputFile, needsBom)));
         cmd.add("-controldir=" + controlDirPath);
         cmd.add("-result=" + resultFile);
         cmd.add("-log=" + logFile);
-        if (capturingOutput) {
-            cmd.add("-output=" + outputFile);
-        }
         if (LAUNCH_DIAGNOSTICS) {
             cmd.add("-debug");
         }
@@ -269,12 +271,31 @@ public final class PowershellScript extends FileMonitoringTask {
     /**
      * Same motivation as {@link PowershellScript#generateScriptWrapper(String, List, FilePath)}, only for the binary-based launcher
      */
-    private static String generateCommandWrapper(String scriptPath) {
-        return String.format(
-                    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; " +
+    private static String generateCommandWrapper(String scriptPath, boolean capturingOutput, String outputPath, boolean needsBom) {
+        String encoding = "UTF8";
+        if (!needsBom) {
+            encoding = "utf8NoBOM";
+        }
+        String wrapper = String.format(
+                    "[Console]::OutputEncoding = [Text.Encoding]::%s; [Console]::InputEncoding = [System.Text.Encoding]::%s; " +
                     "& {try {& \\\"%s\\\"} catch {throw}; " +
                     "exit $LASTEXITCODE}",
-                    scriptPath);
+                    encoding, encoding, scriptPath);
+
+        // Note: Do not set the `-output` flag for the binary when capturing output, it will pollute the success stream.
+        // This is because Powershell automatically redirects the non-error streams to the success stream when running -File or -Command.
+        // Non-success streams can only redirect to the success stream or a separate file (streams may not share a file).
+        // Using Tee-Object outputs the success stream to both the output file and stdout. This allows the binary to capture
+        String teeEncoding = "ascii";
+        if (!needsBom) {
+            encoding = "utf8NoBOM";
+        }
+
+        if (capturingOutput && outputPath != "") {
+            wrapper = String.format("$PSDefaultParameterValues = @{'Out-File:Encoding' = '%s'}; %s | Tee-Object -FilePath \\\"%s\\\"",
+                    teeEncoding, wrapper, outputPath);
+        }
+        return wrapper;
     }
 
     private static String quote(FilePath f) {
