@@ -285,21 +285,14 @@ public class PowershellScriptTest {
         c.cleanup(ws);
     }
 
-    // Note: test will fail if capture output is enabled. Captured output is written in ascii
     @Test public void unicodeChars() throws Exception {
-        DurableTask task = new PowershellScript("Write-Output \"Helló, Wõrld ®\";");//.launch(new EnvVars(), ws, launcher, listener);
-        task.captureOutput();
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        Controller c = new PowershellScript("Write-Output \"Helló, Wõrld ®\";").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, TaskListener.NULL));
         String log = baos.toString("UTF-8");
-        if (launcher.isUnix()) {
-            assertEquals("Helló, Wõrld ®\n", new String(c.getOutput(ws, launcher)));
-        } else {
-            assertEquals("Helló, Wõrld ®\r\n", new String(c.getOutput(ws, launcher)));
-        }
+        assertTrue(log, log.contains("Helló, Wõrld ®"));
         c.cleanup(ws);
     }
 
