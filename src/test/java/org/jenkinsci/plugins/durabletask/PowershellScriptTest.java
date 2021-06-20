@@ -56,11 +56,10 @@ public class PowershellScriptTest {
     private FilePath ws;
     private Launcher launcher;
     private int psVersion;
+    private boolean enablePwsh = false;
 
     @Before public void vars() throws IOException, InterruptedException {
         PowershellScript.FORCE_BINARY_WRAPPER = true;
-        // TODO: REMOVE
-        System.setProperty(PowershellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "true");
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
@@ -102,7 +101,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void explicitExit() throws Exception {
-        Controller c = new PowershellScript("Write-Output \"Hello, World!\"; exit 1;").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Write-Output \"Hello, World!\"; exit 1;");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -112,7 +113,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void implicitExit() throws Exception {
-        Controller c = new PowershellScript("Write-Output \"Success!\";").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Write-Output \"Success!\";");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -122,7 +125,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void implicitError() throws Exception {
-        Controller c = new PowershellScript("$ErrorActionPreference = 'Stop'; Write-Error \"Bogus error\"").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("$ErrorActionPreference = 'Stop'; Write-Error \"Bogus error\"");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -132,14 +137,18 @@ public class PowershellScriptTest {
     }
 
     @Test public void implicitErrorNegativeTest() throws Exception {
-        Controller c = new PowershellScript("$ErrorActionPreference = 'SilentlyContinue'; Write-Error \"Bogus error\"").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("$ErrorActionPreference = 'SilentlyContinue'; Write-Error \"Bogus error\"");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         assertTrue(c.exitStatus(ws, launcher, TaskListener.NULL).intValue() == 0);
         c.cleanup(ws);
     }
 
     @Test public void parseError() throws Exception {
-        Controller c = new PowershellScript("Write-Output \"Hello, World!").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Write-Output \"Hello, World!");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -149,7 +158,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void invocationCommandNotExistError() throws Exception {
-        Controller c = new PowershellScript("Get-VerbDoesNotExist").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Get-VerbDoesNotExist");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -159,7 +170,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void invocationParameterNotExistError() throws Exception {
-        Controller c = new PowershellScript("Get-Date -PARAMDOESNOTEXIST").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Get-Date -PARAMDOESNOTEXIST");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -169,7 +182,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void invocationParameterBindingError() throws Exception {
-        Controller c = new PowershellScript("Get-Command -CommandType DOESNOTEXIST").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Get-Command -CommandType DOESNOTEXIST");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -179,7 +194,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void invocationParameterValidationError() throws Exception {
-        Controller c = new PowershellScript("Get-Date -Month 15").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Get-Date -Month 15");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -188,7 +205,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void cmdletBindingScriptDoesNotError() throws Exception {
-        Controller c = new PowershellScript("[CmdletBinding()]param([Parameter()][string]$Param1) \"Param1 = $Param1\"").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("[CmdletBinding()]param([Parameter()][string]$Param1) \"Param1 = $Param1\"");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -197,9 +216,10 @@ public class PowershellScriptTest {
     }
 
     @Test public void explicitThrow() throws Exception {
-        DurableTask task = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");
-        task.captureOutput();
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Write-Output \"Hello, World!\"; throw \"explicit error\";");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        s.captureOutput();
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -214,8 +234,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void implicitThrow() throws Exception {
-        DurableTask task = new PowershellScript("$ErrorActionPreference = 'Stop'; My-BogusCmdlet;");
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("$ErrorActionPreference = 'Stop'; My-BogusCmdlet;");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -225,15 +246,16 @@ public class PowershellScriptTest {
     }
 
     @Test public void noStdoutPollution() throws Exception {
-        DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
-                                                "$WarningPreference = \"Continue\"; " +
-                                                "$DebugPreference = \"Continue\"; " +
-                                                "Write-Verbose \"Hello, Verbose!\"; " +
-                                                "Write-Warning \"Hello, Warning!\"; " +
-                                                "Write-Debug \"Hello, Debug!\"; " +
-                                                "Write-Output \"Success\"");
-        task.captureOutput();
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("$VerbosePreference = \"Continue\"; " +
+                                                  "$WarningPreference = \"Continue\"; " +
+                                                  "$DebugPreference = \"Continue\"; " +
+                                                  "Write-Verbose \"Hello, Verbose!\"; " +
+                                                  "Write-Warning \"Hello, Warning!\"; " +
+                                                  "Write-Debug \"Hello, Debug!\"; " +
+                                                  "Write-Output \"Success\"");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        s.captureOutput();
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -250,13 +272,14 @@ public class PowershellScriptTest {
     }
 
     @Test public void specialStreams() throws Exception {
-        DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
-                                                "$WarningPreference = \"Continue\"; " +
-                                                "$DebugPreference = \"Continue\"; " +
-                                                "Write-Verbose \"Hello, Verbose!\"; " +
-                                                "Write-Warning \"Hello, Warning!\"; " +
-                                                "Write-Debug \"Hello, Debug!\";");
-        Controller c = task.launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("$VerbosePreference = \"Continue\"; " +
+                                                  "$WarningPreference = \"Continue\"; " +
+                                                  "$DebugPreference = \"Continue\"; " +
+                                                  "Write-Verbose \"Hello, Verbose!\"; " +
+                                                  "Write-Warning \"Hello, Warning!\"; " +
+                                                  "Write-Debug \"Hello, Debug!\";");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -269,14 +292,18 @@ public class PowershellScriptTest {
 
     @Test public void spacesInWorkspace() throws Exception {
         final FilePath newWs = new FilePath(ws, "subdirectory with spaces");
-        Controller c = new PowershellScript("Write-Host 'Running in a workspace with spaces in the path'").launch(new EnvVars(), newWs, launcher, listener);
+        PowershellScript s = new PowershellScript("Write-Host 'Running in a workspace with spaces in the path'");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         assertEquals(0, c.exitStatus(newWs, launcher, TaskListener.NULL).intValue());
         c.cleanup(ws);
     }
 
     @Test public void echoEnvVar() throws Exception {
-        Controller c = new PowershellScript("echo envvar=$env:MYVAR").launch(new EnvVars("MYVAR", "power$hell"), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("echo envvar=$env:MYVAR");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars("MYVAR", "power$hell"), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
@@ -286,7 +313,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void unicodeChars() throws Exception {
-        Controller c = new PowershellScript("Write-Output \"Helló, Wõrld ®\";").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("Write-Output \"Helló, Wõrld ®\";");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
@@ -297,7 +326,9 @@ public class PowershellScriptTest {
     }
 
     @Test public void correctExitCode() throws Exception {
-        Controller c = new PowershellScript("exit 5;").launch(new EnvVars(), ws, launcher, listener);
+        PowershellScript s = new PowershellScript("exit 5;");
+        s.setPowershellBinary("pwsh");
+        Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         assertEquals(Integer.valueOf(5), c.exitStatus(ws, launcher, TaskListener.NULL));
         c.cleanup(ws);
@@ -305,7 +336,7 @@ public class PowershellScriptTest {
 
     @Test public void checkProfile() throws Exception {
         PowershellScript s = new PowershellScript("if ((Get-CimInstance Win32_Process -Filter \"ProcessId = $PID\").CommandLine.split(\" \").Contains(\"-NoProfile\")) { exit 0; } else { exit 1; } ");
-
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
