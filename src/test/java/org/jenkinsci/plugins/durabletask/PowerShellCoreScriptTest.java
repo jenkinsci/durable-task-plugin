@@ -79,6 +79,7 @@ public class PowerShellCoreScriptTest {
 
     @Before
     public void setUp() throws Exception {
+        PowershellScript.FORCE_BINARY_WRAPPER = true;
         listener = StreamTaskListener.fromStdout();
         if (pwshExists) {
             s = j.createOnlineSlave();
