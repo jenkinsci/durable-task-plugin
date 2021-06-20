@@ -273,7 +273,6 @@ public final class PowershellScript extends FileMonitoringTask {
      * Same motivation as {@link PowershellScript#generateScriptWrapper(String, List, FilePath)}, only for the binary-based launcher
      */
     private static String generateCommandWrapper(String scriptPath, boolean capturingOutput, String outputPath, boolean usesBom, String tempPath) {
-        String encoding = usesBom ? "UTF8" : "utf8NoBOM";
         String wrapper;
         if (capturingOutput) {
             String output = usesBom ? tempPath : outputPath;
@@ -286,16 +285,16 @@ public final class PowershellScript extends FileMonitoringTask {
             // This is because Powershell automatically redirects the non-error streams to the success stream when running -File or -Command.
             // Caution: Do NOT put a space after any commas or else the binary will parse it as a separate argument
             wrapper = String.format(
-                    "[Console]::OutputEncoding = [Text.Encoding]::%s; [Console]::InputEncoding = [System.Text.Encoding]::%s; " +
+                    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; " +
                     "& {try {& \\\"%s\\\" | Out-File -FilePath \\\"%s\\\"} catch {throw}%s" +
                     "exit $LASTEXITCODE}",
-                    encoding, encoding, scriptPath, output, finallyString);
+                    scriptPath, output, finallyString);
         } else {
             wrapper = String.format(
-                    "[Console]::OutputEncoding = [Text.Encoding]::%s; [Console]::InputEncoding = [System.Text.Encoding]::%s; " +
+                    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; " +
                     "& {try {& \\\"%s\\\"} catch {throw}; " +
                     "exit $LASTEXITCODE}",
-                    encoding, encoding, scriptPath);
+                    scriptPath);
 
         }
         return wrapper;
