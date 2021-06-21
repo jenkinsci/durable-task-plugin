@@ -129,8 +129,17 @@ public final class PowershellScript extends FileMonitoringTask {
             usesBom = false;
         }
 
-            List<String> launcherCmd = null;
+        List<String> launcherCmd = null;
+        boolean useBinaryWrapper = false;
         if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
+            // Binary does not support pwsh on linux
+            if ((agentInfo.getOs() == AgentInfo.OsType.LINUX) && powershellBinary.equals("pwsh")) {
+                useBinaryWrapper = false;
+            } else {
+                useBinaryWrapper = true;
+            }
+        }
+        if (useBinaryWrapper) {
             FilePath controlDir = c.controlDir(ws);
             FilePath binary;
             if (agentInfo.isCachingAvailable()) {
