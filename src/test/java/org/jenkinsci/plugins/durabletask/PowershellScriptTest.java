@@ -327,7 +327,7 @@ public class PowershellScriptTest {
 
     @Test public void correctExitCode() throws Exception {
         PowershellScript s = new PowershellScript("exit 5;");
-        s.setPowershellBinary("pwsh");
+        if (enablePwsh) {s.setPowershellBinary("pwsh");}
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         assertEquals(Integer.valueOf(5), c.exitStatus(ws, launcher, TaskListener.NULL));
