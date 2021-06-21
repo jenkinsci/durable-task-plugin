@@ -49,7 +49,7 @@
         <dependency>
             <groupId>io.jenkins.plugins</groupId>
             <artifactId>lib-durable-task</artifactId>
-            <version>48.v01def8e85d7e</version> <!-- TODO: Use released version when https://github.com/jenkinsci/lib-durable-task/pull/7 is merged -->
+            <version>49.v6c3068797bbe</version> <!-- TODO: Use released version when https://github.com/jenkinsci/lib-durable-task/pull/7 is merged -->
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.test</groupId>
