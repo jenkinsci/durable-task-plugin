@@ -133,7 +133,7 @@ public final class PowershellScript extends FileMonitoringTask {
         boolean useBinaryWrapper = false;
         if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
             // Binary does not support pwsh on linux
-            if ((agentInfo.getOs() == AgentInfo.OsType.LINUX) && powershellBinary.equals("pwsh")) {
+            if ((agentInfo.getOs() == AgentInfo.OsType.LINUX) && "pwsh".equals(powershellBinary)) {
                 useBinaryWrapper = false;
             } else {
                 useBinaryWrapper = true;
