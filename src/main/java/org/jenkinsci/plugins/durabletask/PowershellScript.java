@@ -275,7 +275,7 @@ public final class PowershellScript extends FileMonitoringTask {
                 "param()\r\n" +
                 "& %s %s -Command '& {try {& ''%s''} catch {throw}; exit $LASTEXITCODE}'\r\n" +
                 "exit $LASTEXITCODE",
-                powershellBinary, powershellArgs, quote(quote(powerShellScriptFile)));
+                powershellBinary, String.join(" ", powershellArgs), quote(quote(powerShellScriptFile)));
     }
 
     /**
