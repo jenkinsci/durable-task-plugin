@@ -34,7 +34,6 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.DumbSlave;
-import hudson.slaves.OfflineCause;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -80,6 +79,7 @@ public class EncodingTest {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
     }
     @Before public void setUp() throws Exception {
+        BourneShellScript.FORCE_BINARY_WRAPPER = true;
         s = null;
         BourneShellScriptTest.unix();
         BourneShellScriptTest.assumeDocker();
@@ -103,10 +103,9 @@ public class EncodingTest {
         }
     }
 
-    @AfterClass public static
-     void tearDown() throws Exception {
+    @After public void tearDown() throws Exception {
         if (s != null) {
-            s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+            r.jenkins.removeNode(s);
         }
     }
 
