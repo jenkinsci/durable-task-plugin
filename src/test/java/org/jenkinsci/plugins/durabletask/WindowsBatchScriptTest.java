@@ -30,7 +30,6 @@ import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.containsString;
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -174,6 +173,17 @@ public class WindowsBatchScriptTest {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        c.cleanup(ws);
+    }
+
+    @Test public void unicodeChars() throws Exception {
+        Controller c = new WindowsBatchScript("echo Helló, Wõrld ®").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        String log = baos.toString("UTF-8");
+        assertTrue(log, log.contains("Helló, Wõrld ®"));
         c.cleanup(ws);
     }
 
