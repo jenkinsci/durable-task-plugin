@@ -192,9 +192,7 @@ public final class PowershellScript extends FileMonitoringTask {
 
         }
 
-//        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
-        // TODO: REMOVE
-        LOGGER.log(Level.INFO, "launching {0}", launcherCmd);
+        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
         Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
         ps.readStdout().readStderr();  // TODO see BourneShellScript
         Proc p = ps.start();

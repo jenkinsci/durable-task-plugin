@@ -43,13 +43,22 @@ import static org.junit.Assert.*;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 import org.jvnet.hudson.test.JenkinsRule;
 import java.util.Properties;
 import java.util.*;
 import org.apache.commons.io.IOUtils;
 import org.junit.AssumptionViolatedException;
 
+@RunWith(Parameterized.class)
 public class PowershellScriptTest {
+    @Parameters(name = "{index}: USE_BINARY={0}")
+    public static Object[] parameters() {
+        return new Object[] {true, false};
+    }
+
     @Rule public JenkinsRule j = new JenkinsRule();
 
     private StreamTaskListener listener;
@@ -57,9 +66,14 @@ public class PowershellScriptTest {
     private Launcher launcher;
     private int psVersion;
     private boolean enablePwsh = false;
+    private boolean enableBinary;
+
+    public PowershellScriptTest(boolean enableBinary) {
+        this.enableBinary = enableBinary;
+    }
 
     @Before public void vars() throws IOException, InterruptedException {
-        PowershellScript.FORCE_BINARY_WRAPPER = true;
+        PowershellScript.FORCE_BINARY_WRAPPER = enableBinary;
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
