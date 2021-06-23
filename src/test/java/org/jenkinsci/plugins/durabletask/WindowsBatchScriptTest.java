@@ -38,13 +38,20 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 
 import java.io.IOException;
 import java.util.Arrays;
 
+@RunWith(Parameterized.class)
 public class WindowsBatchScriptTest {
+    @Parameterized.Parameters(name = "{index}: USE_BINARY={0}")
+    public static Object[] parameters() {
+        return new Object[] {true, false};
+    }
 
     @Rule public JenkinsRule j = new JenkinsRule();
 
@@ -55,9 +62,14 @@ public class WindowsBatchScriptTest {
     private StreamTaskListener listener;
     private FilePath ws;
     private Launcher launcher;
+    private boolean enableBinary;
+
+    public WindowsBatchScriptTest(boolean enableBinary) {
+        this.enableBinary = enableBinary;
+    }
 
     @Before public void vars() {
-        WindowsBatchScript.FORCE_BINARY_WRAPPER = true;
+        WindowsBatchScript.FORCE_BINARY_WRAPPER = enableBinary;
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
