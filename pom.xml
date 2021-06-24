@@ -3,7 +3,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>3.54</version>
+        <version>4.19</version>
         <relativePath />
     </parent>
     <artifactId>durable-task</artifactId>
@@ -22,8 +22,9 @@
     <properties>
         <revision>1.38</revision>
         <changelist>-SNAPSHOT</changelist>
-        <jenkins.version>2.150.1</jenkins.version>
+        <jenkins.version>2.249.3</jenkins.version>
         <java.level>8</java.level>
+        <!--        <slf4j.version>1.7.26</slf4j.version>-->
     </properties>
 
     <repositories>
@@ -54,22 +55,27 @@
         <dependency>
             <groupId>org.jenkins-ci.test</groupId>
             <artifactId>docker-fixtures</artifactId>
-            <version>1.8</version>
+            <version>1.11</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-slaves</artifactId>
-            <version>1.30.0</version>
+            <version>1.31.5</version> <!-- TODO: Remove version when core is 2.277 or greater (included in BOM) -->
             <scope>test</scope>
         </dependency>
     </dependencies>
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>io.jenkins.tools.bom</groupId>
+                <artifactId>bom-2.249.x</artifactId>
+                <version>876.vc43b4c6423b6</version>
+            </dependency>
+            <dependency>
                 <groupId>org.jenkins-ci</groupId>
                 <artifactId>symbol-annotation</artifactId>
-                <version>1.17</version>
+                <version>1.20</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
