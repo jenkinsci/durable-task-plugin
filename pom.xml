@@ -22,9 +22,8 @@
     <properties>
         <revision>1.38</revision>
         <changelist>-SNAPSHOT</changelist>
-        <jenkins.version>2.249.3</jenkins.version>
+        <jenkins.version>2.277.1</jenkins.version>
         <java.level>8</java.level>
-        <!--        <slf4j.version>1.7.26</slf4j.version>-->
     </properties>
 
     <repositories>
@@ -61,7 +60,6 @@
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-slaves</artifactId>
-            <version>1.31.5</version> <!-- TODO: Remove version when core is 2.277 or greater (included in BOM) -->
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -70,12 +68,9 @@
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
                 <artifactId>bom-2.249.x</artifactId>
-                <version>876.vc43b4c6423b6</version>
-            </dependency>
-            <dependency>
-                <groupId>org.jenkins-ci</groupId>
-                <artifactId>symbol-annotation</artifactId>
-                <version>1.20</version>
+                <version>887.vae9c8ac09ff7</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
