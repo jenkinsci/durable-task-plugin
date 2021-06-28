@@ -188,7 +188,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         String outputFile = c.getOutputFile(ws).getRemote();
         String controlDirPath = c.controlDir(ws).getRemote();
 
-                List<String> cmd = new ArrayList<>();
+        List<String> cmd = new ArrayList<>();
         cmd.add(binaryPath);
         cmd.add("-controldir=" + controlDirPath);
         cmd.add("-result=" + resultFile);
