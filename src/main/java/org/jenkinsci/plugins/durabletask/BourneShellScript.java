@@ -122,14 +122,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
 
         FilePath nodeRoot = getNodeRoot(ws);
-        final Jenkins jenkins = Jenkins.get();
-
-        PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
-        if (durablePlugin == null) {
-            throw new IOException("Unable to find durable task plugin");
-        }
-        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
-        AgentInfo agentInfo = nodeRoot.act(new AgentInfo.GetAgentInfo(pluginVersion));
+        AgentInfo agentInfo = getAgentInfo(nodeRoot);
 
         OsType os = agentInfo.getOs();
         String scriptEncodingCharset = "UTF-8";
@@ -149,7 +142,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         String shell = null;
         if (!script.startsWith("#!")) {
-            shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
+            shell = Jenkins.get().getDescriptorByType(Shell.DescriptorImpl.class).getShell();
             if (shell == null) {
                 // Do not use getShellOrDefault, as that assumes that the filesystem layout of the agent matches that seen from a possibly decorated launcher.
                 shell = "sh";
@@ -164,29 +157,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
         List<String> launcherCmd = null;
-        if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
-            FilePath controlDir = c.controlDir(ws);
-            FilePath binary;
-            if (agentInfo.isCachingAvailable()) {
-                binary = nodeRoot.child(agentInfo.getBinaryPath());
-            } else {
-                binary = controlDir.child(agentInfo.getBinaryPath());
-            }
-            String resourcePath = BINARY_RESOURCE_PREFIX + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture();
-            try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
-                if (binaryStream != null) {
-                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
-                        binary.copyFrom(binaryStream);
-                        binary.chmod(0755);
-                    }
-                    launcherCmd = binaryLauncherCmd(c, ws, shell,
-                            controlDir.getRemote(),
-                            binary.getRemote(),
-                            scriptPath,
-                            cookieValue,
-                            cookieVariable);
-                }
-            }
+        FilePath binary;
+        if (FORCE_BINARY_WRAPPER && (binary = requestBinary(nodeRoot, agentInfo, ws, c)) != null) {
+            launcherCmd = binaryLauncherCmd(c, ws, shell, binary.getRemote(), scriptPath, cookieValue, cookieVariable);
         }
         if (launcherCmd == null) {
             launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
@@ -208,14 +181,14 @@ public final class BourneShellScript extends FileMonitoringTask {
     }
 
     @Nonnull
-    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, @Nullable String shell,
-                                           String controlDirPath, String binaryPath, String scriptPath,
-                                           String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, @Nullable String shell, String binaryPath,
+                                           String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
         String outputFile = c.getOutputFile(ws).getRemote();
+        String controlDirPath = c.controlDir(ws).getRemote();
 
-        List<String> cmd = new ArrayList<>();
+                List<String> cmd = new ArrayList<>();
         cmd.add(binaryPath);
         cmd.add("-controldir=" + controlDirPath);
         cmd.add("-result=" + resultFile);

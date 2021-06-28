@@ -105,15 +105,9 @@ public final class PowershellScript extends FileMonitoringTask {
 
     @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
-        FilePath nodeRoot = getNodeRoot(ws);
-        final Jenkins jenkins = Jenkins.get();
-        PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
-        if (durablePlugin == null) {
-            throw new IOException("Unable to find durable task plugin");
-        }
-        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
-        AgentInfo agentInfo = nodeRoot.act(new AgentInfo.GetAgentInfo(pluginVersion));
 
+        FilePath nodeRoot = getNodeRoot(ws);
+        AgentInfo agentInfo = getAgentInfo(nodeRoot);
         PowershellController c = new PowershellController(ws);
 
         List<String> powershellArgs = new ArrayList<>();
@@ -130,41 +124,25 @@ public final class PowershellScript extends FileMonitoringTask {
         }
 
         List<String> launcherCmd = null;
-        boolean useBinaryWrapper = false;
-        if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
-            // Binary does not support pwsh on linux
-            if ((agentInfo.getOs() == AgentInfo.OsType.LINUX) && "pwsh".equals(powershellBinary)) {
-                useBinaryWrapper = false;
+        FilePath binary;
+        // Binary does not support pwsh on linux
+        boolean pwshLinux;
+        if ((agentInfo.getOs() == AgentInfo.OsType.LINUX) && "pwsh".equals(powershellBinary)) {
+            pwshLinux = true;
+        } else {
+            pwshLinux = false;
+        }
+        if (FORCE_BINARY_WRAPPER && !pwshLinux && (binary = requestBinary(nodeRoot, agentInfo, ws, c)) != null) {
+            launcherCmd = binaryLauncherCmd(c, ws, binary.getRemote(), c.getPowerShellScriptFile(ws).getRemote(), powershellArgs);
+            if (!usesBom) {
+                // There is no need to add a BOM with Open PowerShell / PowerShell Core
+                c.getPowerShellScriptFile(ws).write(script, "UTF-8");
             } else {
-                useBinaryWrapper = true;
+                // Write the Windows PowerShell scripts out with a UTF8 BOM
+                writeWithBom(c.getPowerShellScriptFile(ws), script);
             }
         }
-        if (useBinaryWrapper) {
-            FilePath controlDir = c.controlDir(ws);
-            FilePath binary;
-            if (agentInfo.isCachingAvailable()) {
-                binary = nodeRoot.child(agentInfo.getBinaryPath());
-            } else {
-                binary = controlDir.child(agentInfo.getBinaryPath());
-            }
-            String resourcePath = BINARY_RESOURCE_PREFIX + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture() + ".exe";
-            try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
-                if (binaryStream != null) {
-                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
-                        binary.copyFrom(binaryStream);
-                    }
 
-                    launcherCmd = binaryLauncherCmd(c, ws, controlDir.getRemote(), binary.getRemote(), c.getPowerShellScriptFile(ws).getRemote(), powershellArgs);
-                    if (!usesBom) {
-                        // There is no need to add a BOM with Open PowerShell / PowerShell Core
-                        c.getPowerShellScriptFile(ws).write(script, "UTF-8");
-                    } else {
-                        // Write the Windows PowerShell scripts out with a UTF8 BOM
-                        writeWithBom(c.getPowerShellScriptFile(ws), script);
-                    }
-                }
-            }
-        }
         if (launcherCmd == null) {
             launcherCmd = scriptLauncherCmd(c, ws, powershellArgs);
 
@@ -203,10 +181,11 @@ public final class PowershellScript extends FileMonitoringTask {
     }
 
     @Nonnull
-    private List<String> binaryLauncherCmd(PowershellController c, FilePath ws, String controlDirPath, String binaryPath, String scriptPath, List<String> powershellArgs) throws IOException, InterruptedException {
+    private List<String> binaryLauncherCmd(PowershellController c, FilePath ws, String binaryPath, String scriptPath, List<String> powershellArgs) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
         String outputFile = c.getOutputFile(ws).getRemote();
+        String controlDirPath = c.controlDir(ws).getRemote();
 
         List<String> cmd = new ArrayList<>();
         cmd.add(binaryPath);
