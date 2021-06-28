@@ -87,35 +87,13 @@ public final class WindowsBatchScript extends FileMonitoringTask {
             throw new IOException("Batch scripts can only be run on Windows nodes");
         }
 
-        FilePath nodeRoot = getNodeRoot(ws);
-        final Jenkins jenkins = Jenkins.get();
-        PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
-        if (durablePlugin == null) {
-            throw new IOException("Unable to find durable task plugin");
-        }
-        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
-        AgentInfo agentInfo = nodeRoot.act(new AgentInfo.GetAgentInfo(pluginVersion));
         BatchController c = new BatchController(ws);
 
         List<String> launcherCmd = null;
-        if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
-            FilePath controlDir = c.controlDir(ws);
-            FilePath binary;
-            if (agentInfo.isCachingAvailable()) {
-                binary = nodeRoot.child(agentInfo.getBinaryPath());
-            } else {
-                binary = controlDir.child(agentInfo.getBinaryPath());
-            }
-            String resourcePath = BINARY_RESOURCE_PREFIX + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture() + ".exe";
-            try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
-                if (binaryStream != null) {
-                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
-                        binary.copyFrom(binaryStream);
-                    }
-                    launcherCmd = binaryLauncherCmd(c, ws, controlDir.getRemote(), binary.getRemote(), c.getBatchFile2(ws).getRemote());
-                    c.getBatchFile2(ws).write(script, "UTF-8");
-                }
-            }
+        FilePath binary;
+        if (FORCE_BINARY_WRAPPER && (binary = requestBinary(ws, c)) != null) {
+            launcherCmd = binaryLauncherCmd(c, ws, binary.getRemote(), c.getBatchFile2(ws).getRemote());
+            c.getBatchFile2(ws).write(script, "UTF-8");
         }
         if (launcherCmd == null) {
             launcherCmd = scriptLauncherCmd(c, ws);
@@ -136,10 +114,11 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     }
 
     @Nonnull
-    private List<String> binaryLauncherCmd(BatchController c, FilePath ws, String controlDirPath, String binaryPath, String scriptPath) throws IOException, InterruptedException {
+    private List<String> binaryLauncherCmd(BatchController c, FilePath ws, String binaryPath, String scriptPath) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
         String outputFile = c.getOutputFile(ws).getRemote();
+        String controlDirPath = c.controlDir(ws).getRemote();
 
         List<String> cmd = new ArrayList<>();
         cmd.add(binaryPath);
