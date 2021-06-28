@@ -191,7 +191,7 @@ public class WindowsBatchScriptTest {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        Thread.sleep(500); // Pause allows slower systems to exit binary before cleanup is attempted
+        Thread.sleep(1000); // Pause allows slower systems to exit binary before cleanup is attempted
     }
 
 }
