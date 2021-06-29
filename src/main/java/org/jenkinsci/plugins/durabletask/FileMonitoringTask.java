@@ -29,11 +29,8 @@ import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Util;
-import hudson.init.Terminator;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
-import hudson.remoting.DaemonThreadFactory;
-import hudson.remoting.NamingThreadFactory;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
@@ -63,8 +60,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -72,6 +67,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.security.MasterToSlaveCallable;
+import jenkins.util.Timer;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.io.output.CountingOutputStream;
@@ -446,21 +442,6 @@ public abstract class FileMonitoringTask extends DurableTask {
         private static final long serialVersionUID = 1L;
     }
 
-    private static ScheduledExecutorService watchService;
-    private synchronized static ScheduledExecutorService watchService() {
-        if (watchService == null) {
-            // TODO 2.105+ use ClassLoaderSanityThreadFactory
-            watchService = new /*ErrorLogging*/ScheduledThreadPoolExecutor(5, new NamingThreadFactory(new DaemonThreadFactory(), "FileMonitoringTask watcher"));
-        }
-        return watchService;
-    }
-    @Terminator public static synchronized void shutDownWatchService() {
-        if (watchService != null) {
-            watchService.shutdownNow();
-            watchService = null;
-        }
-    }
-
     private static class StartWatching extends MasterToSlaveFileCallable<Void> {
 
         private static final long serialVersionUID = 1L;
@@ -476,7 +457,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public Void invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
-            watchService().submit(new Watcher(controller, new FilePath(workspace), handler, listener));
+            Timer.get().submit(new Watcher(controller, new FilePath(workspace), handler, listener));
             return null;
         }
 
@@ -538,7 +519,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     }
                     // Could use an adaptive timeout as in DurableTaskStep.Execution in polling mode,
                     // though less relevant here since there is no network overhead to the check.
-                    watchService().schedule(this, 100, TimeUnit.MILLISECONDS);
+                    Timer.get().schedule(this, 100, TimeUnit.MILLISECONDS);
                 }
             } catch (Exception x) {
                 // note that LOGGER here is going to the agent log, not master log
