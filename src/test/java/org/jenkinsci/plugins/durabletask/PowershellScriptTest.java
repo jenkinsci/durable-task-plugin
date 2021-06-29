@@ -367,6 +367,5 @@ public class PowershellScriptTest {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
-        Thread.sleep(3000); // Pause allows slower systems to exit binary before cleanup is attempted
     }
 }
