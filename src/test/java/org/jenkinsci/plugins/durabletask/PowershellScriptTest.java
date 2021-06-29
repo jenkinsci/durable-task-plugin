@@ -273,7 +273,8 @@ public class PowershellScriptTest {
     }
 
     @Test public void specialStreams() throws Exception {
-        DurableTask task = new PowershellScript("$VerbosePreference = \"Continue\"; " +
+        DurableTask task = new PowershellScript("[Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US'; " +
+                                                "$VerbosePreference = \"Continue\"; " +
                                                 "$WarningPreference = \"Continue\"; " +
                                                 "$DebugPreference = \"Continue\"; " +
                                                 "Write-Verbose \"Hello, Verbose!\"; " +
