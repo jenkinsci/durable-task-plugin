@@ -55,7 +55,7 @@ import jenkins.model.Jenkins;
 public final class WindowsBatchScript extends FileMonitoringTask {
     @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
     @Restricted(NoExternalUse.class)
-    public static boolean USE_SCRIPT_WRAPPER = Boolean.getBoolean(WindowsBatchScript.class.getName() + ".USE_SCRIPT_WRAPPER");
+    public static boolean FORCE_BINARY_WRAPPER = Boolean.getBoolean(WindowsBatchScript.class.getName() + ".FORCE_BINARY_WRAPPER");
 
     private final String script;
     private boolean capturingOutput;
@@ -91,7 +91,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
 
         List<String> launcherCmd = null;
         FilePath binary;
-        if (!USE_SCRIPT_WRAPPER && (binary = requestBinary(ws, c)) != null) {
+        if (FORCE_BINARY_WRAPPER && (binary = requestBinary(ws, c)) != null) {
             launcherCmd = binaryLauncherCmd(c, ws, binary.getRemote(), c.getBatchFile2(ws).getRemote());
             c.getBatchFile2(ws).write(script, "UTF-8");
         }

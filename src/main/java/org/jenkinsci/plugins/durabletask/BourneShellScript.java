@@ -65,7 +65,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
     @Restricted(NoExternalUse.class)
-    public static boolean USE_SCRIPT_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".USE_SCRIPT_WRAPPER");
+    public static boolean FORCE_BINARY_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".FORCE_BINARY_WRAPPER");
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
@@ -158,7 +158,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         List<String> launcherCmd = null;
         FilePath binary;
-        if (!USE_SCRIPT_WRAPPER && (binary = requestBinary(nodeRoot, agentInfo, ws, c)) != null) {
+        if (FORCE_BINARY_WRAPPER && (binary = requestBinary(nodeRoot, agentInfo, ws, c)) != null) {
             launcherCmd = binaryLauncherCmd(c, ws, shell, binary.getRemote(), scriptPath, cookieValue, cookieVariable);
         }
         if (launcherCmd == null) {

@@ -129,15 +129,16 @@ public class BourneShellScriptTest {
     @Before public void prepareAgentForPlatform() throws Exception {
         switch (platform) {
             case NATIVE:
+                BourneShellScript.FORCE_BINARY_WRAPPER = true;
                 s = j.createOnlineSlave();
                 break;
-            case UBUNTU_NO_BINARY:
-                BourneShellScript.USE_SCRIPT_WRAPPER = true;
             case SLIM:
             case ALPINE:
             case CENTOS:
             case UBUNTU:
             case NO_INIT:
+                BourneShellScript.FORCE_BINARY_WRAPPER = true;
+            case UBUNTU_NO_BINARY:
                 assumeDocker();
                 s = prepareAgentDocker();
                 j.jenkins.addNode(s);
@@ -198,7 +199,7 @@ public class BourneShellScriptTest {
         if (s != null) {
             j.jenkins.removeNode(s);
         }
-        BourneShellScript.USE_SCRIPT_WRAPPER = false;
+        BourneShellScript.FORCE_BINARY_WRAPPER = false;
     }
 
     @Test public void smokeTest() throws Exception {

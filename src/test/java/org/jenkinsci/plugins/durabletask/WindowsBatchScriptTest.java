@@ -61,14 +61,14 @@ public class WindowsBatchScriptTest {
     private StreamTaskListener listener;
     private FilePath ws;
     private Launcher launcher;
-    private boolean useBinary;
+    private boolean enableBinary;
 
-    public WindowsBatchScriptTest(boolean useBinary) {
-        this.useBinary = useBinary;
+    public WindowsBatchScriptTest(boolean enableBinary) {
+        this.enableBinary = enableBinary;
     }
 
     @Before public void vars() {
-        WindowsBatchScript.USE_SCRIPT_WRAPPER = !useBinary;
+        WindowsBatchScript.FORCE_BINARY_WRAPPER = enableBinary;
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
