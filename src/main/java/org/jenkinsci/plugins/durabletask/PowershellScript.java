@@ -248,9 +248,9 @@ public final class PowershellScript extends FileMonitoringTask {
      */
     private static String generateScriptWrapper(String powershellBinary, List<String> powershellArgs, FilePath powerShellScriptFile) {
         return String.format(
-                "[CmdletBinding()]\r%n" +
-                "param()\r%n" +
-                "& %s %s -Command '& {try {& ''%s''} catch {throw}; exit $LASTEXITCODE}'\r%n" +
+                "[CmdletBinding()]\r\n" +
+                "param()\r\n" +
+                "& %s %s -Command '& {try {& ''%s''} catch {throw}; exit $LASTEXITCODE}'\r\n" +
                 "exit $LASTEXITCODE",
                 powershellBinary, String.join(" ", powershellArgs), quote(quote(powerShellScriptFile)));
     }
