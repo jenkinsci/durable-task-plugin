@@ -51,7 +51,7 @@ import hudson.util.LineEndingConversion;
 public final class WindowsBatchScript extends FileMonitoringTask {
     @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
     @Restricted(NoExternalUse.class)
-    public static boolean USE_BINARY_WRAPPER = Boolean.getBoolean(WindowsBatchScript.class.getName() + ".FORCE_BINARY_WRAPPER");
+    public static boolean USE_BINARY_WRAPPER = Boolean.getBoolean(WindowsBatchScript.class.getName() + ".USE_BINARY_WRAPPER");
 
     private final String script;
     private boolean capturingOutput;
