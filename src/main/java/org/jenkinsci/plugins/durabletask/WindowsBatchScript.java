@@ -77,7 +77,6 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         capturingOutput = true;
     }
 
-    @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         if (launcher.isUnix()) {
             throw new IOException("Batch scripts can only be run on Windows nodes");
@@ -134,6 +133,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     }
 
     @Nonnull
+    @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     private List<String> scriptLauncherCmd(BatchController c, FilePath ws) throws IOException, InterruptedException {
 
         String cmdString;

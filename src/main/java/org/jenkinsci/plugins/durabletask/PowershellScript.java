@@ -103,7 +103,6 @@ public final class PowershellScript extends FileMonitoringTask {
         capturingOutput = true;
     }
 
-    @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
 
         FilePath nodeRoot = getNodeRoot(ws);
@@ -246,6 +245,7 @@ public final class PowershellScript extends FileMonitoringTask {
      * whoami -f || $($global:LASTEXITCODE = 0)
      *
      */
+    @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification=" from master might be \\n")
     private static String generateScriptWrapper(String powershellBinary, List<String> powershellArgs, FilePath powerShellScriptFile) {
         return String.format(
                 "[CmdletBinding()]\r\n" +
