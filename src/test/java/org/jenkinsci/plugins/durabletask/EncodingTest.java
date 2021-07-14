@@ -79,7 +79,7 @@ public class EncodingTest {
         assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
     }
     @Before public void setUp() throws Exception {
-        BourneShellScript.FORCE_BINARY_WRAPPER = true;
+        BourneShellScript.USE_BINARY_WRAPPER = true;
         s = null;
         BourneShellScriptTest.unix();
         BourneShellScriptTest.assumeDocker();

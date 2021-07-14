@@ -56,7 +56,7 @@ import javax.annotation.Nonnull;
 public final class PowershellScript extends FileMonitoringTask {
     @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
     @Restricted(NoExternalUse.class)
-    public static boolean FORCE_BINARY_WRAPPER = Boolean.getBoolean(PowershellScript.class.getName() + ".FORCE_BINARY_WRAPPER");
+    public static boolean USE_BINARY_WRAPPER = Boolean.getBoolean(PowershellScript.class.getName() + ".USE_BINARY_WRAPPER");
 
     private final String script;
     private String powershellBinary = "powershell";
@@ -132,7 +132,7 @@ public final class PowershellScript extends FileMonitoringTask {
         } else {
             pwshLinux = false;
         }
-        if (FORCE_BINARY_WRAPPER && !pwshLinux && (binary = requestBinary(nodeRoot, agentInfo, ws, c)) != null) {
+        if (USE_BINARY_WRAPPER && !pwshLinux && (binary = requestBinary(nodeRoot, agentInfo, ws, c)) != null) {
             launcherCmd = binaryLauncherCmd(c, ws, binary.getRemote(), c.getPowerShellScriptFile(ws).getRemote(), powershellArgs);
             if (!usesBom) {
                 // There is no need to add a BOM with Open PowerShell / PowerShell Core

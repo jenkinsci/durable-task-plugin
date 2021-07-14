@@ -29,11 +29,9 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.PluginWrapper;
 import hudson.Proc;
 import hudson.model.TaskListener;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -42,12 +40,10 @@ import java.util.logging.Logger;
 
 import javax.annotation.Nonnull;
 
-import org.apache.commons.lang.StringUtils;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import hudson.util.LineEndingConversion;
-import jenkins.model.Jenkins;
 
 /**
  * Runs a Windows batch script.
@@ -55,7 +51,7 @@ import jenkins.model.Jenkins;
 public final class WindowsBatchScript extends FileMonitoringTask {
     @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
     @Restricted(NoExternalUse.class)
-    public static boolean FORCE_BINARY_WRAPPER = Boolean.getBoolean(WindowsBatchScript.class.getName() + ".FORCE_BINARY_WRAPPER");
+    public static boolean USE_BINARY_WRAPPER = Boolean.getBoolean(WindowsBatchScript.class.getName() + ".FORCE_BINARY_WRAPPER");
 
     private final String script;
     private boolean capturingOutput;
@@ -91,7 +87,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
 
         List<String> launcherCmd = null;
         FilePath binary;
-        if (FORCE_BINARY_WRAPPER && (binary = requestBinary(ws, c)) != null) {
+        if (USE_BINARY_WRAPPER && (binary = requestBinary(ws, c)) != null) {
             launcherCmd = binaryLauncherCmd(c, ws, binary.getRemote(), c.getBatchFile2(ws).getRemote());
             c.getBatchFile2(ws).write(script, "UTF-8");
         }

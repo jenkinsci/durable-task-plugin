@@ -73,7 +73,7 @@ public class PowershellScriptTest {
     }
 
     @Before public void vars() throws IOException, InterruptedException {
-        PowershellScript.FORCE_BINARY_WRAPPER = enableBinary;
+        PowershellScript.USE_BINARY_WRAPPER = enableBinary;
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
