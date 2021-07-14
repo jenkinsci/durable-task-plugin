@@ -66,14 +66,14 @@ public class PowershellScriptTest {
     private Launcher launcher;
     private int psVersion;
     private boolean enablePwsh = false;
-    private boolean enableBinary;
+    private boolean useBinary;
 
-    public PowershellScriptTest(boolean enableBinary) {
-        this.enableBinary = enableBinary;
+    public PowershellScriptTest(boolean useBinary) {
+        this.useBinary = useBinary;
     }
 
-    @Before public void vars() throws IOException, InterruptedException {
-        PowershellScript.FORCE_BINARY_WRAPPER = enableBinary;
+    @Before public void vars() throws IOException {
+        PowershellScript.USE_SCRIPT_WRAPPER = !useBinary;
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
