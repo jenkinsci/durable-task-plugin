@@ -29,7 +29,6 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Proc;
 import hudson.model.TaskListener;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -37,11 +36,11 @@ import java.io.IOException;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import static org.hamcrest.Matchers.containsString;
 import org.junit.Test;
-import static org.junit.Assert.*;
 import org.junit.Assume;
+import org.junit.AssumptionViolatedException;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -50,7 +49,9 @@ import org.jvnet.hudson.test.JenkinsRule;
 import java.util.Properties;
 import java.util.*;
 import org.apache.commons.io.IOUtils;
-import org.junit.AssumptionViolatedException;
+
+import static org.junit.Assert.*;
+import static org.hamcrest.Matchers.containsString;
 
 @RunWith(Parameterized.class)
 public class PowershellScriptTest {
@@ -60,6 +61,13 @@ public class PowershellScriptTest {
     }
 
     @Rule public JenkinsRule j = new JenkinsRule();
+
+    @BeforeClass
+    public static void setup() {
+        // increase delete attempts as it takes the binary a little longer to release resources
+        System.setProperty("hudson.Util.maxFileDeletionRetries", "6");
+        System.setProperty("hudson.Util.deletionRetryWait", "500");
+    }
 
     private StreamTaskListener listener;
     private FilePath ws;

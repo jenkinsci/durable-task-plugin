@@ -30,20 +30,20 @@ import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import static org.hamcrest.Matchers.containsString;
-import org.junit.Test;
-import static org.junit.Assert.*;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
-
 import java.io.IOException;
 import java.util.Arrays;
+
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.Assert.*;
 
 @RunWith(Parameterized.class)
 public class WindowsBatchScriptTest {
@@ -56,6 +56,9 @@ public class WindowsBatchScriptTest {
 
     @BeforeClass public static void windows() {
         Assume.assumeTrue("These tests are only for Windows", File.pathSeparatorChar == ';');
+        // increase delete attempts as it takes the binary a little longer to release resources
+        System.setProperty("hudson.Util.maxFileDeletionRetries", "6");
+        System.setProperty("hudson.Util.deletionRetryWait", "500");
     }
 
     private StreamTaskListener listener;

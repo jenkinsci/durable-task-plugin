@@ -95,10 +95,6 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
-    // Tuning for windows binary testing. This gives the binary a chance to release resources before cleanup happens.
-    private static final int MAX_CLEANUP_TRIES = 6;
-    private static final int MS_BETWEEN_RETRIES = 500;
-
     /** Value of {@link #charset} used to mean the node’s system default. */
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
 
@@ -450,17 +446,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
-            for (int i = 0; i < MAX_CLEANUP_TRIES; i++) {
-                try {
-                    controlDir(workspace).deleteRecursive();
-                    break;
-                } catch (IOException e) {
-                    if (e.getMessage().contains("Unable to delete")) {
-                        Thread.sleep(MS_BETWEEN_RETRIES);
-                        continue;
-                    }
-                }
-            }
+            controlDir(workspace).deleteRecursive();
             if (cleanupList != null) {
                 cleanupList.stream().forEach(IOUtils::closeQuietly);
             }
