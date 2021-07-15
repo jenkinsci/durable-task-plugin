@@ -28,25 +28,17 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
-import hudson.FilePath.FileCallable;
 import hudson.Launcher;
-import hudson.Platform;
 import hudson.PluginWrapper;
 import hudson.Proc;
 import hudson.Util;
-import hudson.model.Computer;
-import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
 import hudson.tasks.Shell;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Serializable;
 import java.io.File;
 import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -58,7 +50,7 @@ import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.lang.StringUtils;
-import org.jenkinsci.remoting.RoleChecker;
+import org.jenkinsci.plugins.durabletask.AgentInfo.OsType;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -73,7 +65,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
     @Restricted(NoExternalUse.class)
-    public static boolean FORCE_BINARY_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".FORCE_BINARY_WRAPPER");
+    public static boolean USE_BINARY_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".USE_BINARY_WRAPPER");
 
     private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
@@ -81,29 +73,14 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
 
-    private enum OsType {
-        // NOTE: changes to these binary names must be mirrored in lib-durable-task
-        DARWIN("darwin"),
-        LINUX("linux"),
-        WINDOWS("windows"),
-        FREEBSD("freebsd"),
-        ZOS("zos");
-
-        private final String binaryName;
-        OsType(final String binaryName) {
-            this.binaryName = binaryName;
-        }
-        public String getNameForBinary() {
-            return binaryName;
-        }
-    }
-
     /**
      * Whether to stream stdio from the wrapper script, which should normally not print any.
      * Copying output from the controller process consumes a Java thread, so we want to avoid it generally.
      * If requested, we can do this to assist in diagnosis.
      * (For example, if we are unable to write to a workspace due to permissions,
      * we would want to see that error message.)
+     *
+     * For the binary wrapper, this enables the debug flag.
      */
     @SuppressWarnings("FieldMayBeFinal")
     // TODO use SystemProperties if and when unrestricted
@@ -144,26 +121,8 @@ public final class BourneShellScript extends FileMonitoringTask {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
 
-        Computer wsComputer = ws.toComputer();
-        if (wsComputer == null) {
-            throw new IOException("Unable to retrieve computer for workspace");
-        }
-        Node wsNode = wsComputer.getNode();
-        if (wsNode == null) {
-            throw new IOException("Unable to retrieve node for workspace");
-        }
-        FilePath nodeRoot = wsNode.getRootPath();
-        if (nodeRoot == null) {
-            throw new IOException("Unable to retrieve root path of node");
-        }
-        final Jenkins jenkins = Jenkins.get();
-
-        PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
-        if (durablePlugin == null) {
-            throw new IOException("Unable to find durable task plugin");
-        }
-        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
-        AgentInfo agentInfo = nodeRoot.act(new GetAgentInfo(pluginVersion));
+        FilePath nodeRoot = getNodeRoot(ws);
+        AgentInfo agentInfo = getAgentInfo(nodeRoot);
 
         OsType os = agentInfo.getOs();
         String scriptEncodingCharset = "UTF-8";
@@ -183,7 +142,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         String shell = null;
         if (!script.startsWith("#!")) {
-            shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShell();
+            shell = Jenkins.get().getDescriptorByType(Shell.DescriptorImpl.class).getShell();
             if (shell == null) {
                 // Do not use getShellOrDefault, as that assumes that the filesystem layout of the agent matches that seen from a possibly decorated launcher.
                 shell = "sh";
@@ -198,29 +157,9 @@ public final class BourneShellScript extends FileMonitoringTask {
         envVars.put(cookieVariable, "please-do-not-kill-me");
 
         List<String> launcherCmd = null;
-        if (FORCE_BINARY_WRAPPER && agentInfo.isBinaryCompatible()) {
-            FilePath controlDir = c.controlDir(ws);
-            FilePath binary;
-            if (agentInfo.isCachingAvailable()) {
-                binary = nodeRoot.child(agentInfo.getBinaryPath());
-            } else {
-                binary = controlDir.child(agentInfo.getBinaryPath());
-            }
-            String resourcePath = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_" + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture();
-            try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
-                if (binaryStream != null) {
-                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
-                        binary.copyFrom(binaryStream);
-                        binary.chmod(0755);
-                    }
-                    launcherCmd = binaryLauncherCmd(c, ws, shell,
-                            controlDir.getRemote(),
-                            binary.getRemote(),
-                            scriptPath,
-                            cookieValue,
-                            cookieVariable);
-                }
-            }
+        FilePath binary;
+        if (USE_BINARY_WRAPPER && (binary = requestBinary(nodeRoot, agentInfo, ws, c)) != null) {
+            launcherCmd = binaryLauncherCmd(c, ws, shell, binary.getRemote(), scriptPath, cookieValue, cookieVariable);
         }
         if (launcherCmd == null) {
             launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
@@ -242,12 +181,12 @@ public final class BourneShellScript extends FileMonitoringTask {
     }
 
     @Nonnull
-    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, @Nullable String shell,
-                                           String controlDirPath, String binaryPath, String scriptPath,
-                                           String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, @Nullable String shell, String binaryPath,
+                                           String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
         String outputFile = c.getOutputFile(ws).getRemote();
+        String controlDirPath = c.controlDir(ws).getRemote();
 
         List<String> cmd = new ArrayList<>();
         cmd.add(binaryPath);
@@ -263,9 +202,10 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (capturingOutput) {
             cmd.add("-output=" + outputFile);
         }
-        if (!LAUNCH_DIAGNOSTICS) {
-            // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
-            cmd.add("-daemon");
+        // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
+        cmd.add("-daemon");
+        if (LAUNCH_DIAGNOSTICS) {
+            cmd.add("-debug");
         }
         return cmd;
     }
@@ -411,131 +351,6 @@ public final class BourneShellScript extends FileMonitoringTask {
             return Messages.BourneShellScript_bourne_shell();
         }
 
-    }
-
-    private static final class AgentInfo implements Serializable {
-        private static final long serialVersionUID = 7599995179651071957L;
-        private final OsType os;
-        private final String binaryPath;
-        private final String architecture;
-        private boolean binaryCompatible;
-        private boolean binaryCached;
-        private boolean cachingAvailable;
-
-        public AgentInfo(OsType os, String architecture, boolean binaryCompatible, String binaryPath, boolean cachingAvailable) {
-            this.os = os;
-            this.architecture = architecture;
-            this.binaryPath = binaryPath;
-            this.binaryCompatible = binaryCompatible;
-            this.binaryCached = false;
-            this.cachingAvailable = cachingAvailable;
-        }
-
-        public OsType getOs() {
-            return os;
-        }
-
-        public String getArchitecture() {
-            return architecture;
-        }
-
-        public String getBinaryPath() {
-            return binaryPath;
-        }
-
-        public void setBinaryAvailability(boolean isCached) {
-            binaryCached = isCached;
-        }
-
-        public boolean isBinaryCompatible() {
-            return binaryCompatible;
-        }
-
-        public boolean isBinaryCached() {
-            return binaryCached;
-        }
-
-        public boolean isCachingAvailable() {
-            return cachingAvailable;
-        }
-    }
-
-    private static final class GetAgentInfo implements FileCallable<AgentInfo> {
-        private static final long serialVersionUID = 1L;
-        private static final String BINARY_PREFIX = "durable_task_monitor_";
-        private static final String CACHE_PATH = "caches/durable-task/";
-        // Version makes sure we don't use an out-of-date cached binary
-        private String binaryVersion;
-
-        GetAgentInfo(String pluginVersion) {
-            this.binaryVersion = pluginVersion;
-        }
-
-        @Override
-        public AgentInfo invoke(File nodeRoot, VirtualChannel virtualChannel) throws IOException, InterruptedException {
-            OsType os;
-            if (Platform.isDarwin()) {
-                os = OsType.DARWIN;
-            } else if (Platform.current() == Platform.WINDOWS) {
-                os = OsType.WINDOWS;
-            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
-                os = OsType.ZOS;
-            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("FreeBSD")) {
-                os = OsType.FREEBSD;
-            } else {
-                os = OsType.LINUX; // Default Value
-            }
-
-            String arch = System.getProperty("os.arch");
-            boolean binaryCompatible;
-            if ((os != OsType.FREEBSD) && (arch.contains("86") || arch.contains("amd64"))) {
-                binaryCompatible = true;
-            } else {
-                binaryCompatible = false;
-            }
-            String archType = "";
-            if (os == OsType.DARWIN) {
-                if (arch.contains("aarch") || arch.contains("arm")) {
-                    archType = "arm";
-                } else {
-                    archType = "amd"; // Default Value
-                }
-            }
-
-            // Note: This will only determine the architecture bits of the JVM. The result will be "32" or "64".
-            String bits = System.getProperty("sun.arch.data.model");
-            if (bits.equals("64")) {
-                archType += "64";
-            } else {
-                archType += "32"; // Default Value
-            }
-
-            String binaryName = BINARY_PREFIX + binaryVersion + "_" + os.getNameForBinary() + "_" + archType;
-            String binaryPath;
-            boolean isCached;
-            boolean cachingAvailable;
-            try {
-                Path cachePath = Paths.get(nodeRoot.toPath().toString(), CACHE_PATH);
-                Files.createDirectories(cachePath);
-                File binaryFile = new File(cachePath.toFile(), binaryName);
-                binaryPath = binaryFile.toPath().toString();
-                isCached = binaryFile.exists();
-                cachingAvailable = true;
-            } catch (Exception e) {
-                // when the jenkins agent cache path is not accessible
-                binaryPath = binaryName;
-                isCached = false;
-                cachingAvailable = false;
-            }
-            AgentInfo agentInfo = new AgentInfo(os, archType, binaryCompatible, binaryPath, cachingAvailable);
-            agentInfo.setBinaryAvailability(isCached);
-            return agentInfo;
-        }
-
-        @Override
-        public void checkRoles(RoleChecker roleChecker) throws SecurityException {
-
-        }
     }
 
     private static final class getIBMzOsEncoding extends MasterToSlaveCallable<String,RuntimeException> {

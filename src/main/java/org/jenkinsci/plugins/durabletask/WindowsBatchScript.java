@@ -32,6 +32,16 @@ import hudson.Launcher;
 import hudson.Proc;
 import hudson.model.TaskListener;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.annotation.Nonnull;
+
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import hudson.util.LineEndingConversion;
 
@@ -39,8 +49,21 @@ import hudson.util.LineEndingConversion;
  * Runs a Windows batch script.
  */
 public final class WindowsBatchScript extends FileMonitoringTask {
+    @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
+    @Restricted(NoExternalUse.class)
+    public static boolean USE_BINARY_WRAPPER = Boolean.getBoolean(WindowsBatchScript.class.getName() + ".USE_BINARY_WRAPPER");
+
     private final String script;
     private boolean capturingOutput;
+    private static final Logger LOGGER = Logger.getLogger(WindowsBatchScript.class.getName());
+    private static final String LAUNCH_DIAGNOSTICS_PROP = WindowsBatchScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
+
+    /**
+     * Used by the binary wrapper, this enables the debug flag.
+     */
+    @SuppressWarnings("FieldMayBeFinal")
+    // TODO use SystemProperties if and when unrestricted
+    private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
 
     @DataBoundConstructor public WindowsBatchScript(String script) {
         this.script = LineEndingConversion.convertEOL(script, LineEndingConversion.EOLType.Windows);
@@ -54,30 +77,26 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         capturingOutput = true;
     }
 
-    @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     @Override protected FileMonitoringController doLaunch(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars) throws IOException, InterruptedException {
         if (launcher.isUnix()) {
             throw new IOException("Batch scripts can only be run on Windows nodes");
         }
+
         BatchController c = new BatchController(ws);
 
-        String cmd;
-        if (capturingOutput) {
-            cmd = String.format("@echo off \r\ncmd /c call \"%s\" > \"%s\" 2> \"%s\"\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
-                quote(c.getBatchFile2(ws)),
-                quote(c.getOutputFile(ws)),
-                quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)));
-        } else {
-            cmd = String.format("@echo off \r\ncmd /c call \"%s\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
-                quote(c.getBatchFile2(ws)),
-                quote(c.getLogFile(ws)),
-                quote(c.getResultFile(ws)));
+        List<String> launcherCmd = null;
+        FilePath binary;
+        if (USE_BINARY_WRAPPER && (binary = requestBinary(ws, c)) != null) {
+            launcherCmd = binaryLauncherCmd(c, ws, binary.getRemote(), c.getBatchFile2(ws).getRemote());
+            c.getBatchFile2(ws).write(script, "UTF-8");
         }
-        c.getBatchFile1(ws).write(cmd, "UTF-8");
-        c.getBatchFile2(ws).write(script, "UTF-8");
+        if (launcherCmd == null) {
+            launcherCmd = scriptLauncherCmd(c, ws);
+        }
 
-        Launcher.ProcStarter ps = launcher.launch().cmds("cmd", "/c", "\"\"" + c.getBatchFile1(ws) + "\"\"").envs(escape(envVars)).pwd(ws).quiet(true);
+        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
+        Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
+
         /* Too noisy, and consumes a thread:
         ps.stdout(listener);
         */
@@ -87,6 +106,55 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         c.registerForCleanup(p.getStderr());
 
         return c;
+    }
+
+    @Nonnull
+    private List<String> binaryLauncherCmd(BatchController c, FilePath ws, String binaryPath, String scriptPath) throws IOException, InterruptedException {
+        String logFile = c.getLogFile(ws).getRemote();
+        String resultFile = c.getResultFile(ws).getRemote();
+        String outputFile = c.getOutputFile(ws).getRemote();
+        String controlDirPath = c.controlDir(ws).getRemote();
+
+        List<String> cmd = new ArrayList<>();
+        cmd.add(binaryPath);
+        cmd.add("-daemon");
+        cmd.add("-executable=cmd");
+        cmd.add("-args=/C call \\\"" + scriptPath + "\\\"");
+        cmd.add("-controldir=" + controlDirPath);
+        cmd.add("-result=" + resultFile);
+        cmd.add("-log=" + logFile);
+        if (capturingOutput) {
+            cmd.add("-output=" + outputFile);
+        }
+        if (LAUNCH_DIAGNOSTICS) {
+            cmd.add("-debug");
+        }
+        return cmd;
+    }
+
+    @Nonnull
+    @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
+    private List<String> scriptLauncherCmd(BatchController c, FilePath ws) throws IOException, InterruptedException {
+
+        String cmdString;
+        if (capturingOutput) {
+            cmdString = String.format("@echo off \r\ncmd /c call \"%s\" > \"%s\" 2> \"%s\"\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+                quote(c.getBatchFile2(ws)),
+                quote(c.getOutputFile(ws)),
+                quote(c.getLogFile(ws)),
+                quote(c.getResultFile(ws)));
+        } else {
+            cmdString = String.format("@echo off \r\ncmd /c call \"%s\" > \"%s\" 2>&1\r\necho %%ERRORLEVEL%% > \"%s\"\r\n",
+                quote(c.getBatchFile2(ws)),
+                quote(c.getLogFile(ws)),
+                quote(c.getResultFile(ws)));
+        }
+        c.getBatchFile1(ws).write(cmdString, "UTF-8");
+        c.getBatchFile2(ws).write(script, "UTF-8");
+
+        List<String> cmd = new ArrayList<>();
+        cmd.addAll(Arrays.asList("cmd", "/c", "\"\"" + c.getBatchFile1(ws).getRemote() + "\"\""));
+        return cmd;
     }
 
     private static String quote(FilePath f) {

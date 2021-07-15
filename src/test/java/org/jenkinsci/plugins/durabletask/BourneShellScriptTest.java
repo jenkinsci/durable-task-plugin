@@ -129,7 +129,7 @@ public class BourneShellScriptTest {
     @Before public void prepareAgentForPlatform() throws Exception {
         switch (platform) {
             case NATIVE:
-                BourneShellScript.FORCE_BINARY_WRAPPER = true;
+                BourneShellScript.USE_BINARY_WRAPPER = true;
                 s = j.createOnlineSlave();
                 break;
             case SLIM:
@@ -137,7 +137,7 @@ public class BourneShellScriptTest {
             case CENTOS:
             case UBUNTU:
             case NO_INIT:
-                BourneShellScript.FORCE_BINARY_WRAPPER = true;
+                BourneShellScript.USE_BINARY_WRAPPER = true;
             case UBUNTU_NO_BINARY:
                 assumeDocker();
                 s = prepareAgentDocker();
@@ -199,7 +199,7 @@ public class BourneShellScriptTest {
         if (s != null) {
             j.jenkins.removeNode(s);
         }
-        BourneShellScript.FORCE_BINARY_WRAPPER = false;
+        BourneShellScript.USE_BINARY_WRAPPER = false;
     }
 
     @Test public void smokeTest() throws Exception {
@@ -482,8 +482,10 @@ public class BourneShellScriptTest {
                     String macArch = System.getProperty("os.arch");
                     if (macArch.contains("aarch") || macArch.contains("arm")) {
                         architecture = "arm";
-                    } else {
+                    } else if (macArch.contains("amd") || macArch.contains("x86")) {
                         architecture = "amd";
+                    } else {
+                        architecture = "NOTSUPPORTED";
                     }
                 } else {
                     os = "linux";
