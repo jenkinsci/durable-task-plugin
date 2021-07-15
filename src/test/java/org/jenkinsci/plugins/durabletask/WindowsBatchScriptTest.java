@@ -33,7 +33,7 @@ import java.io.File;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Rule;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -52,7 +52,7 @@ public class WindowsBatchScriptTest {
         return new Object[] {true, false};
     }
 
-    @Rule public JenkinsRule j = new JenkinsRule();
+    @ClassRule public static JenkinsRule j = new JenkinsRule();
 
     @BeforeClass public static void windows() {
         Assume.assumeTrue("These tests are only for Windows", File.pathSeparatorChar == ';');
