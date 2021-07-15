@@ -40,12 +40,10 @@ import org.junit.Test;
 import org.junit.Assume;
 import org.junit.AssumptionViolatedException;
 import org.junit.Before;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-import org.jvnet.hudson.test.FlagRule;
 import org.jvnet.hudson.test.JenkinsRule;
 import java.util.Properties;
 import java.util.*;
@@ -61,9 +59,6 @@ public class PowershellScriptTest {
         return new Object[] {true, false};
     }
 
-    // increase delete attempts as it takes the binary a little longer to release resources
-    @ClassRule public static FlagRule retryRule = FlagRule.systemProperty("hudson.Util.maxFileDeletionRetries", "6");
-    @ClassRule public static FlagRule waitRule = FlagRule.systemProperty("hudson.Util.deletionRetryWait", "500");
     @Rule public JenkinsRule j = new JenkinsRule();
 
     private StreamTaskListener listener;
@@ -372,5 +367,22 @@ public class PowershellScriptTest {
         while (c.exitStatus(ws, launcher, listener) == null) {
             Thread.sleep(100);
         }
+        int retries = 0;
+        while (retries < 6) {
+            if (binaryInactive()) {
+                break;
+            }
+            Thread.sleep(500);
+            retries++;
+        }
+    }
+
+    /**
+     * Determines if the windows binary is not running by checking the tasklist
+     */
+    private boolean binaryInactive() throws IOException, InterruptedException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        assertEquals(0, launcher.launch().cmds("tasklist", "/fi", "\"imagename eq durable_task_monitor_*\"").stdout(baos).join());
+        return baos.toString().contains("No tasks");
     }
 }
