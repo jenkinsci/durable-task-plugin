@@ -30,19 +30,27 @@ import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import org.apache.commons.io.output.TeeOutputStream;
-import static org.hamcrest.Matchers.containsString;
-import org.junit.Test;
-import static org.junit.Assert.*;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
+import java.io.IOException;
 import java.util.Arrays;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.Assert.*;
+
+@RunWith(Parameterized.class)
 public class WindowsBatchScriptTest {
+    @Parameterized.Parameters(name = "{index}: USE_BINARY={0}")
+    public static Object[] parameters() {
+        return new Object[] {true, false};
+    }
 
     @Rule public JenkinsRule j = new JenkinsRule();
 
@@ -53,8 +61,14 @@ public class WindowsBatchScriptTest {
     private StreamTaskListener listener;
     private FilePath ws;
     private Launcher launcher;
+    private boolean enableBinary;
+
+    public WindowsBatchScriptTest(boolean enableBinary) {
+        this.enableBinary = enableBinary;
+    }
 
     @Before public void vars() {
+        WindowsBatchScript.USE_BINARY_WRAPPER = enableBinary;
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
         launcher = j.jenkins.createLauncher(listener);
@@ -78,9 +92,7 @@ public class WindowsBatchScriptTest {
     private void testWithPath(String path) throws Exception {
         FilePath wsWithPath = ws.child(path);
         Controller c = new WindowsBatchScript("echo hello world").launch(new EnvVars(), wsWithPath, launcher, listener);
-        while (c.exitStatus(wsWithPath, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(wsWithPath, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(wsWithPath, launcher, listener));
@@ -93,13 +105,9 @@ public class WindowsBatchScriptTest {
     @Issue("JENKINS-27419")
     @Test public void exitCommand() throws Exception {
         Controller c = new WindowsBatchScript("echo hello world\r\nexit 1").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        TeeOutputStream tos = new TeeOutputStream(baos, System.err);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            c.writeLog(ws, tos);
-            Thread.sleep(100);
-        }
-        c.writeLog(ws, tos);
+        c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher, listener));
         String log = baos.toString();
         assertTrue(log, log.contains("hello world"));
@@ -108,9 +116,7 @@ public class WindowsBatchScriptTest {
 
     @Test public void exitBCommandAfterError() throws Exception {
         Controller c = new WindowsBatchScript("cmd /c exit 42\r\nexit /b").launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(42, c.exitStatus(ws, launcher, listener).intValue());
@@ -122,9 +128,7 @@ public class WindowsBatchScriptTest {
         DurableTask task = new WindowsBatchScript("@echo 42"); // http://stackoverflow.com/a/8486061/12916
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -135,9 +139,7 @@ public class WindowsBatchScriptTest {
     @Issue("JENKINS-40734")
     @Test public void envWithShellChar() throws Exception {
         Controller c = new WindowsBatchScript("echo value=%MYNEWVAR%").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws,baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -167,13 +169,45 @@ public class WindowsBatchScriptTest {
             "echo zwei\n" +
             "goto :eins\n";
         Controller c = new WindowsBatchScript(script).launch(new EnvVars(), ws, launcher, listener);
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
+        awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
+    }
+
+    @Test public void unicodeChars() throws Exception {
+        Controller c = new WindowsBatchScript("echo Helló, Wõrld ®").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
+        String log = baos.toString("UTF-8");
+        assertTrue(log, log.contains("Helló, Wõrld ®"));
+        c.cleanup(ws);
+    }
+
+    private void awaitCompletion(Controller c) throws IOException, InterruptedException {
+        while (c.exitStatus(ws, launcher, listener) == null) {
+            Thread.sleep(100);
+        }
+        int retries = 0;
+        while (retries < 6) {
+            if (binaryInactive()) {
+                break;
+            }
+            Thread.sleep(500);
+            retries++;
+        }
+    }
+
+    /**
+     * Determines if the windows binary is not running by checking the tasklist
+     */
+    private boolean binaryInactive() throws IOException, InterruptedException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        assertEquals(0, launcher.launch().cmds("tasklist", "/fi", "\"imagename eq durable_task_monitor_*\"").stdout(baos).join());
+        return baos.toString().contains("No tasks");
     }
 
 }

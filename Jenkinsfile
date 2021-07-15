@@ -1,1 +1,1 @@
-buildPlugin(platforms: ['docker', 'maven-windows'])
+buildPlugin()

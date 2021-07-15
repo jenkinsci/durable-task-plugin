@@ -25,11 +25,15 @@
 package org.jenkinsci.plugins.durabletask;
 
 import com.google.common.io.Files;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.PluginWrapper;
 import hudson.Util;
 import hudson.init.Terminator;
+import hudson.model.Computer;
+import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
 import hudson.remoting.DaemonThreadFactory;
@@ -71,11 +75,13 @@ import java.util.logging.Logger;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
+import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.commons.io.output.WriterOutputStream;
+import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.remoting.util.IOUtils;
 
 /**
@@ -86,6 +92,8 @@ public abstract class FileMonitoringTask extends DurableTask {
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
     private static final String COOKIE = "JENKINS_SERVER_COOKIE";
+
+    protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
     /** Value of {@link #charset} used to mean the node’s system default. */
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
@@ -145,6 +153,73 @@ public abstract class FileMonitoringTask extends DurableTask {
             m.put(entry.getKey(), entry.getValue().replace("$", "$$"));
         }
         return m;
+    }
+
+    protected static FilePath getNodeRoot(FilePath workspace) throws IOException {
+        Computer computer = workspace.toComputer();
+        if (computer == null) {
+            throw new IOException("Unable to retrieve computer for workspace");
+        }
+        Node node = computer.getNode();
+        if (node == null) {
+            throw new IOException("Unable to retrieve node for workspace");
+        }
+        FilePath nodeRoot = node.getRootPath();
+        if (nodeRoot == null) {
+            throw new IOException("Unable to retrieve root path of node");
+        }
+        return nodeRoot;
+    }
+
+    protected static AgentInfo getAgentInfo(FilePath nodeRoot) throws IOException, InterruptedException {
+        final Jenkins jenkins = Jenkins.get();
+        PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
+        if (durablePlugin == null) {
+            throw new IOException("Unable to find durable task plugin");
+        }
+        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
+        AgentInfo agentInfo = nodeRoot.act(new AgentInfo.GetAgentInfo(pluginVersion));
+
+        return agentInfo;
+    }
+
+    /**
+     * Returns path of binary on agent. Copies binary to agent if it does not exist
+     */
+    @CheckForNull
+    protected static FilePath requestBinary(FilePath ws, FileMonitoringController c) throws IOException, InterruptedException {
+        FilePath nodeRoot = getNodeRoot(ws);
+        AgentInfo agentInfo = getAgentInfo(nodeRoot);
+        return requestBinary(nodeRoot, agentInfo, ws, c);
+    }
+
+    /**
+     * Returns path of binary on agent. Copies binary to agent if it does not exist
+     */
+    @CheckForNull
+    protected static FilePath requestBinary(FilePath nodeRoot, AgentInfo agentInfo, FilePath ws, FileMonitoringController c) throws IOException, InterruptedException {
+        FilePath binary = null;
+        if (agentInfo.isBinaryCompatible()) {
+            FilePath controlDir = c.controlDir(ws);
+            if (agentInfo.isCachingAvailable()) {
+                binary = nodeRoot.child(agentInfo.getBinaryPath());
+            } else {
+                binary = controlDir.child(agentInfo.getBinaryPath());
+            }
+            String resourcePath = BINARY_RESOURCE_PREFIX + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture();
+            if (agentInfo.getOs() == AgentInfo.OsType.WINDOWS) {
+                resourcePath += ".exe";
+            }
+            try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
+                if (binaryStream != null) {
+                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
+                        binary.copyFrom(binaryStream);
+                        binary.chmod(0755);
+                    }
+                }
+            }
+        }
+        return binary;
     }
 
     /**
