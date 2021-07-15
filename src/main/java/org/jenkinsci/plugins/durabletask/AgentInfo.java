@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import jenkins.MasterToSlaveFileCallable;
 import org.jenkinsci.remoting.RoleChecker;
 
 import hudson.Platform;
@@ -75,7 +76,7 @@ public final class AgentInfo implements Serializable {
         return cachingAvailable;
     }
 
-    public static final class GetAgentInfo implements FileCallable<AgentInfo> {
+    public static final class GetAgentInfo extends MasterToSlaveFileCallable<AgentInfo> {
         private static final long serialVersionUID = 1L;
         private static final String BINARY_PREFIX = "durable_task_monitor_";
         private static final String CACHE_PATH = "caches/durable-task/";
@@ -159,11 +160,6 @@ public final class AgentInfo implements Serializable {
             AgentInfo agentInfo = new AgentInfo(os, archType, binaryCompatible, binaryPath, cachingAvailable);
             agentInfo.setBinaryAvailability(isCached);
             return agentInfo;
-        }
-
-        @Override
-        public void checkRoles(RoleChecker roleChecker) throws SecurityException {
-
         }
     }
 }
