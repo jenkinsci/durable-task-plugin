@@ -40,11 +40,12 @@ import org.junit.Test;
 import org.junit.Assume;
 import org.junit.AssumptionViolatedException;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.jvnet.hudson.test.FlagRule;
 import org.jvnet.hudson.test.JenkinsRule;
 import java.util.Properties;
 import java.util.*;
@@ -60,14 +61,10 @@ public class PowershellScriptTest {
         return new Object[] {true, false};
     }
 
-    @ClassRule public static JenkinsRule j = new JenkinsRule();
-
-    @BeforeClass
-    public static void setup() {
-        // increase delete attempts as it takes the binary a little longer to release resources
-        System.setProperty("hudson.Util.maxFileDeletionRetries", "6");
-        System.setProperty("hudson.Util.deletionRetryWait", "500");
-    }
+    // increase delete attempts as it takes the binary a little longer to release resources
+    @ClassRule public static FlagRule retryRule = FlagRule.systemProperty("hudson.Util.maxFileDeletionRetries", "6");
+    @ClassRule public static FlagRule waitRule = FlagRule.systemProperty("hudson.Util.deletionRetryWait", "500");
+    @Rule public JenkinsRule j = new JenkinsRule();
 
     private StreamTaskListener listener;
     private FilePath ws;
