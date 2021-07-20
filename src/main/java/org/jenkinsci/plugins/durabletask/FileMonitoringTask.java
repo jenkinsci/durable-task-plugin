@@ -61,6 +61,8 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -104,7 +106,15 @@ public abstract class FileMonitoringTask extends DurableTask {
     private @CheckForNull String charset;
 
     private static String cookieFor(FilePath workspace) {
-        return "durable-" + Util.getDigestOf(workspace.getRemote());
+        return "durable-" + digest(workspace.getRemote());
+    }
+
+    private static String digest(String text) {
+        try {
+            return Util.toHexString(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new Error(e);
+        }
     }
 
     @Override public final Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
