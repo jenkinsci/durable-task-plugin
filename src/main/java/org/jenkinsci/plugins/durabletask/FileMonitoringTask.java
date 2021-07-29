@@ -64,6 +64,7 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -93,8 +94,10 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
-    private static final String COOKIE = "JENKINS_SERVER_COOKIE";
-
+    private static final String COOKIE = "JENKINS_SERVER_COOKIE_2";
+    
+    protected static final String COOKIE_OLD = "JENKINS_SERVER_COOKIE";
+    
     protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
     /** Value of {@link #charset} used to mean the node’s system default. */
@@ -105,8 +108,14 @@ public abstract class FileMonitoringTask extends DurableTask {
      */
     private @CheckForNull String charset;
 
+    private static String cookieFor(FilePath workspace, boolean old) {
+        String suffix = "durable-%s";
+        String remote = workspace.getRemote();
+        return String.format(suffix, old ? Util.getDigestOf(remote) : digest(remote));
+    }
+    
     private static String cookieFor(FilePath workspace) {
-        return "durable-" + digest(workspace.getRemote());
+        return cookieFor(workspace, false);
     }
 
     private static String digest(String text) {
@@ -125,6 +134,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     protected FileMonitoringController launchWithCookie(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         envVars.put(cookieVariable, cookieValue); // ensure getCharacteristicEnvVars does not match, so Launcher.killAll will leave it alone
+        envVars.put(COOKIE_OLD, cookieFor(workspace, true)); // To maintain backward compatibility
         return doLaunch(workspace, launcher, listener, envVars);
     }
 
@@ -452,7 +462,10 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
+            Map<String, String> cookiesMap = new HashMap<>();
+            cookiesMap.put(COOKIE, cookieFor(workspace));
+            cookiesMap.put(COOKIE_OLD, cookieFor(workspace, true));
+            launcher.kill(Collections.unmodifiableMap(cookiesMap));
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {

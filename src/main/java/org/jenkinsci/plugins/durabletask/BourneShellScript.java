@@ -155,6 +155,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
         envVars.put(cookieVariable, "please-do-not-kill-me");
+        envVars.put(FileMonitoringTask.COOKIE_OLD, "please-do-not-kill-me"); // To maintain backward compatibility
 
         List<String> launcherCmd = null;
         FilePath binary;
