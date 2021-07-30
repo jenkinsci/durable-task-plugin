@@ -94,9 +94,10 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
-    private static final String COOKIE = "JENKINS_SERVER_COOKIE_2";
+    private static final String COOKIE = "JENKINS_SERVER_COOKIE_ID";
     
-    protected static final String COOKIE_OLD = "JENKINS_SERVER_COOKIE";
+    /** To maintain backward compatibility */
+    private static final String COOKIE_OLD = "JENKINS_SERVER_COOKIE";
     
     protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
@@ -108,10 +109,18 @@ public abstract class FileMonitoringTask extends DurableTask {
      */
     private @CheckForNull String charset;
 
+    /**
+     * Provides the cookie value for a given {@link FilePath} workspace. It also uses
+     * a flag to identify if we want this cookie hash based on MD5 (former/old format) or SHA-256 algorithm.
+     * This method is only used to maintain backward compatibility on stopping tasks that were
+     * launched before the new format was applied.
+     * @param workspace
+     * @param old
+     * @return
+     */
     private static String cookieFor(FilePath workspace, boolean old) {
-        String suffix = "durable-%s";
         String remote = workspace.getRemote();
-        return String.format(suffix, old ? Util.getDigestOf(remote) : digest(remote));
+        return String.format("durable-%s", old ? Util.getDigestOf(remote) : digest(remote));
     }
     
     private static String cookieFor(FilePath workspace) {
@@ -134,7 +143,6 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     protected FileMonitoringController launchWithCookie(FilePath workspace, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         envVars.put(cookieVariable, cookieValue); // ensure getCharacteristicEnvVars does not match, so Launcher.killAll will leave it alone
-        envVars.put(COOKIE_OLD, cookieFor(workspace, true)); // To maintain backward compatibility
         return doLaunch(workspace, launcher, listener, envVars);
     }
 
@@ -464,7 +472,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             Map<String, String> cookiesMap = new HashMap<>();
             cookiesMap.put(COOKIE, cookieFor(workspace));
-            cookiesMap.put(COOKIE_OLD, cookieFor(workspace, true));
+            cookiesMap.put(COOKIE_OLD, cookieFor(workspace, true)); // To maintain backward compatibility 
             launcher.kill(Collections.unmodifiableMap(cookiesMap));
         }
 
