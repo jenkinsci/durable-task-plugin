@@ -1,4 +1,4 @@
-Durable Task Plugin
+TESTDurable Task Plugin
 ===
 
 Library offering an extension point for processes which can run outside
