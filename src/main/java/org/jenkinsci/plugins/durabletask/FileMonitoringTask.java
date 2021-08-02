@@ -93,10 +93,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
-    private static final String COOKIE = "JENKINS_SERVER_COOKIE_ID";
-    
-    /** To maintain backward compatibility */
-    private static final String COOKIE_OLD = "JENKINS_SERVER_COOKIE";
+    private static final String COOKIE = "JENKINS_SERVER_COOKIE";
     
     protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
@@ -470,7 +467,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
             launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
-            launcher.kill(Collections.singletonMap(COOKIE_OLD, cookieFor(workspace, true))); // To maintain backward compatibility
+            launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace, true))); // To maintain backward compatibility
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
