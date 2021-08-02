@@ -64,7 +64,6 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -470,10 +469,8 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            Map<String, String> cookiesMap = new HashMap<>();
-            cookiesMap.put(COOKIE, cookieFor(workspace));
-            cookiesMap.put(COOKIE_OLD, cookieFor(workspace, true)); // To maintain backward compatibility 
-            launcher.kill(Collections.unmodifiableMap(cookiesMap));
+            launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
+            launcher.kill(Collections.singletonMap(COOKIE_OLD, cookieFor(workspace, true))); // To maintain backward compatibility
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
