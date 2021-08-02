@@ -113,8 +113,8 @@ public abstract class FileMonitoringTask extends DurableTask {
      * a flag to identify if we want this cookie hash based on MD5 (former/old format) or SHA-256 algorithm.
      * This method is only used to maintain backward compatibility on stopping tasks that were
      * launched before the new format was applied.
-     * @param workspace
-     * @param old
+     * @param workspace - workspace path used to setup the digest
+     * @param old - boolean to select if we want to use former/old hash algorithm to maintain backward compatibility
      * @return
      */
     private static String cookieFor(FilePath workspace, boolean old) {
