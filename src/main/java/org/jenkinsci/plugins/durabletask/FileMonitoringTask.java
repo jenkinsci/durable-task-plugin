@@ -94,7 +94,7 @@ public abstract class FileMonitoringTask extends DurableTask {
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
     private static final String COOKIE = "JENKINS_SERVER_COOKIE";
-    
+
     protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
     /** Value of {@link #charset} used to mean the node’s system default. */
@@ -265,6 +265,9 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Only used if {@link #writeLog(FilePath, OutputStream)} is used; not used for {@link #watch}.
          */
         private long lastLocation;
+        
+        /** Store the cookie value for JENKINS_SERVER_COOKIE */
+        private String cookieValue;
 
         /** @see FileMonitoringTask#charset */
         private @CheckForNull String charset;
@@ -299,6 +302,7 @@ public abstract class FileMonitoringTask extends DurableTask {
             } else {
                 controlDir = null;
             }
+            cookieValue = cookieFor(ws);
         }
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
@@ -466,8 +470,10 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
-            launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace, true))); // To maintain backward compatibility
+            if (cookieValue == null) {
+                cookieValue = cookieFor(workspace, true); // To maintain backward compatibility
+            }
+            launcher.kill(Collections.singletonMap(COOKIE, cookieValue));
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
