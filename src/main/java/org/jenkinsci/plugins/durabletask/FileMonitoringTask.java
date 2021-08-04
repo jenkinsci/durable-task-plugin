@@ -112,7 +112,7 @@ public abstract class FileMonitoringTask extends DurableTask {
      * launched before the new format was applied.
      * @param workspace - workspace path used to setup the digest
      * @param old - boolean to select if we want to use former/old hash algorithm to maintain backward compatibility
-     * @return
+     * @return the cookie value
      */
     private static String cookieFor(FilePath workspace, boolean old) {
         String remote = workspace.getRemote();
@@ -266,7 +266,7 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         private long lastLocation;
         
-        /** Store the cookie value for JENKINS_SERVER_COOKIE */
+        /** Store the value for {@link #COOKIE} */
         private String cookieValue;
 
         /** @see FileMonitoringTask#charset */
