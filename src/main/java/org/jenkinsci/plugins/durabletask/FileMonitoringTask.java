@@ -115,8 +115,7 @@ public abstract class FileMonitoringTask extends DurableTask {
      * @return the cookie value
      */
     private static String cookieFor(FilePath workspace, boolean old) {
-        String remote = workspace.getRemote();
-        return String.format("durable-%s", old ? Util.getDigestOf(remote) : digest(remote));
+        return String.format("durable-%s", old ? Util.getDigestOf(workspace.getRemote()) : digest(workspace.getRemote()));
     }
     
     private static String cookieFor(FilePath workspace) {
