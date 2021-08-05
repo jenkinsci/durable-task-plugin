@@ -306,7 +306,7 @@ public final class PowershellScript extends FileMonitoringTask {
 
     private static final class PowershellController extends FileMonitoringController {
         private PowershellController(FilePath ws) throws IOException, InterruptedException {
-            super(ws);
+            super(ws, cookieFor(ws));
         }
 
         public FilePath getPowerShellScriptFile(FilePath ws) throws IOException, InterruptedException {

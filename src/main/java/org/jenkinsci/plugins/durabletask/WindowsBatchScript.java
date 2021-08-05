@@ -163,7 +163,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
 
     private static final class BatchController extends FileMonitoringController {
         private BatchController(FilePath ws) throws IOException, InterruptedException {
-            super(ws);
+            super(ws, cookieFor(ws));
         }
 
         public FilePath getBatchFile1(FilePath ws) throws IOException, InterruptedException {

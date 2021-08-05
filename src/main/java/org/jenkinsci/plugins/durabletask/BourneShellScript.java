@@ -276,7 +276,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         private final boolean isZos;
 
         private ShellController(FilePath ws, boolean zOsFlag) throws IOException, InterruptedException {
-            super(ws);
+            super(ws, cookieFor(ws));
             this.isZos = zOsFlag;
         }
 

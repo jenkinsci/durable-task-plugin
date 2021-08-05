@@ -25,6 +25,8 @@
 package org.jenkinsci.plugins.durabletask;
 
 import com.google.common.io.Files;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.FilePath;
@@ -118,7 +120,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         return String.format("durable-%s", old ? Util.getDigestOf(workspace.getRemote()) : digest(workspace.getRemote()));
     }
     
-    private static String cookieFor(FilePath workspace) {
+    public static String cookieFor(FilePath workspace) {
         return cookieFor(workspace, false);
     }
 
@@ -290,7 +292,18 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         private transient volatile Charset writeLogCs;
 
+        protected FileMonitoringController(FilePath ws, @NonNull String cookieValue) throws IOException, InterruptedException {
+            setupControlDir(ws);
+            this.cookieValue = cookieValue;
+        }
+        
+        @Deprecated
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
+            setupControlDir(ws);
+            this.cookieValue = cookieFor(ws, true);
+        }
+        
+        private void setupControlDir(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
             FilePath tmpDir = /* TODO pending JENKINS-61197 fix in baseline */ ws.getParent() != null ? WorkspaceList.tempDir(ws) : null;
@@ -301,7 +314,6 @@ public abstract class FileMonitoringTask extends DurableTask {
             } else {
                 controlDir = null;
             }
-            cookieValue = cookieFor(ws);
         }
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
