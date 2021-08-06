@@ -24,6 +24,7 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
@@ -82,7 +83,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
             throw new IOException("Batch scripts can only be run on Windows nodes");
         }
 
-        BatchController c = new BatchController(ws);
+        BatchController c = new BatchController(ws, envVars.get(COOKIE));
 
         List<String> launcherCmd = null;
         FilePath binary;
@@ -162,8 +163,8 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     }
 
     private static final class BatchController extends FileMonitoringController {
-        private BatchController(FilePath ws) throws IOException, InterruptedException {
-            super(ws, cookieFor(ws));
+        private BatchController(FilePath ws, @NonNull String cookieValue) throws IOException, InterruptedException {
+            super(ws, cookieValue);
         }
 
         public FilePath getBatchFile1(FilePath ws) throws IOException, InterruptedException {

@@ -95,7 +95,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
-    private static final String COOKIE = "JENKINS_SERVER_COOKIE";
+    protected static final String COOKIE = "JENKINS_SERVER_COOKIE";
 
     protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
@@ -112,15 +112,15 @@ public abstract class FileMonitoringTask extends DurableTask {
      * a flag to identify if we want this cookie hash based on MD5 (former/old format) or SHA-256 algorithm.
      * This method is only used to maintain backward compatibility on stopping tasks that were
      * launched before the new format was applied.
-     * @param workspace - workspace path used to setup the digest
-     * @param old - boolean to select if we want to use former/old hash algorithm to maintain backward compatibility
+     * @param workspace path used to setup the digest
+     * @param boolean to select if we want to use former/old hash algorithm to maintain backward compatibility
      * @return the cookie value
      */
     private static String cookieFor(FilePath workspace, boolean old) {
         return String.format("durable-%s", old ? Util.getDigestOf(workspace.getRemote()) : digest(workspace.getRemote()));
     }
     
-    public static String cookieFor(FilePath workspace) {
+    private static String cookieFor(FilePath workspace) {
         return cookieFor(workspace, false);
     }
 

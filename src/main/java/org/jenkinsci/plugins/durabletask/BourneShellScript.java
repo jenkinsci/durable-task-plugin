@@ -24,6 +24,7 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
@@ -135,7 +136,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             scriptEncodingCharset = zOSSystemEncodingCharset.name();
         }
 
-        ShellController c = new ShellController(ws,(os == OsType.ZOS));
+        ShellController c = new ShellController(ws,(os == OsType.ZOS), cookieValue);
         FilePath shf = c.getScriptFile(ws);
 
         shf.write(script, scriptEncodingCharset);
@@ -275,8 +276,8 @@ public final class BourneShellScript extends FileMonitoringTask {
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */
         private final boolean isZos;
 
-        private ShellController(FilePath ws, boolean zOsFlag) throws IOException, InterruptedException {
-            super(ws, cookieFor(ws));
+        private ShellController(FilePath ws, boolean zOsFlag, @NonNull String cookieValue) throws IOException, InterruptedException {
+            super(ws, cookieValue);
             this.isZos = zOsFlag;
         }
 
