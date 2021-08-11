@@ -25,6 +25,8 @@
 package org.jenkinsci.plugins.durabletask;
 
 import com.google.common.io.Files;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.FilePath;
@@ -61,6 +63,8 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -91,7 +95,7 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
-    private static final String COOKIE = "JENKINS_SERVER_COOKIE";
+    protected static final String COOKIE = "JENKINS_SERVER_COOKIE";
 
     protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
@@ -103,8 +107,29 @@ public abstract class FileMonitoringTask extends DurableTask {
      */
     private @CheckForNull String charset;
 
+    /**
+     * Provides the cookie value for a given {@link FilePath} workspace. It also uses
+     * a flag to identify if we want this cookie hash based on MD5 (former/old format) or SHA-256 algorithm.
+     * This method is only used to maintain backward compatibility on stopping tasks that were
+     * launched before the new format was applied.
+     * @param workspace path used to setup the digest
+     * @param boolean to select if we want to use former/old hash algorithm to maintain backward compatibility
+     * @return the cookie value
+     */
+    private static String cookieFor(FilePath workspace, boolean old) {
+        return String.format("durable-%s", old ? Util.getDigestOf(workspace.getRemote()) : digest(workspace.getRemote()));
+    }
+    
     private static String cookieFor(FilePath workspace) {
-        return "durable-" + Util.getDigestOf(workspace.getRemote());
+        return cookieFor(workspace, false);
+    }
+
+    private static String digest(String text) {
+        try {
+            return Util.toHexString(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new Error(e);
+        }
     }
 
     @Override public final Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
@@ -241,6 +266,9 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Only used if {@link #writeLog(FilePath, OutputStream)} is used; not used for {@link #watch}.
          */
         private long lastLocation;
+        
+        /** Store the value for {@link #COOKIE} */
+        private String cookieValue;
 
         /** @see FileMonitoringTask#charset */
         private @CheckForNull String charset;
@@ -264,7 +292,18 @@ public abstract class FileMonitoringTask extends DurableTask {
          */
         private transient volatile Charset writeLogCs;
 
+        protected FileMonitoringController(FilePath ws, @NonNull String cookieValue) throws IOException, InterruptedException {
+            setupControlDir(ws);
+            this.cookieValue = cookieValue;
+        }
+        
+        @Deprecated
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
+            setupControlDir(ws);
+            this.cookieValue = cookieFor(ws, true);
+        }
+        
+        private void setupControlDir(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
             FilePath tmpDir = /* TODO pending JENKINS-61197 fix in baseline */ ws.getParent() != null ? WorkspaceList.tempDir(ws) : null;
@@ -442,7 +481,10 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
+            if (cookieValue == null) {
+                cookieValue = cookieFor(workspace, true); // To maintain backward compatibility
+            }
+            launcher.kill(Collections.singletonMap(COOKIE, cookieValue));
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {

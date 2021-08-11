@@ -24,6 +24,7 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.*;
 import hudson.util.ListBoxModel;
@@ -107,7 +108,7 @@ public final class PowershellScript extends FileMonitoringTask {
 
         FilePath nodeRoot = getNodeRoot(ws);
         AgentInfo agentInfo = getAgentInfo(nodeRoot);
-        PowershellController c = new PowershellController(ws);
+        PowershellController c = new PowershellController(ws, envVars.get(COOKIE));
 
         List<String> powershellArgs = new ArrayList<>();
         if (!loadProfile) {
@@ -305,8 +306,8 @@ public final class PowershellScript extends FileMonitoringTask {
     }
 
     private static final class PowershellController extends FileMonitoringController {
-        private PowershellController(FilePath ws) throws IOException, InterruptedException {
-            super(ws);
+        private PowershellController(FilePath ws, @NonNull String cookieValue) throws IOException, InterruptedException {
+            super(ws, cookieValue);
         }
 
         public FilePath getPowerShellScriptFile(FilePath ws) throws IOException, InterruptedException {
