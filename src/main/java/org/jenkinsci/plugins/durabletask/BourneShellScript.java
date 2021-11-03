@@ -24,53 +24,68 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.LauncherDecorator;
-import hudson.Platform;
+import hudson.PluginWrapper;
+import hudson.Proc;
 import hudson.Util;
 import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
 import hudson.tasks.Shell;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.File;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.io.File;
 import javax.annotation.Nonnull;
+
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
-import hudson.remoting.VirtualChannel;
+import org.apache.commons.lang.StringUtils;
+import org.jenkinsci.plugins.durabletask.AgentInfo.OsType;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
 import jenkins.MasterToSlaveFileCallable;
-import org.apache.commons.io.FileUtils;
-import com.google.common.io.Files;
-
-
 
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
  */
 public final class BourneShellScript extends FileMonitoringTask {
 
-    private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
+    @SuppressFBWarnings("MS_SHOULD_BE_FINAL") // Used to control usage of binary or shell wrapper
+    @Restricted(NoExternalUse.class)
+    public static boolean USE_BINARY_WRAPPER = Boolean.getBoolean(BourneShellScript.class.getName() + ".USE_BINARY_WRAPPER");
 
-    private static enum OsType {DARWIN, UNIX, WINDOWS, ZOS}
+    private static final Logger LOGGER = Logger.getLogger(BourneShellScript.class.getName());
 
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
 
-    /** Number of times we will show launch diagnostics in a newly encountered workspace before going mute to save resources. */
+    private static final String LAUNCH_DIAGNOSTICS_PROP = BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
+
+    /**
+     * Whether to stream stdio from the wrapper script, which should normally not print any.
+     * Copying output from the controller process consumes a Java thread, so we want to avoid it generally.
+     * If requested, we can do this to assist in diagnosis.
+     * (For example, if we are unable to write to a workspace due to permissions,
+     * we would want to see that error message.)
+     *
+     * For the binary wrapper, this enables the debug flag.
+     */
     @SuppressWarnings("FieldMayBeFinal")
     // TODO use SystemProperties if and when unrestricted
-    private static int NOVEL_WORKSPACE_DIAGNOSTICS_COUNT = Integer.getInteger(BourneShellScript.class.getName() + ".NOVEL_WORKSPACE_DIAGNOSTICS_COUNT", 10);
+    private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
 
     /**
      * Seconds between heartbeat checks, where we check to see if
@@ -93,7 +108,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     @DataBoundConstructor public BourneShellScript(String script) {
         this.script = Util.fixNull(script);
     }
-    
+
     public String getScript() {
         return script;
     }
@@ -102,22 +117,15 @@ public final class BourneShellScript extends FileMonitoringTask {
         capturingOutput = true;
     }
 
-    /**
-     * Set of workspaces which we have already run a process in.
-     * Copying output from the controller process consumes a Java thread, so we want to avoid it generally.
-     * But we do it the first few times we run a process in a new workspace, to assist in diagnosis.
-     * (For example, if we are unable to write to it due to permissions, we want to see that error message.)
-     * Ideally we would display output the first time a given {@link Launcher} was used in that workspace,
-     * but this seems impractical since {@link LauncherDecorator#decorate} may be called anew for each process,
-     * and forcing the resulting {@link Launcher}s to implement {@link Launcher#equals} seems onerous.
-     */
-    private static final Map<FilePath,Integer> encounteredPaths = new WeakHashMap<FilePath,Integer>();
-
     @Override protected FileMonitoringController launchWithCookie(FilePath ws, Launcher launcher, TaskListener listener, EnvVars envVars, String cookieVariable, String cookieValue) throws IOException, InterruptedException {
         if (script.isEmpty()) {
             listener.getLogger().println("Warning: was asked to run an empty script");
         }
-        OsType os = ws.act(new getOsType());
+
+        FilePath nodeRoot = getNodeRoot(ws);
+        AgentInfo agentInfo = getAgentInfo(nodeRoot);
+
+        OsType os = agentInfo.getOs();
         String scriptEncodingCharset = "UTF-8";
         if(os == OsType.ZOS) {
             Charset zOSSystemEncodingCharset = Charset.forName(ws.act(new getIBMzOsEncoding()));
@@ -127,98 +135,149 @@ public final class BourneShellScript extends FileMonitoringTask {
             }
             scriptEncodingCharset = zOSSystemEncodingCharset.name();
         }
-        
-        ShellController c = new ShellController(ws,(os == OsType.ZOS));
+
+        ShellController c = new ShellController(ws,(os == OsType.ZOS), cookieValue);
         FilePath shf = c.getScriptFile(ws);
 
         shf.write(script, scriptEncodingCharset);
 
-        final Jenkins jenkins = Jenkins.getInstance();
-        String interpreter = "";
+        String shell = null;
         if (!script.startsWith("#!")) {
-            String shell = jenkins.getDescriptorByType(Shell.DescriptorImpl.class).getShellOrDefault(ws.getChannel());
-            interpreter = "'" + shell + "' -xe ";
+            shell = Jenkins.get().getDescriptorByType(Shell.DescriptorImpl.class).getShell();
+            if (shell == null) {
+                // Do not use getShellOrDefault, as that assumes that the filesystem layout of the agent matches that seen from a possibly decorated launcher.
+                shell = "sh";
+            }
         } else {
             shf.chmod(0755);
         }
 
         String scriptPath = shf.getRemote();
-        List<String> args = new ArrayList<>();
 
-        if (os != OsType.DARWIN) { // JENKINS-25848
-            args.add("nohup");
-        }
-        if (os == OsType.WINDOWS) { // JENKINS-40255
-            scriptPath= scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
-        }
-
-        envVars.put(cookieVariable, "please-do-not-kill-me");
         // The temporary variable is to ensure JENKINS_SERVER_COOKIE=durable-… does not appear even in argv[], lest it be confused with the environment.
-        String cmd;
+        envVars.put(cookieVariable, "please-do-not-kill-me");
+
+        List<String> launcherCmd = null;
+        FilePath binary;
+        if (USE_BINARY_WRAPPER && (binary = requestBinary(nodeRoot, agentInfo, ws, c)) != null) {
+            launcherCmd = binaryLauncherCmd(c, ws, shell, binary.getRemote(), scriptPath, cookieValue, cookieVariable);
+        }
+        if (launcherCmd == null) {
+            launcherCmd = scriptLauncherCmd(c, ws, shell, os, scriptPath, cookieValue, cookieVariable);
+        }
+
+        LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
+        Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
+        if (LAUNCH_DIAGNOSTICS) {
+            ps.stdout(listener);
+            ps.start();
+        } else {
+            ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
+            Proc p = ps.start();
+            // Make sure these stream will get closed later, to release their remote counterpart from the agent's ExportTable. See JENKINS-60960.
+            c.registerForCleanup(p.getStdout());
+            c.registerForCleanup(p.getStderr());
+        }
+        return c;
+    }
+
+    @Nonnull
+    private List<String> binaryLauncherCmd(ShellController c, FilePath ws, @Nullable String shell, String binaryPath,
+                                           String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
+        String logFile = c.getLogFile(ws).getRemote();
+        String resultFile = c.getResultFile(ws).getRemote();
+        String outputFile = c.getOutputFile(ws).getRemote();
+        String controlDirPath = c.controlDir(ws).getRemote();
+
+        List<String> cmd = new ArrayList<>();
+        cmd.add(binaryPath);
+        cmd.add("-controldir=" + controlDirPath);
+        cmd.add("-result=" + resultFile);
+        cmd.add("-log=" + logFile);
+        cmd.add("-cookiename=" + cookieVariable);
+        cmd.add("-cookieval=" + cookieValue);
+        cmd.add("-script=" + scriptPath);
+        if (shell != null) {
+            cmd.add("-shell=" + shell);
+        }
+        if (capturingOutput) {
+            cmd.add("-output=" + outputFile);
+        }
+        // JENKINS-58290: launch in the background. No need to close stdout/err, binary does not write to them.
+        cmd.add("-daemon");
+        if (LAUNCH_DIAGNOSTICS) {
+            cmd.add("-debug");
+        }
+        return cmd;
+    }
+
+    @Nonnull
+    private List<String> scriptLauncherCmd(ShellController c, FilePath ws, @CheckForNull String shell,
+                                           OsType os, String scriptPath, String cookieValue,
+                                           String cookieVariable) throws IOException, InterruptedException {
+        String cmdString;
         FilePath logFile = c.getLogFile(ws);
         FilePath resultFile = c.getResultFile(ws);
         FilePath controlDir = c.controlDir(ws);
-        if (capturingOutput) {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                controlDir,
-                resultFile,
-                logFile,
-                cookieValue,
-                cookieVariable,
-                interpreter,
-                scriptPath,
-                c.getOutputFile(ws),
-                logFile,
-                resultFile, resultFile, resultFile);
-        } else {
-            cmd = String.format("pid=$$; { while [ \\( -d /proc/$pid -o \\! -d /proc/$$ \\) -a -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
-                controlDir,
-                resultFile,
-                logFile,
-                cookieValue,
-                cookieVariable,
-                interpreter,
-                scriptPath,
-                logFile,
-                resultFile, resultFile, resultFile);
-        }
-        cmd = cmd.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+        String interpreter = "";
 
-        args.addAll(Arrays.asList("sh", "-c", cmd));
-        LOGGER.log(Level.FINE, "launching {0}", args);
-        Launcher.ProcStarter ps = launcher.launch().cmds(args).envs(escape(envVars)).pwd(ws).quiet(true);
-        boolean novel;
-        synchronized (encounteredPaths) {
-            Integer cnt = encounteredPaths.get(ws);
-            if (cnt == null) {
-                cnt = 0;
-            }
-            novel = cnt < NOVEL_WORKSPACE_DIAGNOSTICS_COUNT;
-            encounteredPaths.put(ws, cnt + 1);
+        if ((shell != null) && !script.startsWith("#!")) {
+            interpreter = "'" + shell + "' -xe ";
         }
-        if (novel) {
-            // First time in this combination. Display any output from the wrapper script for diagnosis.
-            ps.stdout(listener);
+        if (os == OsType.WINDOWS) { // JENKINS-40255
+            scriptPath = scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
+        }
+        if (capturingOutput) {
+            cmdString = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                                      controlDir,
+                                      resultFile,
+                                      logFile,
+                                      cookieValue,
+                                      cookieVariable,
+                                      interpreter,
+                                      scriptPath,
+                                      c.getOutputFile(ws),
+                                      logFile,
+                                      resultFile, resultFile, resultFile);
         } else {
-            // Second or subsequent time. Suppress output to save a thread.
-            ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
+            cmdString = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                                      controlDir,
+                                      resultFile,
+                                      logFile,
+                                      cookieValue,
+                                      cookieVariable,
+                                      interpreter,
+                                      scriptPath,
+                                      logFile,
+                                      resultFile, resultFile, resultFile);
         }
-        ps.start();
-        return c;
+
+        cmdString = cmdString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
+        List<String> cmd = new ArrayList<>();
+        if (os != OsType.DARWIN) { // JENKINS-25848
+            cmd.add("nohup");
+        }
+        if (LAUNCH_DIAGNOSTICS) {
+            cmd.addAll(Arrays.asList("sh", "-c", cmdString));
+        } else {
+            // JENKINS-58290: launch in the background. Also close stdout/err so docker-exec and the like do not wait.
+            cmd.addAll(Arrays.asList("sh", "-c", "(" + cmdString + ") >&- 2>&- &"));
+        }
+        return cmd;
     }
 
     /*package*/ static final class ShellController extends FileMonitoringController {
 
         /** Last time we checked the timestamp, in nanoseconds on the master. */
         private transient long lastCheck;
-        /** Last-observed modification time of {@link getLogFile} on remote computer, in milliseconds. */
+        /** Last-observed modification time of {@link FileMonitoringTask.FileMonitoringController#getLogFile(FilePath)} on remote computer, in milliseconds. */
         private transient long checkedTimestamp;
 
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */
         private final boolean isZos;
-        
-        private ShellController(FilePath ws, boolean zOsFlag) throws IOException, InterruptedException {
-            super(ws);
+
+        private ShellController(FilePath ws, boolean zOsFlag, @NonNull String cookieValue) throws IOException, InterruptedException {
+            super(ws, cookieValue);
             this.isZos = zOsFlag;
         }
 
@@ -254,6 +313,9 @@ public final class BourneShellScript extends FileMonitoringTask {
                 long currentTimestamp = getLogFile(workspace).lastModified();
                 if (currentTimestamp == 0) {
                     listener.getLogger().println("process apparently never started in " + controlDir);
+                    if (!LAUNCH_DIAGNOSTICS) {
+                        listener.getLogger().println("(running Jenkins temporarily with -D" + LAUNCH_DIAGNOSTICS_PROP + "=true might make the problem clearer)");
+                    }
                     return recordExitStatus(workspace, -2);
                 } else if (checkedTimestamp > 0) {
                     if (currentTimestamp < checkedTimestamp) {
@@ -292,21 +354,6 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     }
 
-    private static final class getOsType extends MasterToSlaveCallable<OsType,RuntimeException> {
-        @Override public OsType call() throws RuntimeException {
-            if (Platform.isDarwin()) {
-              return OsType.DARWIN;
-            } else if (Platform.current() == Platform.WINDOWS) {
-              return OsType.WINDOWS;
-            } else if(Platform.current() == Platform.UNIX && System.getProperty("os.name").equals("z/OS")) {
-              return OsType.ZOS;  
-            } else {
-              return OsType.UNIX; // Default Value
-            }
-        }
-        private static final long serialVersionUID = 1L;
-    }
-
     private static final class getIBMzOsEncoding extends MasterToSlaveCallable<String,RuntimeException> {
         @Override public String call() throws RuntimeException {
             // Not null on z/OS systems
@@ -326,7 +373,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
             if (f.exists() && f.length() > 0) {
                 try {
-                    String fileString = Files.readFirstLine(f, Charset.forName(charset));
+                    String fileString = com.google.common.io.Files.readFirstLine(f, Charset.forName(charset));
                     if (fileString == null || fileString.isEmpty()) {
                         return null;
                     } else {

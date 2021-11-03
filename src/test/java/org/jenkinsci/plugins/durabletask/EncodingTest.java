@@ -24,17 +24,23 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import com.cloudbees.plugins.credentials.Credentials;
+import com.cloudbees.plugins.credentials.CredentialsScope;
+import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
+import com.cloudbees.plugins.credentials.domains.Domain;
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.DumbSlave;
-import hudson.slaves.OfflineCause;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.BlockingQueue;
@@ -43,14 +49,13 @@ import java.util.logging.Level;
 import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.Matchers.containsString;
-import org.jenkinsci.test.acceptance.docker.DockerClassRule;
+import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
-import org.junit.AfterClass;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.*;
+
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
-import org.junit.BeforeClass;
+
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.jvnet.hudson.test.Issue;
@@ -61,40 +66,47 @@ import org.jvnet.hudson.test.LoggerRule;
 @RunWith(Parameterized.class)
 public class EncodingTest {
 
-    @ClassRule public static JenkinsRule r = new JenkinsRule();
-
-    @ClassRule public static DockerClassRule<JavaContainer> dockerUbuntu = new DockerClassRule<>(JavaContainer.class);
-
-    @ClassRule public static LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
-
-    @BeforeClass public static void unixAndDocker() throws Exception {
-        BourneShellScriptTest.unixAndDocker();
-    }
+    @Rule public LoggerRule logging = new LoggerRule().recordPackage(EncodingTest.class, Level.FINE);
+    @Rule public JenkinsRule r = new JenkinsRule();
+    @Rule public DockerRule<JavaContainer> dockerUbuntu = new DockerRule<>(JavaContainer.class);
 
     private static DumbSlave s;
     private static StreamTaskListener listener;
     private static FilePath ws;
     private static Launcher launcher;
 
-    @BeforeClass public static void setUp() throws Exception {
+    @BeforeClass public static void unix() throws Exception {
+        assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
+    }
+    @Before public void setUp() throws Exception {
+        BourneShellScript.USE_BINARY_WRAPPER = true;
+        s = null;
+        BourneShellScriptTest.unix();
+        BourneShellScriptTest.assumeDocker();
         listener = StreamTaskListener.fromStdout();
         launcher = r.jenkins.createLauncher(listener);
-        JavaContainer container = dockerUbuntu.create();
-        s = new DumbSlave("docker", "/home/test", new SSHLauncher(container.ipBound(22), container.port(22), "test", "test", "", "-Dfile.encoding=ISO-8859-1"));
+        JavaContainer container = dockerUbuntu.get();
+        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
+        SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
+        sshLauncher.setJvmOptions("-Dfile.encoding=ISO-8859-1");
+        s = new DumbSlave("docker", "/home/test", sshLauncher);
         r.jenkins.addNode(s);
         r.waitOnline(s);
         assertEquals("ISO-8859-1", s.getChannel().call(new DetectCharset()));
         ws = s.getWorkspaceRoot();
         launcher = s.createLauncher(listener);
     }
+
     private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
         @Override public String call() throws RuntimeException {
             return Charset.defaultCharset().name();
         }
     }
 
-    @AfterClass public static void tearDown() throws Exception {
-        s.toComputer().disconnect(new OfflineCause.UserCause(null, null));
+    @After public void tearDown() throws Exception {
+        if (s != null) {
+            r.jenkins.removeNode(s);
+        }
     }
 
     public static final class TestCase {

@@ -7,3 +7,4 @@ work
 .settings
 .project
 .classpath
+durable_task_monitor_*

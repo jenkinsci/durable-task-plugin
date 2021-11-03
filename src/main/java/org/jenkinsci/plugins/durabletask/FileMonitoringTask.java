@@ -25,16 +25,24 @@
 package org.jenkinsci.plugins.durabletask;
 
 import com.google.common.io.Files;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
+import hudson.PluginWrapper;
 import hudson.Util;
+import hudson.model.Computer;
+import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
 import hudson.remoting.RemoteOutputStream;
 import hudson.remoting.VirtualChannel;
 import hudson.slaves.WorkspaceList;
 import hudson.util.StreamTaskListener;
+
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -52,23 +60,29 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.MasterToSlaveFileCallable;
+import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
 import jenkins.util.Timer;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.commons.io.output.WriterOutputStream;
+import org.apache.commons.lang.StringUtils;
+import org.jenkinsci.remoting.util.IOUtils;
 
 /**
  * A task which forks some external command and then waits for log and status files to be updated/created.
@@ -77,7 +91,9 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     private static final Logger LOGGER = Logger.getLogger(FileMonitoringTask.class.getName());
 
-    private static final String COOKIE = "JENKINS_SERVER_COOKIE";
+    protected static final String COOKIE = "JENKINS_SERVER_COOKIE";
+
+    protected static final String BINARY_RESOURCE_PREFIX = "/io/jenkins/plugins/lib-durable-task/durable_task_monitor_";
 
     /** Value of {@link #charset} used to mean the node’s system default. */
     private static final String SYSTEM_DEFAULT_CHARSET = "SYSTEM_DEFAULT";
@@ -87,8 +103,29 @@ public abstract class FileMonitoringTask extends DurableTask {
      */
     private @CheckForNull String charset;
 
+    /**
+     * Provides the cookie value for a given {@link FilePath} workspace. It also uses
+     * a flag to identify if we want this cookie hash based on MD5 (former/old format) or SHA-256 algorithm.
+     * This method is only used to maintain backward compatibility on stopping tasks that were
+     * launched before the new format was applied.
+     * @param workspace path used to setup the digest
+     * @param boolean to select if we want to use former/old hash algorithm to maintain backward compatibility
+     * @return the cookie value
+     */
+    private static String cookieFor(FilePath workspace, boolean old) {
+        return String.format("durable-%s", old ? Util.getDigestOf(workspace.getRemote()) : digest(workspace.getRemote()));
+    }
+    
     private static String cookieFor(FilePath workspace) {
-        return "durable-" + Util.getDigestOf(workspace.getRemote());
+        return cookieFor(workspace, false);
+    }
+
+    private static String digest(String text) {
+        try {
+            return Util.toHexString(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new Error(e);
+        }
     }
 
     @Override public final Controller launch(EnvVars env, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
@@ -139,6 +176,73 @@ public abstract class FileMonitoringTask extends DurableTask {
         return m;
     }
 
+    protected static FilePath getNodeRoot(FilePath workspace) throws IOException {
+        Computer computer = workspace.toComputer();
+        if (computer == null) {
+            throw new IOException("Unable to retrieve computer for workspace");
+        }
+        Node node = computer.getNode();
+        if (node == null) {
+            throw new IOException("Unable to retrieve node for workspace");
+        }
+        FilePath nodeRoot = node.getRootPath();
+        if (nodeRoot == null) {
+            throw new IOException("Unable to retrieve root path of node");
+        }
+        return nodeRoot;
+    }
+
+    protected static AgentInfo getAgentInfo(FilePath nodeRoot) throws IOException, InterruptedException {
+        final Jenkins jenkins = Jenkins.get();
+        PluginWrapper durablePlugin = jenkins.getPluginManager().getPlugin("durable-task");
+        if (durablePlugin == null) {
+            throw new IOException("Unable to find durable task plugin");
+        }
+        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
+        AgentInfo agentInfo = nodeRoot.act(new AgentInfo.GetAgentInfo(pluginVersion));
+
+        return agentInfo;
+    }
+
+    /**
+     * Returns path of binary on agent. Copies binary to agent if it does not exist
+     */
+    @CheckForNull
+    protected static FilePath requestBinary(FilePath ws, FileMonitoringController c) throws IOException, InterruptedException {
+        FilePath nodeRoot = getNodeRoot(ws);
+        AgentInfo agentInfo = getAgentInfo(nodeRoot);
+        return requestBinary(nodeRoot, agentInfo, ws, c);
+    }
+
+    /**
+     * Returns path of binary on agent. Copies binary to agent if it does not exist
+     */
+    @CheckForNull
+    protected static FilePath requestBinary(FilePath nodeRoot, AgentInfo agentInfo, FilePath ws, FileMonitoringController c) throws IOException, InterruptedException {
+        FilePath binary = null;
+        if (agentInfo.isBinaryCompatible()) {
+            FilePath controlDir = c.controlDir(ws);
+            if (agentInfo.isCachingAvailable()) {
+                binary = nodeRoot.child(agentInfo.getBinaryPath());
+            } else {
+                binary = controlDir.child(agentInfo.getBinaryPath());
+            }
+            String resourcePath = BINARY_RESOURCE_PREFIX + agentInfo.getOs().getNameForBinary() + "_" + agentInfo.getArchitecture();
+            if (agentInfo.getOs() == AgentInfo.OsType.WINDOWS) {
+                resourcePath += ".exe";
+            }
+            try (InputStream binaryStream = BourneShellScript.class.getResourceAsStream(resourcePath)) {
+                if (binaryStream != null) {
+                    if (!agentInfo.isCachingAvailable() || !agentInfo.isBinaryCached()) {
+                        binary.copyFrom(binaryStream);
+                        binary.chmod(0755);
+                    }
+                }
+            }
+        }
+        return binary;
+    }
+
     /**
      * Tails a log file and watches for an exit status file.
      * Must be remotable so that {@link #watch} can transfer the implementation.
@@ -158,6 +262,9 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Only used if {@link #writeLog(FilePath, OutputStream)} is used; not used for {@link #watch}.
          */
         private long lastLocation;
+        
+        /** Store the value for {@link #COOKIE} */
+        private String cookieValue;
 
         /** @see FileMonitoringTask#charset */
         private @CheckForNull String charset;
@@ -166,38 +273,63 @@ public abstract class FileMonitoringTask extends DurableTask {
             return charset;
         }
 
+        private transient List<Closeable> cleanupList;
+
+        void registerForCleanup(Closeable c) {
+            if (cleanupList == null) {
+                cleanupList = new LinkedList<>();
+            }
+            cleanupList.add(c);
+        }
+
         /**
          * {@link #transcodingCharset} on the remote side when using {@link #writeLog}.
-         * May be a wrapper for null; initialized on demand.
+         * May be null; initialized on demand.
          */
-        private transient volatile AtomicReference<Charset> writeLogCs;
+        private transient volatile Charset writeLogCs;
 
+        protected FileMonitoringController(FilePath ws, @NonNull String cookieValue) throws IOException, InterruptedException {
+            setupControlDir(ws);
+            this.cookieValue = cookieValue;
+        }
+        
+        @Deprecated
         protected FileMonitoringController(FilePath ws) throws IOException, InterruptedException {
+            setupControlDir(ws);
+            this.cookieValue = cookieFor(ws, true);
+        }
+        
+        private void setupControlDir(FilePath ws) throws IOException, InterruptedException {
             // can't keep ws reference because Controller is expected to be serializable
             ws.mkdirs();
-            FilePath cd = tempDir(ws).child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
-            cd.mkdirs();
-            controlDir = cd.getRemote();
+            FilePath tmpDir = /* TODO pending JENKINS-61197 fix in baseline */ ws.getParent() != null ? WorkspaceList.tempDir(ws) : null;
+            if (tmpDir != null) {
+                FilePath cd = tmpDir.child("durable-" + Util.getDigestOf(UUID.randomUUID().toString()).substring(0,8));
+                cd.mkdirs();
+                controlDir = cd.getRemote();
+            } else {
+                controlDir = null;
+            }
         }
 
         @Override public final boolean writeLog(FilePath workspace, OutputStream sink) throws IOException, InterruptedException {
             if (writeLogCs == null) {
                 if (SYSTEM_DEFAULT_CHARSET.equals(charset)) {
                     String cs = workspace.act(new TranscodingCharsetForSystemDefault());
-                    writeLogCs = new AtomicReference<>(cs == null ? null : Charset.forName(cs));
+                    writeLogCs = cs == null ? null : Charset.forName(cs);
                 } else {
                     // Does not matter what system default charset on the remote side is, so save the Remoting call.
-                    writeLogCs = new AtomicReference<>(transcodingCharset(charset));
+                    writeLogCs = transcodingCharset(charset);
                 }
                 LOGGER.log(Level.FINE, "remote transcoding charset: {0}", writeLogCs);
             }
             FilePath log = getLogFile(workspace);
             OutputStream transcodedSink;
-            if (writeLogCs.get() == null) {
+            if (writeLogCs == null) {
                 transcodedSink = sink;
             } else {
                 // WriterOutputStream constructor taking Charset calls .replaceWith("?") which we do not want:
-                CharsetDecoder decoder = writeLogCs.get().newDecoder().onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE);
+                CharsetDecoder decoder = writeLogCs.newDecoder().onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE);
                 transcodedSink = new WriterOutputStream(new OutputStreamWriter(sink, StandardCharsets.UTF_8), decoder, 1024, true);
             }
             CountingOutputStream cos = new CountingOutputStream(transcodedSink);
@@ -293,19 +425,26 @@ public abstract class FileMonitoringTask extends DurableTask {
          * Like {@link #getOutput(FilePath, Launcher)} but not requesting a {@link Launcher}, which would not be available in {@link #watch} mode anyway.
          */
         protected byte[] getOutput(FilePath workspace) throws IOException, InterruptedException {
-            return getOutputFile(workspace).act(new MasterToSlaveFileCallable<byte[]>() {
-                @Override public byte[] invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
-                    byte[] buf = FileUtils.readFileToByteArray(f);
-                    ByteBuffer transcoded = maybeTranscode(buf, charset);
-                    if (transcoded == null) {
-                        return buf;
-                    } else {
-                        byte[] buf2 = new byte[transcoded.remaining()];
-                        transcoded.get(buf2);
-                        return buf2;
-                    }
+            return getOutputFile(workspace).act(new GetOutput(charset));
+        }
+
+        private static class GetOutput extends MasterToSlaveFileCallable<byte[]> {
+            private final String charset;
+            GetOutput(String charset) {
+                this.charset = charset;
+            }
+            @Override
+            public byte[] invoke(File file, VirtualChannel vc) throws IOException, InterruptedException {
+                byte[] buf = FileUtils.readFileToByteArray(file);
+                ByteBuffer transcoded = maybeTranscode(buf, charset);
+                if (transcoded == null) {
+                    return buf;
+                } else {
+                    byte[] buf2 = new byte[transcoded.remaining()];
+                    transcoded.get(buf2);
+                    return buf2;
                 }
-            });
+            }
         }
 
         /**
@@ -338,11 +477,17 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public final void stop(FilePath workspace, Launcher launcher) throws IOException, InterruptedException {
-            launcher.kill(Collections.singletonMap(COOKIE, cookieFor(workspace)));
+            if (cookieValue == null) {
+                cookieValue = cookieFor(workspace, true); // To maintain backward compatibility
+            }
+            launcher.kill(Collections.singletonMap(COOKIE, cookieValue));
         }
 
         @Override public void cleanup(FilePath workspace) throws IOException, InterruptedException {
             controlDir(workspace).deleteRecursive();
+            if (cleanupList != null) {
+                cleanupList.stream().forEach(IOUtils::closeQuietly);
+            }
         }
 
         /**
@@ -362,11 +507,6 @@ public abstract class FileMonitoringTask extends DurableTask {
             id = null;
             LOGGER.info("using migrated control directory " + controlDir + " for remainder of this task");
             return cd;
-        }
-
-        // TODO 1.652 use WorkspaceList.tempDir
-        private static FilePath tempDir(FilePath ws) {
-            return ws.sibling(ws.getName() + System.getProperty(WorkspaceList.class.getName(), "@") + "tmp");
         }
 
         /**
@@ -454,6 +594,7 @@ public abstract class FileMonitoringTask extends DurableTask {
             this.handler = handler;
             this.listener = listener;
             cs = FileMonitoringController.transcodingCharset(controller.charset);
+            LOGGER.log(Level.FINE, "remote transcoding charset: {0}", cs);
         }
 
         @Override public void run() {
@@ -472,7 +613,9 @@ public abstract class FileMonitoringTask extends DurableTask {
                         InputStream locallyEncodedStream = Channels.newInputStream(ch.position(lastLocation));
                         InputStream utf8EncodedStream = cs == null ? locallyEncodedStream : new ReaderInputStream(new InputStreamReader(locallyEncodedStream, cs), StandardCharsets.UTF_8);
                         handler.output(utf8EncodedStream);
-                        lastLocationFile.write(Long.toString(ch.position()), null);
+                        long newLocation = ch.position();
+                        lastLocationFile.write(Long.toString(newLocation), null);
+                        LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, logFile});
                     }
                 }
                 if (exitStatus != null) {
@@ -482,11 +625,13 @@ public abstract class FileMonitoringTask extends DurableTask {
                     } else {
                         output = null;
                     }
+                    LOGGER.log(Level.FINE, "exiting with code {0}", exitStatus);
                     handler.exited(exitStatus, output);
                     controller.cleanup(workspace);
                 } else {
                     if (!controller.controlDir(workspace).isDirectory()) {
                         LOGGER.log(Level.WARNING, "giving up on watching nonexistent {0}", controller.controlDir);
+                        controller.cleanup(workspace);
                         return;
                     }
                     // Could use an adaptive timeout as in DurableTaskStep.Execution in polling mode,

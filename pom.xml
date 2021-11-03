@@ -3,7 +3,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>3.19</version>
+        <version>4.19</version>
         <relativePath />
     </parent>
     <artifactId>durable-task</artifactId>
@@ -11,22 +11,21 @@
     <packaging>hpi</packaging>
     <name>Durable Task Plugin</name>
     <description>Library offering an extension point for processes which can run outside of Jenkins yet be monitored.</description>
-    <url>https://wiki.jenkins.io/display/JENKINS/Durable+Task+Plugin</url>
+    <url>https://github.com/jenkinsci/durable-task-plugin</url>
     <licenses>
         <license>
             <name>MIT License</name>
             <url>https://opensource.org/licenses/MIT</url>
         </license>
     </licenses>
-    
+
     <properties>
-        <revision>1.30</revision>
+        <revision>1.40</revision>
         <changelist>-SNAPSHOT</changelist>
-        <jenkins.version>2.7.3</jenkins.version>
-        <java.level>7</java.level>
-        <findbugs.failOnError>false</findbugs.failOnError>
+        <jenkins.version>2.277.1</jenkins.version>
+        <java.level>8</java.level>
     </properties>
-    
+
     <repositories>
         <repository>
             <id>repo.jenkins-ci.org</id>
@@ -48,16 +47,31 @@
     </scm>
     <dependencies>
         <dependency>
+            <groupId>io.jenkins.plugins</groupId>
+            <artifactId>lib-durable-task</artifactId>
+            <version>25.v6c906af81ee2</version>
+        </dependency>
+        <dependency>
             <groupId>org.jenkins-ci.test</groupId>
             <artifactId>docker-fixtures</artifactId>
-            <version>1.8</version>
+            <version>1.11</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-slaves</artifactId>
-            <version>1.25</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.jenkins.tools.bom</groupId>
+                <artifactId>bom-2.277.x</artifactId>
+                <version>887.vae9c8ac09ff7</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>
