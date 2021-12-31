@@ -35,8 +35,8 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 /**
  * Defines how to control the execution of a task after it has started.
@@ -55,7 +55,7 @@ public abstract class Controller implements Serializable {
      * @throws IOException if initiating the watch fails, for example with a {@link ChannelClosedException}
      * @throws UnsupportedOperationException when this mode is not available, so you must fall back to polling {@link #writeLog} and {@link #exitStatus(FilePath, Launcher)}
      */
-    public void watch(@Nonnull FilePath workspace, @Nonnull Handler handler, @Nonnull TaskListener listener) throws IOException, InterruptedException, UnsupportedOperationException {
+    public void watch(@NonNull FilePath workspace, @NonNull Handler handler, @NonNull TaskListener listener) throws IOException, InterruptedException, UnsupportedOperationException {
         throw new UnsupportedOperationException("Asynchronous mode is not implemented in " + getClass().getName());
     }
 
@@ -109,7 +109,7 @@ public abstract class Controller implements Serializable {
      * @see DurableTask#charset
      * @see DurableTask#defaultCharset
      */
-    public @Nonnull byte[] getOutput(@Nonnull FilePath workspace, @Nonnull Launcher launcher) throws IOException, InterruptedException {
+    public @NonNull byte[] getOutput(@NonNull FilePath workspace, @NonNull Launcher launcher) throws IOException, InterruptedException {
         throw new IOException("Did not implement getOutput in " + getClass().getName());
     }
 

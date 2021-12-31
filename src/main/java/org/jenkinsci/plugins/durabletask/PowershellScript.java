@@ -49,7 +49,7 @@ import java.util.logging.Logger;
 
 import org.kohsuke.stapler.DataBoundSetter;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 /**
  * Runs a Powershell script
@@ -180,7 +180,7 @@ public final class PowershellScript extends FileMonitoringTask {
         return c;
     }
 
-    @Nonnull
+    @NonNull
     private List<String> binaryLauncherCmd(PowershellController c, FilePath ws, String binaryPath, String scriptPath, List<String> powershellArgs) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();

@@ -29,8 +29,8 @@ import hudson.Launcher;
 import hudson.remoting.VirtualChannel;
 import java.io.InputStream;
 import java.io.Serializable;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import edu.umd.cs.findbugs.annotations.Nullable;
 
 /**
  * A remote handler which may be sent to an agent and handle process output and results.
@@ -49,7 +49,7 @@ public abstract class Handler implements Serializable { // TODO 2.107+ Serializa
      * @param stream a way to read process output which has not already been handled
      * @throws Exception if anything goes wrong, this watch is deactivated
      */
-    public abstract void output(@Nonnull InputStream stream) throws Exception;
+    public abstract void output(@NonNull InputStream stream) throws Exception;
 
     /**
      * Notification that the process has exited or vanished.

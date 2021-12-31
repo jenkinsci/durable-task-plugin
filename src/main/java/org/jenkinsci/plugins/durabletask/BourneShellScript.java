@@ -46,7 +46,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
@@ -55,8 +55,8 @@ import org.jenkinsci.plugins.durabletask.AgentInfo.OsType;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nullable;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.Nullable;
 import jenkins.MasterToSlaveFileCallable;
 
 /**
@@ -102,7 +102,7 @@ public final class BourneShellScript extends FileMonitoringTask {
     @SuppressWarnings("FieldMayBeFinal")
     private static int HEARTBEAT_MINIMUM_DELTA = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_MINIMUM_DELTA", 2);
 
-    private final @Nonnull String script;
+    private final @NonNull String script;
     private boolean capturingOutput;
 
     @DataBoundConstructor public BourneShellScript(String script) {
@@ -181,7 +181,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         return c;
     }
 
-    @Nonnull
+    @NonNull
     private List<String> binaryLauncherCmd(ShellController c, FilePath ws, @Nullable String shell, String binaryPath,
                                            String scriptPath, String cookieValue, String cookieVariable) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
@@ -211,7 +211,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         return cmd;
     }
 
-    @Nonnull
+    @NonNull
     private List<String> scriptLauncherCmd(ShellController c, FilePath ws, @CheckForNull String shell,
                                            OsType os, String scriptPath, String cookieValue,
                                            String cookieVariable) throws IOException, InterruptedException {

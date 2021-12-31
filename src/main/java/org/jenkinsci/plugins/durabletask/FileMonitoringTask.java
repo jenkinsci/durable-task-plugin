@@ -71,8 +71,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
@@ -454,7 +454,7 @@ public abstract class FileMonitoringTask extends DurableTask {
          * @return a buffer of UTF-8 encoded data ({@link CodingErrorAction#REPLACE} is used),
          *         or null if not performing transcoding because it was not requested or the data was already thought to be in UTF-8
          */
-        private static @CheckForNull ByteBuffer maybeTranscode(@Nonnull byte[] data, @CheckForNull String charset) {
+        private static @CheckForNull ByteBuffer maybeTranscode(@NonNull byte[] data, @CheckForNull String charset) {
             Charset cs = transcodingCharset(charset);
             if (cs == null) {
                 return null;
