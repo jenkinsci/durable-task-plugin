@@ -39,7 +39,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -109,7 +109,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         return c;
     }
 
-    @Nonnull
+    @NonNull
     private List<String> binaryLauncherCmd(BatchController c, FilePath ws, String binaryPath, String scriptPath) throws IOException, InterruptedException {
         String logFile = c.getLogFile(ws).getRemote();
         String resultFile = c.getResultFile(ws).getRemote();
@@ -133,7 +133,7 @@ public final class WindowsBatchScript extends FileMonitoringTask {
         return cmd;
     }
 
-    @Nonnull
+    @NonNull
     @SuppressFBWarnings(value="VA_FORMAT_STRING_USES_NEWLINE", justification="%n from master might be \\n")
     private List<String> scriptLauncherCmd(BatchController c, FilePath ws) throws IOException, InterruptedException {
 

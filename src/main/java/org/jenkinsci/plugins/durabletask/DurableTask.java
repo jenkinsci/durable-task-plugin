@@ -34,7 +34,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 /**
  * A task which may be run asynchronously on a build node and withstand disconnection of the slave agent.
@@ -76,7 +76,7 @@ public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> i
      * If not called, no translation is performed.
      * @param cs the character set in which process output is expected to be
      */
-    public void charset(@Nonnull Charset cs) {
+    public void charset(@NonNull Charset cs) {
         LOGGER.log(Level.WARNING, "The charset method should be overridden in {0}", getClass().getName());
     }
 
