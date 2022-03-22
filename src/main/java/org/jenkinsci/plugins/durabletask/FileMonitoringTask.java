@@ -545,7 +545,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public void watch(FilePath workspace, Handler handler, TaskListener listener) throws IOException, InterruptedException, ClassCastException {
-            workspace.actAsync(new StartWatching(this, handler, listener));
+            workspace.act(new StartWatching(this, handler, listener));
             LOGGER.log(Level.FINE, "started asynchronous watch in {0}", controlDir);
         }
 
