@@ -218,6 +218,7 @@ public abstract class FileMonitoringTask extends DurableTask {
      * Returns path of binary on agent. Copies binary to agent if it does not exist
      */
     @CheckForNull
+    @SuppressFBWarnings(value = "RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE", justification = "TODO needs triage")
     protected static FilePath requestBinary(FilePath nodeRoot, AgentInfo agentInfo, FilePath ws, FileMonitoringController c) throws IOException, InterruptedException {
         FilePath binary = null;
         if (agentInfo.isBinaryCompatible()) {
