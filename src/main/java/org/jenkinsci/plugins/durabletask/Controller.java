@@ -45,7 +45,7 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 public abstract class Controller implements Serializable {
 
     /**
-     * Begins watching the process asynchronously, so that the master may receive notification when output is available or the process has exited.
+     * Begins watching the process asynchronously, so that the controller may receive notification when output is available or the process has exited.
      * This should be called as soon as the process is launched, and thereafter whenever reconnecting to the agent.
      * You should not call {@link #writeLog} or {@link #cleanup} in this case; you do not need to call {@link #exitStatus(FilePath, Launcher)} frequently,
      * though it is advisable to still call it occasionally to verify that the process is still running.

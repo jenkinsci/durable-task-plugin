@@ -34,7 +34,7 @@ import edu.umd.cs.findbugs.annotations.Nullable;
 
 /**
  * A remote handler which may be sent to an agent and handle process output and results.
- * If it needs to communicate with the master, you may use {@link VirtualChannel#export}.
+ * If it needs to communicate with the Controller, you may use {@link VirtualChannel#export}.
  * @see Controller#watch
  */
 public abstract class Handler implements Serializable { // TODO 2.107+ SerializableOnlyOverRemoting
@@ -57,7 +57,7 @@ public abstract class Handler implements Serializable { // TODO 2.107+ Serializa
      * <p>Any metadata associated with the process may be deleted after this call completes, rendering subsequent {@link Controller} calls unsatisfiable.
      * <p>Note that unlike {@link Controller#exitStatus(FilePath, Launcher)}, no specialized {@link Launcher} is available on the agent,
      * so if there are specialized techniques for determining process liveness they will not be considered here;
-     * you still need to occasionally poll for an exit status from the master.
+     * you still need to occasionally poll for an exit status from the controller.
      * @param code the exit code, if known (0 conventionally represents success); may be negative for anomalous conditions such as a missing process
      * @param output standard output captured, if {@link DurableTask#captureOutput} was called; else null
      * @throws Exception if anything goes wrong, this watch is deactivated

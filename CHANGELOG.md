@@ -57,7 +57,7 @@ Release date: 2019-10-22
 > **NOTE**: To revert to previous release behavior, pass the system property
 > `org.jenkinsci.plugins.durabletask.BourneShellScript.FORCE_SHELL_WRAPPER=true` to the Java command line used to start Jenkins.
 
--   Update ssh-slaves ([PR \#100](https://github.com/jenkinsci/durable-task-plugin/pull/100))
+-   Update ssh-agents ([PR \#100](https://github.com/jenkinsci/durable-task-plugin/pull/100))
 -   Do not fail tests when run on a machine without Docker installed.
     ([PR \#101](https://github.com/jenkinsci/durable-task-plugin/pull/101))
 -   Improve watcher logging
@@ -89,7 +89,7 @@ Release date: 2019-07-05
     be used to enable zombie-reaping in docker containers (--init) or kubernetes pods (shared
     process namespaces).
 -   Bugfix: Use `sh` to run shell scripts rather than attempting to
-    use the absolute path to the default shell from the master on
+    use the absolute path to the default shell from the Controller on
     agents. ([PR \#95](https://github.com/jenkinsci/durable-task-plugin/pull/95))
 -   Bugfix: Make PowerShell exit codes propagate correctly. Fixes a
     regression from version 1.23
@@ -129,7 +129,7 @@ Release date: 2018-09-25
     processes from 15 seconds to 5 minutes
     ([JENKINS-48300](https://issues.jenkins-ci.org/browse/JENKINS-48300))
 -   Developer: Define API for pushing durable task logs from build
-    agents directly instead of having the Jenkins master pull logs from
+    agents directly instead of having the Jenkins controller pull logs from
     build agents
     ([JENKINS-52165](https://issues.jenkins-ci.org/browse/JENKINS-52165))
 
@@ -338,7 +338,7 @@ Release date: 2015-12-03
 Release date: 2015-04-08
 
 -   Do not kill a one-shot agent merely because a flyweight task
-    happened to run on it (rather than on master as usual). Works around
+    happened to run on it (rather than on the Controller as usual). Works around
     a bug in the Multibranch API plugin.
 
 ### Version 1.5

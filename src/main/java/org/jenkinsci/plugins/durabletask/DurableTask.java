@@ -37,7 +37,7 @@ import java.util.logging.Logger;
 import edu.umd.cs.findbugs.annotations.NonNull;
 
 /**
- * A task which may be run asynchronously on a build node and withstand disconnection of the slave agent.
+ * A task which may be run asynchronously on a build node and withstand disconnection of the agent.
  * Should have a descriptor, and a {@code config.jelly} for form data binding.
  */
 public abstract class DurableTask extends AbstractDescribableImpl<DurableTask> implements ExtensionPoint {

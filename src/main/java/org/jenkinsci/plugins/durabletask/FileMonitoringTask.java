@@ -640,7 +640,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     Timer.get().schedule(this, 100, TimeUnit.MILLISECONDS);
                 }
             } catch (Exception x) {
-                // note that LOGGER here is going to the agent log, not master log
+                // note that LOGGER here is going to the agent log, not the Controller log
                 LOGGER.log(Level.WARNING, "giving up on watching " + controller.controlDir, x);
                 // Typically this will have been inside Handler.output, e.g.:
                 // hudson.remoting.ChannelClosedException: channel is already closed
