@@ -322,7 +322,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     // Does not matter what system default charset on the remote side is, so save the Remoting call.
                     writeLogCs = transcodingCharset(charset);
                 }
-                LOGGER.log(Level.FINE, "remote transcoding charset: {0}", writeLogCs);
+                LOGGER.log(Level.FINER, "remote transcoding charset: {0}", writeLogCs);
             }
             FilePath log = getLogFile(workspace);
             OutputStream transcodedSink;
@@ -341,7 +341,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                 transcodedSink.flush(); // writeImmediately flag does not seem to work
                 long written = cos.getByteCount();
                 if (written > 0) {
-                    LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {written, log});
+                    LOGGER.log(Level.FINER, "copied {0} bytes from {1}", new Object[] {written, log});
                     lastLocation += written;
                 }
             }
@@ -616,7 +616,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                         handler.output(utf8EncodedStream);
                         long newLocation = ch.position();
                         lastLocationFile.write(Long.toString(newLocation), null);
-                        LOGGER.log(Level.FINE, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, logFile});
+                        LOGGER.log(Level.FINER, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, logFile});
                     }
                 }
                 if (exitStatus != null) {
