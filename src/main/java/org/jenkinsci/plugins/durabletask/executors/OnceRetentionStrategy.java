@@ -48,7 +48,7 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
     private static final Logger LOGGER = Logger.getLogger(OnceRetentionStrategy.class.getName());
 
     private transient boolean terminating;
-    
+
     private int idleMinutes;
 
     /**
@@ -72,7 +72,15 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
             }
         }
         // if the agent is not done and it is offline we should trigger a relaunch
-        if (!terminating && c.isOffline()) {
+        // do not do this whilst we hold the lock, as connect is documented only as "This method may return immediately"
+        // so lets not presume any asynchronous nature and instead that this could be a long blocking op.
+        boolean shouldRestart = false;
+        synchronized (this) {
+            if (!terminating && c.isOffline() && !disabled) {
+                shouldRestart = true;
+            }
+        }
+        if (shouldRestart) {
             LOGGER.log(Level.FINE, "Attempting relaunch of {0}", c.getName());
             c.connect(false);
         }
