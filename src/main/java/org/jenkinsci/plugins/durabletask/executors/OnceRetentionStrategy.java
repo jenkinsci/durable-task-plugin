@@ -76,7 +76,7 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         // so lets not presume any asynchronous nature and instead that this could be a long blocking op.
         boolean shouldRestart = false;
         synchronized (this) {
-            if (!terminating && c.isOffline() && !disabled) {
+            if (!terminating && c.isOffline() && c.isLaunchSupported() && !disabled) {
                 shouldRestart = true;
             }
         }
