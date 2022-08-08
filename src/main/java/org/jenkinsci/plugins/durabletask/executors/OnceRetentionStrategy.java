@@ -71,7 +71,11 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
                 done(c);
             }
         }
-
+        // if the agent is not done and it is offline we should trigger a relaunch
+        if (!terminating && c.isOffline()) {
+            LOGGER.log(Level.FINE, "Attempting relaunch of {0}", c.getName());
+            c.connect(false);
+        }
         // Return one because we want to check every minute if idle.
         return 1;
     }
