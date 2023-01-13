@@ -120,12 +120,30 @@ public final class AgentInfo implements Serializable {
                 }
             }
 
-            // Note: This will only determine the architecture bits of the JVM.
-            String bits = System.getProperty("sun.arch.data.model");
-            if (bits.equals("64") || bits.equals("32")) {
-                archType += bits;
+            if (os == OsType.LINUX) {
+                archType = arch;
+                switch (arch) {
+                	case "aarch64":
+                	case "ppc64le":
+                		archType = arch;
+                		break;
+                	case "amd64":
+                		archType = "64";
+                		break;
+                	case "x86":
+                		archType = "32";
+                		break;
+                	default:
+                		archType = NOT_SUPPORTED;
+                }
             } else {
-                archType += NOT_SUPPORTED;
+                // Note: This will only determine the architecture bits of the JVM.
+                String bits = System.getProperty("sun.arch.data.model");
+	            if (bits.equals("64") || bits.equals("32")) {
+	                archType += bits;
+	            } else {
+	                archType += NOT_SUPPORTED;
+	            }
             }
 
             boolean binaryCompatible;
