@@ -238,6 +238,8 @@ public abstract class FileMonitoringTask extends DurableTask {
                         binary.copyFrom(binaryStream);
                         binary.chmod(0755);
                     }
+                } else {
+                	return null;
                 }
             }
         }
