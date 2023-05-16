@@ -48,7 +48,7 @@
         <dependency>
             <groupId>io.jenkins.plugins</groupId>
             <artifactId>lib-durable-task</artifactId>
-            <version>39.v29675a_4d96e3</version>
+            <version>40.vc66cf8fb_4613</version>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.test</groupId>
