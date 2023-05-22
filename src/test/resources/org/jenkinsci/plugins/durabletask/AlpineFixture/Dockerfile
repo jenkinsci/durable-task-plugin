@@ -1,4 +1,4 @@
-FROM jenkinsci/slave:3.19-1-alpine
+FROM jenkins/agent:alpine-jdk11
 USER root
 RUN apk add --update --no-cache openssh
 RUN ssh-keygen -A
