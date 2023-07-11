@@ -268,7 +268,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
     /*package*/ static final class ShellController extends FileMonitoringController {
 
-        /** Last time we checked the timestamp, in nanoseconds on the master. */
+        /** Last time we checked the timestamp, in nanoseconds on the Controller. */
         private transient long lastCheck;
         /** Last-observed modification time of {@link FileMonitoringTask.FileMonitoringController#getLogFile(FilePath)} on remote computer, in milliseconds. */
         private transient long checkedTimestamp;

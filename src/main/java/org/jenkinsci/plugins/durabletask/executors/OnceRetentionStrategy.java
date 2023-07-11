@@ -40,7 +40,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Retention strategy that allows a cloud slave to run only a single build before disconnecting.
+ * Retention strategy that allows a cloud agent to run only a single build before disconnecting.
  * A {@link ContinuableExecutable} does not trigger termination.
  */
 public final class OnceRetentionStrategy extends CloudRetentionStrategy implements ExecutorListener {
@@ -53,7 +53,7 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
 
     /**
      * Creates the retention strategy.
-     * @param idleMinutes number of minutes of idleness after which to kill the slave; serves a backup in case the strategy fails to detect the end of a task
+     * @param idleMinutes number of minutes of idleness after which to kill the agent; serves a backup in case the strategy fails to detect the end of a task
      */
     public OnceRetentionStrategy(int idleMinutes) {
         super(idleMinutes);
@@ -62,7 +62,7 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
 
     @Override
     public long check(final AbstractCloudComputer c) {
-        // When the slave is idle we should disable accepting tasks and check to see if it is already trying to
+        // When the agent is idle we should disable accepting tasks and check to see if it is already trying to
         // terminate. If it's not already trying to terminate then lets terminate manually.
         if (c.isIdle() && !disabled) {
             final long idleMilliseconds = System.currentTimeMillis() - c.getIdleStartMilliseconds();
