@@ -24,9 +24,6 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import com.google.common.io.Files;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.FilePath;
@@ -58,6 +55,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
@@ -386,20 +384,15 @@ public abstract class FileMonitoringTask extends DurableTask {
             @CheckForNull
             public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 if (f.exists() && f.length() > 0) {
-                    try {
-                        String fileString = Files.readFirstLine(f, Charset.defaultCharset());
-                        if (fileString == null || fileString.isEmpty()) {
-                            return null;
-                        } else {
-                            fileString = fileString.trim();
-                            if (fileString.isEmpty()) {
-                                return null;
-                            } else {
-                                return Integer.parseInt(fileString);
-                            }
+                    String text = Files.readString(f.toPath(), Charset.defaultCharset()).trim();
+                    if (text.isEmpty()) {
+                        return null;
+                    } else {
+                        try {
+                            return Integer.valueOf(text);
+                        } catch (NumberFormatException x) {
+                            throw new IOException("corrupted content in " + f + ": " + x, x);
                         }
-                    } catch (NumberFormatException x) {
-                        throw new IOException("corrupted content in " + f + ": " + x, x);
                     }
                 }
                 return null;
