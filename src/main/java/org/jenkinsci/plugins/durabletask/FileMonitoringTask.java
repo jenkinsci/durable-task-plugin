@@ -541,8 +541,8 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public void watch(FilePath workspace, Handler handler, TaskListener listener) throws IOException, InterruptedException, ClassCastException {
-            workspace.act(new StartWatching(this, handler, listener));
-            LOGGER.log(Level.FINE, "started asynchronous watch in {0}", controlDir);
+            workspace.actAsync(new StartWatching(this, handler, listener));
+            LOGGER.log(Level.FINE, "started asynchronous watch in " + controlDir, new Throwable());
         }
 
         /**
@@ -585,6 +585,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         private final @CheckForNull Charset cs;
 
         Watcher(FileMonitoringController controller, FilePath workspace, Handler handler, TaskListener listener) {
+            LOGGER.log(Level.FINE, "starting " + this, new Throwable());
             this.controller = controller;
             this.workspace = workspace;
             this.handler = handler;
@@ -611,7 +612,8 @@ public abstract class FileMonitoringTask extends DurableTask {
                         handler.output(utf8EncodedStream);
                         long newLocation = ch.position();
                         lastLocationFile.write(Long.toString(newLocation), null);
-                        LOGGER.log(Level.FINER, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, logFile});
+                        long delta = newLocation - lastLocation;
+                        LOGGER.finer(() -> this + " copied " + delta + " bytes from " + logFile);
                     }
                 }
                 if (exitStatus != null) {
@@ -621,7 +623,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     } else {
                         output = null;
                     }
-                    LOGGER.log(Level.FINE, "exiting with code {0}", exitStatus);
+                    LOGGER.fine(() -> this + " exiting with code " + exitStatus);
                     handler.exited(exitStatus, output);
                     controller.cleanup(workspace);
                 } else {
