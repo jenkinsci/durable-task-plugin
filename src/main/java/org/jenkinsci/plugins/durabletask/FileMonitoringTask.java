@@ -71,6 +71,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
+import hudson.remoting.ChannelClosedException;
+import java.io.EOFException;
+import java.nio.channels.ClosedChannelException;
+import java.util.stream.Stream;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
@@ -576,6 +580,21 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     }
 
+    // TODO https://github.com/jenkinsci/remoting/pull/657
+    private static boolean isClosedChannelException(Throwable t) {
+        if (t instanceof ClosedChannelException) {
+            return true;
+        } else if (t instanceof ChannelClosedException) {
+            return true;
+        } else if (t instanceof EOFException) {
+            return true;
+        } else if (t == null) {
+            return false;
+        } else {
+            return isClosedChannelException(t.getCause()) || Stream.of(t.getSuppressed()).anyMatch(FileMonitoringTask::isClosedChannelException);
+        }
+    }
+
     private static class Watcher implements Runnable {
 
         private final FileMonitoringController controller;
@@ -638,7 +657,11 @@ public abstract class FileMonitoringTask extends DurableTask {
                 }
             } catch (Exception x) {
                 // note that LOGGER here is going to the agent log, not master log
-                LOGGER.log(Level.WARNING, "giving up on watching " + controller.controlDir, x);
+                if (isClosedChannelException(x)) {
+                    LOGGER.warning(() -> this + " giving up on watching " + controller.controlDir);
+                } else {
+                    LOGGER.log(Level.WARNING, this + " giving up on watching " + controller.controlDir, x);
+                }
                 // Typically this will have been inside Handler.output, e.g.:
                 // hudson.remoting.ChannelClosedException: channel is already closed
                 //         at hudson.remoting.Channel.send(Channel.java:667)
