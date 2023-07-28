@@ -71,6 +71,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
+import hudson.remoting.ChannelClosedException;
+import java.io.EOFException;
+import java.nio.channels.ClosedChannelException;
+import java.util.stream.Stream;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
@@ -541,8 +545,8 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public void watch(FilePath workspace, Handler handler, TaskListener listener) throws IOException, InterruptedException, ClassCastException {
-            workspace.act(new StartWatching(this, handler, listener));
-            LOGGER.log(Level.FINE, "started asynchronous watch in {0}", controlDir);
+            workspace.actAsync(new StartWatching(this, handler, listener));
+            LOGGER.log(Level.FINE, "started asynchronous watch in " + controlDir, new Throwable());
         }
 
         /**
@@ -576,6 +580,21 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     }
 
+    // TODO https://github.com/jenkinsci/remoting/pull/657
+    private static boolean isClosedChannelException(Throwable t) {
+        if (t instanceof ClosedChannelException) {
+            return true;
+        } else if (t instanceof ChannelClosedException) {
+            return true;
+        } else if (t instanceof EOFException) {
+            return true;
+        } else if (t == null) {
+            return false;
+        } else {
+            return isClosedChannelException(t.getCause()) || Stream.of(t.getSuppressed()).anyMatch(FileMonitoringTask::isClosedChannelException);
+        }
+    }
+
     private static class Watcher implements Runnable {
 
         private final FileMonitoringController controller;
@@ -585,6 +604,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         private final @CheckForNull Charset cs;
 
         Watcher(FileMonitoringController controller, FilePath workspace, Handler handler, TaskListener listener) {
+            LOGGER.log(Level.FINE, "starting " + this, new Throwable());
             this.controller = controller;
             this.workspace = workspace;
             this.handler = handler;
@@ -611,7 +631,8 @@ public abstract class FileMonitoringTask extends DurableTask {
                         handler.output(utf8EncodedStream);
                         long newLocation = ch.position();
                         lastLocationFile.write(Long.toString(newLocation), null);
-                        LOGGER.log(Level.FINER, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, logFile});
+                        long delta = newLocation - lastLocation;
+                        LOGGER.finer(() -> this + " copied " + delta + " bytes from " + logFile);
                     }
                 }
                 if (exitStatus != null) {
@@ -621,7 +642,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     } else {
                         output = null;
                     }
-                    LOGGER.log(Level.FINE, "exiting with code {0}", exitStatus);
+                    LOGGER.fine(() -> this + " exiting with code " + exitStatus);
                     handler.exited(exitStatus, output);
                     controller.cleanup(workspace);
                 } else {
@@ -636,7 +657,11 @@ public abstract class FileMonitoringTask extends DurableTask {
                 }
             } catch (Exception x) {
                 // note that LOGGER here is going to the agent log, not master log
-                LOGGER.log(Level.WARNING, "giving up on watching " + controller.controlDir, x);
+                if (isClosedChannelException(x)) {
+                    LOGGER.warning(() -> this + " giving up on watching " + controller.controlDir);
+                } else {
+                    LOGGER.log(Level.WARNING, this + " giving up on watching " + controller.controlDir, x);
+                }
                 // Typically this will have been inside Handler.output, e.g.:
                 // hudson.remoting.ChannelClosedException: channel is already closed
                 //         at hudson.remoting.Channel.send(Channel.java:667)

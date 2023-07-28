@@ -31,13 +31,15 @@ import java.io.InputStream;
 import java.io.Serializable;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.Nullable;
+import hudson.remoting.Asynchronous;
+import org.jenkinsci.remoting.SerializableOnlyOverRemoting;
 
 /**
  * A remote handler which may be sent to an agent and handle process output and results.
  * If it needs to communicate with the master, you may use {@link VirtualChannel#export}.
  * @see Controller#watch
  */
-public abstract class Handler implements Serializable { // TODO 2.107+ SerializableOnlyOverRemoting
+public abstract class Handler implements SerializableOnlyOverRemoting {
 
     /**
      * Notification that new process output is available.
@@ -60,8 +62,8 @@ public abstract class Handler implements Serializable { // TODO 2.107+ Serializa
      * you still need to occasionally poll for an exit status from the master.
      * @param code the exit code, if known (0 conventionally represents success); may be negative for anomalous conditions such as a missing process
      * @param output standard output captured, if {@link DurableTask#captureOutput} was called; else null
-     * @throws Exception if anything goes wrong, this watch is deactivated
      */
+    @Asynchronous
     public abstract void exited(int code, @Nullable byte[] output) throws Exception;
 
 }
