@@ -602,6 +602,7 @@ public abstract class FileMonitoringTask extends DurableTask {
         private final Handler handler;
         private final TaskListener listener;
         private final @CheckForNull Charset cs;
+        private long lastLocation = -1;
 
         Watcher(FileMonitoringController controller, FilePath workspace, Handler handler, TaskListener listener) {
             LOGGER.log(Level.FINE, "starting " + this, new Throwable());
@@ -616,10 +617,17 @@ public abstract class FileMonitoringTask extends DurableTask {
         @Override public void run() {
             try {
                 Integer exitStatus = controller.exitStatus(workspace, listener); // check before collecting output, in case the process is just now finishing
-                long lastLocation = 0;
-                FilePath lastLocationFile = controller.getLastLocationFile(workspace);
-                if (lastLocationFile.exists()) {
-                    lastLocation = Long.parseLong(lastLocationFile.readToString());
+                if (lastLocation == -1) {
+                    FilePath lastLocationFile = controller.getLastLocationFile(workspace);
+                    if (lastLocationFile.exists()) {
+                        lastLocation = Long.parseLong(lastLocationFile.readToString());
+                        LOGGER.finest(() -> "Loaded lastLocation=" + lastLocation);
+                    } else {
+                        lastLocation = 0;
+                        LOGGER.finest("New watch, lastLocation=0");
+                    }
+                } else {
+                    LOGGER.finest(() -> "Using cached lastLocation=" + lastLocation);
                 }
                 FilePath logFile = controller.getLogFile(workspace);
                 long len = logFile.length();
@@ -630,9 +638,11 @@ public abstract class FileMonitoringTask extends DurableTask {
                         InputStream utf8EncodedStream = cs == null ? locallyEncodedStream : new ReaderInputStream(new InputStreamReader(locallyEncodedStream, cs), StandardCharsets.UTF_8);
                         handler.output(utf8EncodedStream);
                         long newLocation = ch.position();
-                        lastLocationFile.write(Long.toString(newLocation), null);
+                        // TODO use AtomicFileWriter or equivalent?
+                        controller.getLastLocationFile(workspace).write(Long.toString(newLocation), null);
                         long delta = newLocation - lastLocation;
                         LOGGER.finer(() -> this + " copied " + delta + " bytes from " + logFile);
+                        lastLocation = newLocation;
                     }
                 }
                 if (exitStatus != null) {
