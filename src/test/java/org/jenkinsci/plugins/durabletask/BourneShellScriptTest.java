@@ -35,6 +35,7 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Platform;
 import hudson.Proc;
+import hudson.model.Node;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.Channel;
@@ -86,7 +87,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
+    ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
 }
 
 @RunWith(Parameterized.class)
@@ -113,11 +114,11 @@ public class BourneShellScriptTest {
         assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
     }
 
-    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
+    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINEST);
 
     private TestPlatform platform;
     private StreamTaskListener listener;
-    private Slave s;
+    private Node s;
     private FilePath ws;
     private Launcher launcher;
 
@@ -128,6 +129,9 @@ public class BourneShellScriptTest {
 
     @Before public void prepareAgentForPlatform() throws Exception {
         switch (platform) {
+            case ON_CONTROLLER:
+                s = j.jenkins;
+                break;
             case NATIVE:
                 BourneShellScript.USE_BINARY_WRAPPER = true;
                 s = j.createOnlineSlave();
@@ -141,13 +145,15 @@ public class BourneShellScriptTest {
             case UBUNTU_NO_BINARY:
                 assumeDocker();
                 s = prepareAgentDocker();
-                j.jenkins.addNode(s);
-                j.waitOnline(s);
+                if (s instanceof Slave) {
+                    j.jenkins.addNode(s);
+                    j.waitOnline((Slave) s);
+                }
                 break;
             default:
                 throw new AssertionError(platform);
         }
-        ws = s.getWorkspaceRoot().child("ws");
+        ws = (s instanceof Slave ? ((Slave) s).getWorkspaceRoot() : j.jenkins.getRootPath()).child("ws");
         launcher = s.createLauncher(listener);
     }
 
