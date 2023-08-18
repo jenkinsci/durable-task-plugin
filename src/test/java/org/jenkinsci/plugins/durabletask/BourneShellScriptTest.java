@@ -513,7 +513,7 @@ public class BourneShellScriptTest {
         String version = j.getPluginManager().getPlugin("durable-task").getVersion();
         version = StringUtils.substringBefore(version, "-");
         String binaryName = "durable_task_monitor_" + version + "_" + os + "_" + architecture;
-        FilePath binaryPath = ws.getParent().getParent().child("caches/durable-task/" + binaryName);
+        FilePath binaryPath = s.getRootPath().child("caches/durable-task/" + binaryName);
         assertFalse(binaryPath.exists());
 
         BourneShellScript script = new BourneShellScript("echo hello");
