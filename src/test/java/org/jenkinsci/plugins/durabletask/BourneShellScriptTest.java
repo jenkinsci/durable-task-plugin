@@ -130,6 +130,7 @@ public class BourneShellScriptTest {
     @Before public void prepareAgentForPlatform() throws Exception {
         switch (platform) {
             case ON_CONTROLLER:
+                BourneShellScript.USE_BINARY_WRAPPER = true;
                 s = j.jenkins;
                 break;
             case NATIVE:
@@ -212,6 +213,7 @@ public class BourneShellScriptTest {
     @Test public void smokeTest() throws Exception {
         int sleepSeconds;
         switch (platform) {
+            case ON_CONTROLLER:
             case NATIVE:
                 sleepSeconds = 0;
                 break;
@@ -438,6 +440,7 @@ public class BourneShellScriptTest {
     @Test public void backgroundLaunch() throws IOException, InterruptedException {
         int sleepSeconds;
         switch (platform) {
+            case ON_CONTROLLER:
             case NATIVE:
             case CENTOS:
             case UBUNTU:
@@ -483,6 +486,7 @@ public class BourneShellScriptTest {
         String os;
         String architecture;
         switch (platform) {
+            case ON_CONTROLLER:
             case NATIVE:
                 if (Platform.isDarwin()) {
                     os = "darwin";
@@ -608,6 +612,7 @@ public class BourneShellScriptTest {
     private String setPsFormat() {
         String cmdCol = null;
         switch (platform) {
+            case ON_CONTROLLER:
             case NATIVE:
                 cmdCol = Platform.isDarwin() ? "comm" : "cmd";
                 break;
