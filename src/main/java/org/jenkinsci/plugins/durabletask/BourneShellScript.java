@@ -127,6 +127,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         OsType os = agentInfo.getOs();
         String scriptEncodingCharset = "UTF-8";
+        String jenkinsResultTxtEncoding = null;
         if(os == OsType.ZOS) {
             Charset zOSSystemEncodingCharset = Charset.forName(ws.act(new getIBMzOsEncoding()));
             if(SYSTEM_DEFAULT_CHARSET.equals(getCharset())) {
@@ -134,9 +135,10 @@ public final class BourneShellScript extends FileMonitoringTask {
                 charset(zOSSystemEncodingCharset);
             }
             scriptEncodingCharset = zOSSystemEncodingCharset.name();
+            jenkinsResultTxtEncoding = zOSSystemEncodingCharset.name();
         }
 
-        ShellController c = new ShellController(ws,(os == OsType.ZOS), cookieValue);
+        ShellController c = new ShellController(ws,(os == OsType.ZOS), cookieValue, jenkinsResultTxtEncoding);
         FilePath shf = c.getScriptFile(ws);
 
         shf.write(script, scriptEncodingCharset);
@@ -275,10 +277,13 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */
         private final boolean isZos;
+        /** Encoding of jenkins-result.txt if on z/OS, null otherwise          */
+        private String jenkinsResultTxtEncoding;
 
-        private ShellController(FilePath ws, boolean zOsFlag, @NonNull String cookieValue) throws IOException, InterruptedException {
+        private ShellController(FilePath ws, boolean zOsFlag, @NonNull String cookieValue, String jenkinsResultTxtEncoding) throws IOException, InterruptedException {
             super(ws, cookieValue);
             this.isZos = zOsFlag;
+            this.jenkinsResultTxtEncoding = jenkinsResultTxtEncoding == null ? getCharset() : jenkinsResultTxtEncoding;
         }
 
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
@@ -295,7 +300,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             if(isZos) {
                 // We need to transcode status file from EBCDIC only on z/OS platform
                 FilePath statusFile = getResultFile(workspace);
-                status = statusFile.act(new StatusCheckWithEncoding(getCharset()));
+                status = statusFile.act(new StatusCheckWithEncoding(jenkinsResultTxtEncoding));
             }
             else {
                 status = super.exitStatus(workspace, listener);
@@ -385,6 +390,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                         }
                     }
                 } catch (NumberFormatException x) {
+                    LOGGER.log(Level.WARNING, "corrupted content in {0} when reading with charset {1}: {2}", new Object[] {f, charset, x});
                     throw new IOException("corrupted content in " + f + ": " + x, x);
                 }
             }
