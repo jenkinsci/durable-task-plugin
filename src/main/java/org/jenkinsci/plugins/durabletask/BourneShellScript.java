@@ -390,8 +390,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                         }
                     }
                 } catch (NumberFormatException x) {
-                    LOGGER.log(Level.WARNING, "corrupted content in {0} when reading with charset {1}: {2}", new Object[] {f, charset, x});
-                    throw new IOException("corrupted content in " + f + ": " + x, x);
+                    throw new IOException("corrupted content in " + f + " using " + charset + ": " + x, x);
                 }
             }
             return null;
