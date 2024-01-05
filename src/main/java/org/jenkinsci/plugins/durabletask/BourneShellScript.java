@@ -283,7 +283,7 @@ public final class BourneShellScript extends FileMonitoringTask {
         private ShellController(FilePath ws, boolean zOsFlag, @NonNull String cookieValue, String jenkinsResultTxtEncoding) throws IOException, InterruptedException {
             super(ws, cookieValue);
             this.isZos = zOsFlag;
-            this.jenkinsResultTxtEncoding = jenkinsResultTxtEncoding == null ? getCharset() : jenkinsResultTxtEncoding;
+            this.jenkinsResultTxtEncoding = jenkinsResultTxtEncoding;
         }
 
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
@@ -300,7 +300,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             if(isZos) {
                 // We need to transcode status file from EBCDIC only on z/OS platform
                 FilePath statusFile = getResultFile(workspace);
-                status = statusFile.act(new StatusCheckWithEncoding(jenkinsResultTxtEncoding));
+                status = statusFile.act(new StatusCheckWithEncoding(jenkinsResultTxtEncoding != null ? jenkinsResultTxtEncoding : getCharset()));
             }
             else {
                 status = super.exitStatus(workspace, listener);
