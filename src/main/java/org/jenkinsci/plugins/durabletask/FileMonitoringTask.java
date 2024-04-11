@@ -24,9 +24,6 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import com.google.common.io.Files;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.FilePath;
@@ -58,6 +55,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
@@ -73,6 +71,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
+import hudson.remoting.ChannelClosedException;
+import java.io.EOFException;
+import java.nio.channels.ClosedChannelException;
+import java.util.stream.Stream;
 import jenkins.MasterToSlaveFileCallable;
 import jenkins.model.Jenkins;
 import jenkins.security.MasterToSlaveCallable;
@@ -218,7 +220,7 @@ public abstract class FileMonitoringTask extends DurableTask {
      * Returns path of binary on agent. Copies binary to agent if it does not exist
      */
     @CheckForNull
-    @SuppressFBWarnings(value = "RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE", justification = "TODO needs triage")
+    @SuppressFBWarnings(value = {"NP_LOAD_OF_KNOWN_NULL_VALUE", "RCN_REDUNDANT_NULLCHECK_OF_NULL_VALUE"}, justification = "TODO needs triage")
     protected static FilePath requestBinary(FilePath nodeRoot, AgentInfo agentInfo, FilePath ws, FileMonitoringController c) throws IOException, InterruptedException {
         FilePath binary = null;
         if (agentInfo.isBinaryCompatible()) {
@@ -238,6 +240,8 @@ public abstract class FileMonitoringTask extends DurableTask {
                         binary.copyFrom(binaryStream);
                         binary.chmod(0755);
                     }
+                } else {
+                	return null;
                 }
             }
         }
@@ -384,20 +388,15 @@ public abstract class FileMonitoringTask extends DurableTask {
             @CheckForNull
             public Integer invoke(File f, VirtualChannel channel) throws IOException, InterruptedException {
                 if (f.exists() && f.length() > 0) {
-                    try {
-                        String fileString = Files.readFirstLine(f, Charset.defaultCharset());
-                        if (fileString == null || fileString.isEmpty()) {
-                            return null;
-                        } else {
-                            fileString = fileString.trim();
-                            if (fileString.isEmpty()) {
-                                return null;
-                            } else {
-                                return Integer.parseInt(fileString);
-                            }
+                    String text = Files.readString(f.toPath(), Charset.defaultCharset()).trim();
+                    if (text.isEmpty()) {
+                        return null;
+                    } else {
+                        try {
+                            return Integer.valueOf(text);
+                        } catch (NumberFormatException x) {
+                            throw new IOException("corrupted content in " + f + ": " + x, x);
                         }
-                    } catch (NumberFormatException x) {
-                        throw new IOException("corrupted content in " + f + ": " + x, x);
                     }
                 }
                 return null;
@@ -546,8 +545,8 @@ public abstract class FileMonitoringTask extends DurableTask {
         }
 
         @Override public void watch(FilePath workspace, Handler handler, TaskListener listener) throws IOException, InterruptedException, ClassCastException {
-            workspace.act(new StartWatching(this, handler, listener));
-            LOGGER.log(Level.FINE, "started asynchronous watch in {0}", controlDir);
+            workspace.actAsync(new StartWatching(this, handler, listener));
+            LOGGER.log(Level.FINE, "started asynchronous watch in " + controlDir, new Throwable());
         }
 
         /**
@@ -581,6 +580,21 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     }
 
+    // TODO https://github.com/jenkinsci/remoting/pull/657
+    private static boolean isClosedChannelException(Throwable t) {
+        if (t instanceof ClosedChannelException) {
+            return true;
+        } else if (t instanceof ChannelClosedException) {
+            return true;
+        } else if (t instanceof EOFException) {
+            return true;
+        } else if (t == null) {
+            return false;
+        } else {
+            return isClosedChannelException(t.getCause()) || Stream.of(t.getSuppressed()).anyMatch(FileMonitoringTask::isClosedChannelException);
+        }
+    }
+
     private static class Watcher implements Runnable {
 
         private final FileMonitoringController controller;
@@ -588,8 +602,10 @@ public abstract class FileMonitoringTask extends DurableTask {
         private final Handler handler;
         private final TaskListener listener;
         private final @CheckForNull Charset cs;
+        private long lastLocation = -1;
 
         Watcher(FileMonitoringController controller, FilePath workspace, Handler handler, TaskListener listener) {
+            LOGGER.log(Level.FINE, "starting " + this, new Throwable());
             this.controller = controller;
             this.workspace = workspace;
             this.handler = handler;
@@ -601,10 +617,17 @@ public abstract class FileMonitoringTask extends DurableTask {
         @Override public void run() {
             try {
                 Integer exitStatus = controller.exitStatus(workspace, listener); // check before collecting output, in case the process is just now finishing
-                long lastLocation = 0;
-                FilePath lastLocationFile = controller.getLastLocationFile(workspace);
-                if (lastLocationFile.exists()) {
-                    lastLocation = Long.parseLong(lastLocationFile.readToString());
+                if (lastLocation == -1) {
+                    FilePath lastLocationFile = controller.getLastLocationFile(workspace);
+                    if (lastLocationFile.exists()) {
+                        lastLocation = Long.parseLong(lastLocationFile.readToString());
+                        LOGGER.finest(() -> "Loaded lastLocation=" + lastLocation);
+                    } else {
+                        lastLocation = 0;
+                        LOGGER.finest("New watch, lastLocation=0");
+                    }
+                } else {
+                    LOGGER.finest(() -> "Using cached lastLocation=" + lastLocation);
                 }
                 FilePath logFile = controller.getLogFile(workspace);
                 long len = logFile.length();
@@ -615,8 +638,11 @@ public abstract class FileMonitoringTask extends DurableTask {
                         InputStream utf8EncodedStream = cs == null ? locallyEncodedStream : new ReaderInputStream(new InputStreamReader(locallyEncodedStream, cs), StandardCharsets.UTF_8);
                         handler.output(utf8EncodedStream);
                         long newLocation = ch.position();
-                        lastLocationFile.write(Long.toString(newLocation), null);
-                        LOGGER.log(Level.FINER, "copied {0} bytes from {1}", new Object[] {newLocation - lastLocation, logFile});
+                        // TODO use AtomicFileWriter or equivalent?
+                        controller.getLastLocationFile(workspace).write(Long.toString(newLocation), null);
+                        long delta = newLocation - lastLocation;
+                        LOGGER.finer(() -> this + " copied " + delta + " bytes from " + logFile);
+                        lastLocation = newLocation;
                     }
                 }
                 if (exitStatus != null) {
@@ -626,7 +652,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                     } else {
                         output = null;
                     }
-                    LOGGER.log(Level.FINE, "exiting with code {0}", exitStatus);
+                    LOGGER.fine(() -> this + " exiting with code " + exitStatus);
                     handler.exited(exitStatus, output);
                     controller.cleanup(workspace);
                 } else {
@@ -641,7 +667,11 @@ public abstract class FileMonitoringTask extends DurableTask {
                 }
             } catch (Exception x) {
                 // note that LOGGER here is going to the agent log, not master log
-                LOGGER.log(Level.WARNING, "giving up on watching " + controller.controlDir, x);
+                if (isClosedChannelException(x)) {
+                    LOGGER.warning(() -> this + " giving up on watching " + controller.controlDir);
+                } else {
+                    LOGGER.log(Level.WARNING, this + " giving up on watching " + controller.controlDir, x);
+                }
                 // Typically this will have been inside Handler.output, e.g.:
                 // hudson.remoting.ChannelClosedException: channel is already closed
                 //         at hudson.remoting.Channel.send(Channel.java:667)

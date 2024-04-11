@@ -35,6 +35,7 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Platform;
 import hudson.Proc;
+import hudson.model.Node;
 import hudson.model.Slave;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.Channel;
@@ -86,7 +87,7 @@ import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
 enum TestPlatform {
-    NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
+    ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
 }
 
 @RunWith(Parameterized.class)
@@ -113,11 +114,11 @@ public class BourneShellScriptTest {
         assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
     }
 
-    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINE);
+    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINEST);
 
     private TestPlatform platform;
     private StreamTaskListener listener;
-    private Slave s;
+    private Node s;
     private FilePath ws;
     private Launcher launcher;
 
@@ -128,6 +129,10 @@ public class BourneShellScriptTest {
 
     @Before public void prepareAgentForPlatform() throws Exception {
         switch (platform) {
+            case ON_CONTROLLER:
+                BourneShellScript.USE_BINARY_WRAPPER = true;
+                s = j.jenkins;
+                break;
             case NATIVE:
                 BourneShellScript.USE_BINARY_WRAPPER = true;
                 s = j.createOnlineSlave();
@@ -141,13 +146,15 @@ public class BourneShellScriptTest {
             case UBUNTU_NO_BINARY:
                 assumeDocker();
                 s = prepareAgentDocker();
-                j.jenkins.addNode(s);
-                j.waitOnline(s);
+                if (s instanceof Slave) {
+                    j.jenkins.addNode(s);
+                    j.waitOnline((Slave) s);
+                }
                 break;
             default:
                 throw new AssertionError(platform);
         }
-        ws = s.getWorkspaceRoot().child("ws");
+        ws = (s instanceof Slave ? ((Slave) s).getWorkspaceRoot() : j.jenkins.getRootPath()).child("ws");
         launcher = s.createLauncher(listener);
     }
 
@@ -162,7 +169,7 @@ public class BourneShellScriptTest {
             case NO_INIT:
                 return new DumbSlave("docker",
                             "/home/jenkins/agent",
-                            new SimpleCommandLauncher("docker run -i --rm jenkins/slave:3.29-2 java -jar /usr/share/jenkins/slave.jar"));
+                            new SimpleCommandLauncher("docker run -i --rm jenkins/agent:latest-jdk11 java -jar /usr/share/jenkins/agent.jar"));
             default:
                 throw new AssertionError(platform);
         }
@@ -178,6 +185,7 @@ public class BourneShellScriptTest {
                 break;
             case ALPINE:
                 container = dockerAlpine.get();
+                customJavaPath = AlpineFixture.ALPINE_JAVA_LOCATION;
                 break;
             case CENTOS:
                 container = dockerCentOS.get();
@@ -205,6 +213,7 @@ public class BourneShellScriptTest {
     @Test public void smokeTest() throws Exception {
         int sleepSeconds;
         switch (platform) {
+            case ON_CONTROLLER:
             case NATIVE:
                 sleepSeconds = 0;
                 break;
@@ -431,6 +440,7 @@ public class BourneShellScriptTest {
     @Test public void backgroundLaunch() throws IOException, InterruptedException {
         int sleepSeconds;
         switch (platform) {
+            case ON_CONTROLLER:
             case NATIVE:
             case CENTOS:
             case UBUNTU:
@@ -476,6 +486,7 @@ public class BourneShellScriptTest {
         String os;
         String architecture;
         switch (platform) {
+            case ON_CONTROLLER:
             case NATIVE:
                 if (Platform.isDarwin()) {
                     os = "darwin";
@@ -506,7 +517,7 @@ public class BourneShellScriptTest {
         String version = j.getPluginManager().getPlugin("durable-task").getVersion();
         version = StringUtils.substringBefore(version, "-");
         String binaryName = "durable_task_monitor_" + version + "_" + os + "_" + architecture;
-        FilePath binaryPath = ws.getParent().getParent().child("caches/durable-task/" + binaryName);
+        FilePath binaryPath = s.getRootPath().child("caches/durable-task/" + binaryName);
         assertFalse(binaryPath.exists());
 
         BourneShellScript script = new BourneShellScript("echo hello");
@@ -601,6 +612,7 @@ public class BourneShellScriptTest {
     private String setPsFormat() {
         String cmdCol = null;
         switch (platform) {
+            case ON_CONTROLLER:
             case NATIVE:
                 cmdCol = Platform.isDarwin() ? "comm" : "cmd";
                 break;

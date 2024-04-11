@@ -24,7 +24,6 @@
 
 package org.jenkinsci.plugins.durabletask.executors;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.model.Computer;
 import hudson.model.Executor;
 import hudson.model.ExecutorListener;
@@ -35,6 +34,7 @@ import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.EphemeralNode;
 import java.io.IOException;
+import java.util.Date;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -43,13 +43,14 @@ import java.util.logging.Logger;
  * Retention strategy that allows a cloud slave to run only a single build before disconnecting.
  * A {@link ContinuableExecutable} does not trigger termination.
  */
+@SuppressWarnings("rawtypes") // core design flaw
 public final class OnceRetentionStrategy extends CloudRetentionStrategy implements ExecutorListener {
 
     private static final Logger LOGGER = Logger.getLogger(OnceRetentionStrategy.class.getName());
 
     private transient boolean terminating;
-
-    private int idleMinutes;
+    
+    private final int idleMinutes;
 
     /**
      * Creates the retention strategy.
@@ -58,6 +59,7 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
     public OnceRetentionStrategy(int idleMinutes) {
         super(idleMinutes);
         this.idleMinutes = idleMinutes;
+        LOGGER.fine(() -> "initialized with " + idleMinutes + "m");
     }
 
     @Override
@@ -98,10 +100,12 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
     @Override public void taskAccepted(Executor executor, Queue.Task task) {}
 
     @Override public void taskCompleted(Executor executor, Queue.Task task, long durationMS) {
+        LOGGER.fine(() -> "success " + executor + " " + task);
         done(executor);
     }
 
     @Override public void taskCompletedWithProblems(Executor executor, Queue.Task task, long durationMS, Throwable problems) {
+        LOGGER.log(Level.FINE, problems, () -> "error " + executor + " " + task);
         done(executor);
     }
 
@@ -120,7 +124,6 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         done(c);
     }
 
-    @SuppressFBWarnings(value="SE_BAD_FIELD", justification="not a real Callable")
     private void done(final AbstractCloudComputer<?> c) {
         c.setAcceptingTasks(false); // just in case
         synchronized (this) {
@@ -129,30 +132,22 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
             }
             terminating = true;
         }
-        Computer.threadPoolForRemoting.submit(new Runnable() {
-            @Override
-            public void run() {
-                Queue.withLock(new Runnable() {
-                    @Override public void run() {
-                        try {
-                            AbstractCloudSlave node = c.getNode();
-                            if (node != null) {
-                                node.terminate();
-                            }
-                        } catch (InterruptedException e) {
-                            LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
-                            synchronized (OnceRetentionStrategy.this) {
-                                terminating = false;
-                            }
-                        } catch (IOException e) {
-                            LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
-                            synchronized (OnceRetentionStrategy.this) {
-                                terminating = false;
-                            }
-                        }
+        LOGGER.log(Level.FINE, new Throwable(), () -> "terminating " + c + " idle? " + c.isIdle() + " idleStartMilliseconds=" + new Date(c.getIdleStartMilliseconds()));
+        Computer.threadPoolForRemoting.submit(() -> {
+            Queue.withLock(() -> {
+                try {
+                    AbstractCloudSlave node = c.getNode();
+                    if (node != null) {
+                        LOGGER.fine(() -> "terminating " + c + " now");
+                        node.terminate();
                     }
-                });
-            }
+                } catch (InterruptedException | IOException e) {
+                    LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
+                    synchronized (OnceRetentionStrategy.this) {
+                        terminating = false;
+                    }
+                }
+            });
         });
     }
 

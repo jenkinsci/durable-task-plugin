@@ -29,5 +29,6 @@ import org.jenkinsci.test.acceptance.docker.DockerFixture;
 
 /** Analog of {@link JavaContainer} but using Alpine rather than Ubuntu. */
 @DockerFixture(id = "alpine", ports = 22)
-public class AlpineFixture extends DockerContainer {}
-
+public class AlpineFixture extends DockerContainer {
+    public static final String ALPINE_JAVA_LOCATION = "/opt/java/openjdk/bin/java";
+}

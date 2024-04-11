@@ -1,8 +1,8 @@
-FROM mcr.microsoft.com/powershell:ubuntu-bionic
+FROM mcr.microsoft.com/powershell:ubuntu-jammy
 RUN apt-get update -y && \
     apt-get install -y \
         openssh-server \
-        openjdk-8-jre-headless \
+        openjdk-11-jre-headless \
         locales
 # openssh installs procps, and thus /bin/ps, as a dependency, so to reproduce JENKINS-52881 we need to delete it:
 RUN dpkg --force-depends -r procps
