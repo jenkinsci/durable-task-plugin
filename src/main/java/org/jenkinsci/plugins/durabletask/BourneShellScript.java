@@ -127,6 +127,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         OsType os = agentInfo.getOs();
         String scriptEncodingCharset = "UTF-8";
+        String jenkinsResultTxtEncoding = null;
         if(os == OsType.ZOS) {
             Charset zOSSystemEncodingCharset = Charset.forName(ws.act(new getIBMzOsEncoding()));
             if(SYSTEM_DEFAULT_CHARSET.equals(getCharset())) {
@@ -134,11 +135,14 @@ public final class BourneShellScript extends FileMonitoringTask {
                 charset(zOSSystemEncodingCharset);
             }
             scriptEncodingCharset = zOSSystemEncodingCharset.name();
+            jenkinsResultTxtEncoding = zOSSystemEncodingCharset.name();
         }
 
-        ShellController c = new ShellController(ws,(os == OsType.ZOS), cookieValue);
+        ShellController c = new ShellController(ws,(os == OsType.ZOS), cookieValue, jenkinsResultTxtEncoding);
         FilePath shf = c.getScriptFile(ws);
 
+        // JENKINS-70874: if a new process is forked during this call, the writeable file handle will be copied and leading to the "Text file busy" issue
+        // when executing the script.
         shf.write(script, scriptEncodingCharset);
 
         String shell = null;
@@ -227,27 +231,32 @@ public final class BourneShellScript extends FileMonitoringTask {
         if (os == OsType.WINDOWS) { // JENKINS-40255
             scriptPath = scriptPath.replace("\\", "/"); // cygwin sh understands mixed path  (ie : "c:/jenkins/workspace/script.sh" )
         }
+        String scriptPathCopy = scriptPath + ".copy"; // copy file to protect against "Text file busy", see JENKINS-70874
         if (capturingOutput) {
-            cmdString = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmdString = String.format("cp '%s' '%s'; { while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2> '%s'; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                                      scriptPath,
+                                      scriptPathCopy,
                                       controlDir,
                                       resultFile,
                                       logFile,
                                       cookieValue,
                                       cookieVariable,
                                       interpreter,
-                                      scriptPath,
+                                      scriptPathCopy,
                                       c.getOutputFile(ws),
                                       logFile,
                                       resultFile, resultFile, resultFile);
         } else {
-            cmdString = String.format("{ while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+            cmdString = String.format("cp '%s' '%s'; { while [ -d '%s' -a \\! -f '%s' ]; do touch '%s'; sleep 3; done } & jsc=%s; %s=$jsc %s '%s' > '%s' 2>&1; echo $? > '%s.tmp'; mv '%s.tmp' '%s'; wait",
+                                      scriptPath,
+                                      scriptPathCopy,
                                       controlDir,
                                       resultFile,
                                       logFile,
                                       cookieValue,
                                       cookieVariable,
                                       interpreter,
-                                      scriptPath,
+                                      scriptPathCopy,
                                       logFile,
                                       resultFile, resultFile, resultFile);
         }
@@ -275,10 +284,13 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         /** Caching zOS flag to avoid round trip calls in exitStatus()         */
         private final boolean isZos;
+        /** Encoding of jenkins-result.txt if on z/OS, null otherwise          */
+        private String jenkinsResultTxtEncoding;
 
-        private ShellController(FilePath ws, boolean zOsFlag, @NonNull String cookieValue) throws IOException, InterruptedException {
+        private ShellController(FilePath ws, boolean zOsFlag, @NonNull String cookieValue, String jenkinsResultTxtEncoding) throws IOException, InterruptedException {
             super(ws, cookieValue);
             this.isZos = zOsFlag;
+            this.jenkinsResultTxtEncoding = jenkinsResultTxtEncoding;
         }
 
         public FilePath getScriptFile(FilePath ws) throws IOException, InterruptedException {
@@ -295,7 +307,7 @@ public final class BourneShellScript extends FileMonitoringTask {
             if(isZos) {
                 // We need to transcode status file from EBCDIC only on z/OS platform
                 FilePath statusFile = getResultFile(workspace);
-                status = statusFile.act(new StatusCheckWithEncoding(getCharset()));
+                status = statusFile.act(new StatusCheckWithEncoding(jenkinsResultTxtEncoding != null ? jenkinsResultTxtEncoding : getCharset()));
             }
             else {
                 status = super.exitStatus(workspace, listener);
@@ -385,7 +397,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                         }
                     }
                 } catch (NumberFormatException x) {
-                    throw new IOException("corrupted content in " + f + ": " + x, x);
+                    throw new IOException("corrupted content in " + f + " using " + charset + ": " + x, x);
                 }
             }
             return null;

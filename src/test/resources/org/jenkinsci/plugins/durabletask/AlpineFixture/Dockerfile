@@ -1,6 +1,6 @@
-FROM jenkinsci/slave:3.19-1-alpine
+FROM jenkins/agent:alpine-jdk11
 USER root
-RUN apk add --update --no-cache openssh
+RUN apk add --upgrade --update --no-cache openssh
 RUN ssh-keygen -A
 RUN adduser -D test -h /home/test && \
     mkdir -p /home/test/.ssh && \
