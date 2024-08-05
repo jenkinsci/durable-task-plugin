@@ -1,7 +1,8 @@
-FROM centos:7.9.2009
+FROM registry.access.redhat.com/ubi9/ubi
 RUN yum -y install \
         openssh-server \
-        java-11-openjdk-headless \
+        java-21-openjdk-headless \
+        procps-ng \
     && yum clean all
 RUN ssh-keygen -A
 RUN useradd test -d /home/test && \
