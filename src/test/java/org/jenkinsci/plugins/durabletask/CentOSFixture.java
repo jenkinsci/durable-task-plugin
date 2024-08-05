@@ -28,6 +28,6 @@ import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerFixture;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 
-/** Analogue of {@link JavaContainer} but using CentOS rather than Ubuntu. */
+/** Analogue of {@link JavaContainer} but using UBI (formerly CentOS) rather than Ubuntu. */
 @DockerFixture(id = "centos", ports = 22)
 public class CentOSFixture extends DockerContainer {}
