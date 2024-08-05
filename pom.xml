@@ -3,7 +3,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>4.82</version>
+        <version>4.86</version>
         <relativePath />
     </parent>
     <artifactId>durable-task</artifactId>
@@ -21,7 +21,7 @@
 
     <properties>
         <changelist>999999-SNAPSHOT</changelist>
-        <jenkins.version>2.361.4</jenkins.version>
+        <jenkins.version>2.440.3</jenkins.version>
         <gitHubRepo>jenkinsci/${project.artifactId}-plugin</gitHubRepo>
     </properties>
 
@@ -79,7 +79,6 @@
         <dependency>
              <groupId>org.hamcrest</groupId>
              <artifactId>hamcrest</artifactId>
-             <version>2.2</version>
              <scope>test</scope>
         </dependency>
         <dependency>
@@ -93,8 +92,8 @@
         <dependencies>
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
-                <artifactId>bom-2.361.x</artifactId>
-                <version>2102.v854b_fec19c92</version>
+                <artifactId>bom-2.440.x</artifactId>
+                <version>3234.v5ca_5154341ef</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
