@@ -393,7 +393,12 @@ public abstract class FileMonitoringTask extends DurableTask {
                         return null;
                     } else {
                         try {
-                            return Integer.valueOf(text);
+                            long value = Long.parseLong(text);
+                            if (value > Integer.MAX_VALUE) {
+                                LOGGER.warning("ErrorCode greater than max integer detected, limited to max value");
+                                value = Integer.MAX_VALUE;
+                            }
+                            return (Integer) (int) value;
                         } catch (NumberFormatException x) {
                             throw new IOException("corrupted content in " + f + ": " + x, x);
                         }
