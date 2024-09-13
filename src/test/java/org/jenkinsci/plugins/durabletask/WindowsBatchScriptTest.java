@@ -114,6 +114,22 @@ public class WindowsBatchScriptTest {
         c.cleanup(ws);
     }
 
+    @Test public void exitCommandUnsignedInt() throws Exception {
+        Controller c = new WindowsBatchScript("echo hello world\r\nexit 3221225477").launch(new EnvVars(), ws, launcher, listener);
+        awaitCompletion(c);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        c.writeLog(ws, baos);
+        if (enableBinary) {
+            assertEquals(Integer.valueOf(Integer.MAX_VALUE), c.exitStatus(ws, launcher, listener));
+        } else {
+            assertEquals(Integer.valueOf(-1073741819), c.exitStatus(ws, launcher, listener));
+        }
+
+        String log = baos.toString();
+        assertTrue(log, log.contains("hello world"));
+        c.cleanup(ws);
+    }
+
     @Test public void exitBCommandAfterError() throws Exception {
         Controller c = new WindowsBatchScript("cmd /c exit 42\r\nexit /b").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
