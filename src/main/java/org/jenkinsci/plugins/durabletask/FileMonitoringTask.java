@@ -580,21 +580,6 @@ public abstract class FileMonitoringTask extends DurableTask {
 
     }
 
-    // TODO https://github.com/jenkinsci/remoting/pull/657
-    private static boolean isClosedChannelException(Throwable t) {
-        if (t instanceof ClosedChannelException) {
-            return true;
-        } else if (t instanceof ChannelClosedException) {
-            return true;
-        } else if (t instanceof EOFException) {
-            return true;
-        } else if (t == null) {
-            return false;
-        } else {
-            return isClosedChannelException(t.getCause()) || Stream.of(t.getSuppressed()).anyMatch(FileMonitoringTask::isClosedChannelException);
-        }
-    }
-
     private static class Watcher implements Runnable {
 
         private final FileMonitoringController controller;
@@ -667,7 +652,7 @@ public abstract class FileMonitoringTask extends DurableTask {
                 }
             } catch (Exception x) {
                 // note that LOGGER here is going to the agent log, not master log
-                if (isClosedChannelException(x)) {
+                if (Channel.isClosedChannelException(x)) {
                     LOGGER.warning(() -> this + " giving up on watching " + controller.controlDir);
                 } else {
                     LOGGER.log(Level.WARNING, this + " giving up on watching " + controller.controlDir, x);
