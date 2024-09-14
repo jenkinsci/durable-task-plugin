@@ -48,12 +48,14 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
 import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.output.TeeOutputStream;
+
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
 import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
 import org.junit.*;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assume.*;
 
 import org.junit.runner.RunWith;
