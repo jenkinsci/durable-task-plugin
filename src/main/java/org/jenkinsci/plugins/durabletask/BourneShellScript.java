@@ -263,7 +263,7 @@ public final class BourneShellScript extends FileMonitoringTask {
 
         cmdString = cmdString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
         List<String> cmd = new ArrayList<>();
-        if (os != OsType.DARWIN) { // JENKINS-25848
+        if (os != OsType.DARWIN && os != OsType.WINDOWS) { // JENKINS-25848  JENKINS-33708
             cmd.add("nohup");
         }
         if (LAUNCH_DIAGNOSTICS) {
