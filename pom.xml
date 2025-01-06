@@ -79,11 +79,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-             <groupId>org.hamcrest</groupId>
-             <artifactId>hamcrest</artifactId>
-             <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
             <version>4.2.2</version>
