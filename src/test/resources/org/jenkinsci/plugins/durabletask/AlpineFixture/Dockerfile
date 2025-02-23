@@ -1,4 +1,4 @@
-FROM jenkins/agent:alpine-jdk11
+FROM jenkins/agent:alpine-jdk17
 USER root
 RUN apk add --upgrade --update --no-cache openssh
 RUN ssh-keygen -A

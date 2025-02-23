@@ -177,7 +177,7 @@ public class BourneShellScriptTest {
             case NO_INIT:
                 return new DumbSlave("docker",
                             "/home/jenkins/agent",
-                            new SimpleCommandLauncher("docker run -i --rm jenkins/agent:latest-jdk11 java -jar /usr/share/jenkins/agent.jar"));
+                            new SimpleCommandLauncher("docker run -i --rm jenkins/agent:latest-jdk17 java -jar /usr/share/jenkins/agent.jar"));
             default:
                 throw new AssertionError(platform);
         }

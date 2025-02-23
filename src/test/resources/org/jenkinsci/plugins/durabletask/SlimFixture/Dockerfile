@@ -1,6 +1,7 @@
-FROM openjdk:11-jre-slim
+FROM debian:12-slim
 RUN apt-get update -y && \
     apt-get install -y \
+        openjdk-17-jre-headless \
         openssh-server \
         locales
 # openssh installs procps, and thus /bin/ps, as a dependency, so to reproduce JENKINS-52881 we need to delete it:
