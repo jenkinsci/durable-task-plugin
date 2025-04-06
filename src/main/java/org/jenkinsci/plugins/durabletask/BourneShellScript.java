@@ -264,7 +264,11 @@ public final class BourneShellScript extends FileMonitoringTask {
         cmdString = cmdString.replace("$", "$$"); // escape against EnvVars jobEnv in LocalLauncher.launch
         List<String> cmd = new ArrayList<>();
         if (os != OsType.DARWIN && os != OsType.WINDOWS) { // JENKINS-25848  JENKINS-33708
-            cmd.add("nohup");
+            // Some java implementation do block SIGPIPE signal by default, so make sure the default
+            // signal handler is used to avoid having commands hanging for ever.
+            // env --default-signal=SIGPIPE was introduced in coreutils 8.31 released in 2019,
+            // so cope with old OS not supporting this.
+            cmd.addAll(Arrays.asList("sh", "-c", "if env --default-signal=SIGPIPE true 1>/dev/null 2>&1; then exec env --default-signal=SIGPIPE \"$$@\"; else exec \"$$@\"; fi", "--", "nohup"));
         }
         if (LAUNCH_DIAGNOSTICS) {
             cmd.addAll(Arrays.asList("sh", "-c", cmdString));
