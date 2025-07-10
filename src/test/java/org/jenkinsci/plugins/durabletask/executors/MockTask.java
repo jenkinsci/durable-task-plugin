@@ -24,12 +24,14 @@
 
 package org.jenkinsci.plugins.durabletask.executors;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.model.Label;
 import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.ResourceList;
 import hudson.model.queue.AbstractQueueTask;
 import hudson.model.queue.SubTask;
+
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -44,61 +46,81 @@ public class MockTask extends AbstractQueueTask {
         this.cnt = cnt;
     }
 
-    @Override public boolean isBuildBlocked() {
+    @Override
+    public boolean isBuildBlocked() {
         return false;
     }
 
-    @Override public String getWhyBlocked() {
+    @Override
+    public String getWhyBlocked() {
         return null;
     }
 
-    @Override public String getName() {
+    @Override
+    public String getName() {
         return "mock";
     }
 
-    @Override public String getFullDisplayName() {
+    @Override
+    public String getFullDisplayName() {
         return "Mock";
     }
 
-    @Override public void checkAbortPermission() {}
+    @Override
+    public void checkAbortPermission() {
+    }
 
-    @Override public boolean hasAbortPermission() {
+    @Override
+    public boolean hasAbortPermission() {
         return true;
     }
 
-    @Override public String getUrl() {
+    @Override
+    public String getUrl() {
         return "mock/";
     }
 
-    @Override public String getDisplayName() {
+    @Override
+    public String getDisplayName() {
         return "Mock";
     }
 
-    @Override public Label getAssignedLabel() {
+    @Override
+    public Label getAssignedLabel() {
         return null;
     }
 
-    @Override public Node getLastBuiltOn() {
+    @Override
+    public Node getLastBuiltOn() {
         return null;
     }
 
-    @Override public long getEstimatedDuration() {
+    @Override
+    public long getEstimatedDuration() {
         return -1;
     }
 
-    @Override public ResourceList getResourceList() {
+    @Override
+    public ResourceList getResourceList() {
         return new ResourceList();
     }
 
-    @Override public Queue.Executable createExecutable() throws IOException {
+    @Override
+    public Queue.Executable createExecutable() throws IOException {
         return new Queue.Executable() {
-            @Override public SubTask getParent() {
+            @NonNull
+            @Override
+            public SubTask getParent() {
                 return MockTask.this;
             }
-            @Override public long getEstimatedDuration() {
+
+            @Override
+            public long getEstimatedDuration() {
                 return -1;
             }
-            @Override public void run() {
+
+            @Override
+            public void run() {
                 cnt.incrementAndGet();
             }
         };
