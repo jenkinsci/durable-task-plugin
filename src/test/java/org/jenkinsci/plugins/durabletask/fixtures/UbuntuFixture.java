@@ -22,13 +22,22 @@
  * THE SOFTWARE.
  */
 
-package org.jenkinsci.plugins.durabletask;
+package org.jenkinsci.plugins.durabletask.fixtures;
 
-import org.jenkinsci.test.acceptance.docker.DockerContainer;
-import org.jenkinsci.test.acceptance.docker.DockerFixture;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.images.builder.ImageFromDockerfile;
 
-/** Analog of {@link JavaContainer} but using Alpine rather than Ubuntu. */
-@DockerFixture(id = "alpine", ports = 22)
-public class AlpineFixture extends DockerContainer {
-    public static final String ALPINE_JAVA_LOCATION = "/opt/java/openjdk/bin/java";
+import java.util.List;
+
+/**
+ * Container using Ubuntu.
+ */
+public class UbuntuFixture extends GenericContainer<UbuntuFixture> {
+
+    public UbuntuFixture() {
+        super(new ImageFromDockerfile("ubuntu", false)
+                .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/UbuntuFixture/Dockerfile"));
+        setExposedPorts(List.of(22));
+    }
+
 }

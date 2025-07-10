@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2017 CloudBees, Inc.
+ * Copyright 2018 CloudBees, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,12 +22,22 @@
  * THE SOFTWARE.
  */
 
-package org.jenkinsci.plugins.durabletask;
+package org.jenkinsci.plugins.durabletask.fixtures;
 
-import org.jenkinsci.test.acceptance.docker.DockerContainer;
-import org.jenkinsci.test.acceptance.docker.DockerFixture;
-import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.images.builder.ImageFromDockerfile;
 
-/** Analogue of {@link JavaContainer} but using UBI (formerly CentOS) rather than Ubuntu. */
-@DockerFixture(id = "centos", ports = 22)
-public class CentOSFixture extends DockerContainer {}
+import java.util.List;
+
+/**
+ * Container using Alpine.
+ */
+public class AlpineFixture extends GenericContainer<AlpineFixture> {
+    public static final String ALPINE_JAVA_LOCATION = "/opt/java/openjdk/bin/java";
+
+    public AlpineFixture() {
+        super(new ImageFromDockerfile("alpine", false)
+                .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/AlpineFixture/Dockerfile"));
+        setExposedPorts(List.of(22));
+    }
+}
