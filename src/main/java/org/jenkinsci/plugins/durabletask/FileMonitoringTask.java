@@ -645,7 +645,14 @@ public abstract class FileMonitoringTask extends DurableTask {
                     controller.cleanup(workspace);
                 } else {
                     if (!controller.controlDir(workspace).isDirectory()) {
+                        byte[] output;
+                        if (controller.getOutputFile(workspace).exists()) {
+                            output = controller.getOutput(workspace);
+                        } else {
+                            output = null;
+                        }
                         LOGGER.log(Level.WARNING, "giving up on watching nonexistent {0}", controller.controlDir);
+                        handler.exited(-1, output);
                         controller.cleanup(workspace);
                         return;
                     }
