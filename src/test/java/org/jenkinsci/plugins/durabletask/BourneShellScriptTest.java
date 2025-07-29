@@ -68,7 +68,6 @@ import org.apache.commons.io.output.TeeOutputStream;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
-import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.test.acceptance.docker.Docker;
 import org.jenkinsci.test.acceptance.docker.DockerContainer;
 import org.jenkinsci.test.acceptance.docker.DockerRule;
@@ -523,7 +522,9 @@ public class BourneShellScriptTest {
         }
 
         String version = j.getPluginManager().getPlugin("durable-task").getVersion();
-        version = StringUtils.substringBefore(version, "-");
+        if (version != null && version.contains("-")) {
+            version = version.substring(0, version.indexOf("-"));
+        }
         String binaryName = "durable_task_monitor_" + version + "_" + os + "_" + architecture;
         FilePath binaryPath = s.getRootPath().child("caches/durable-task/" + binaryName);
         assertFalse(binaryPath.exists());
