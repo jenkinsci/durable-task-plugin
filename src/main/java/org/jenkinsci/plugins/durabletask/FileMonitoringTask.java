@@ -82,7 +82,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.commons.io.output.WriterOutputStream;
-import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.remoting.util.IOUtils;
 
 /**
@@ -199,7 +198,10 @@ public abstract class FileMonitoringTask extends DurableTask {
         if (durablePlugin == null) {
             throw new IOException("Unable to find durable task plugin");
         }
-        String pluginVersion = StringUtils.substringBefore(durablePlugin.getVersion(), "-");
+        String pluginVersion = durablePlugin.getVersion();
+        if (pluginVersion != null && pluginVersion.contains("-")) {
+            pluginVersion = pluginVersion.substring(0, pluginVersion.indexOf("-"));
+        }
         AgentInfo agentInfo = nodeRoot.act(new AgentInfo.GetAgentInfo(pluginVersion));
 
         return agentInfo;
