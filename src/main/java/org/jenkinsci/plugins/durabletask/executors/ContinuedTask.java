@@ -30,7 +30,6 @@ import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.queue.CauseOfBlockage;
 import hudson.model.queue.QueueTaskDispatcher;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -60,23 +59,23 @@ public interface ContinuedTask extends Queue.Task {
 
         @Override public CauseOfBlockage canTake(Node node, Queue.BuildableItem item) {
             if (isContinued(item.task)) {
-                LOGGER.log(Level.FINER, "{0} is a continued task, so we are not blocking it", item.task);
+                LOGGER.finer(() -> item.task + " is a continued task, so we are not blocking it");
                 return null;
             }
             for (Queue.BuildableItem other : Queue.getInstance().getBuildableItems()) {
                 if (isContinued(other.task)) {
                     Label label = other.task.getAssignedLabel();
                     if (label == null || label.matches(node)) { // conservative; might actually go to a different node
-                        LOGGER.log(Level.FINE, "blocking {0} in favor of {1}", new Object[] {item.task, other.task});
+                        LOGGER.fine(() -> "blocking " + item.task + " in favor of " + other.task);
                         return new HoldOnPlease(other.task);
                     } else {
-                        LOGGER.log(Level.FINER, "{0}’s label {1} does not match {2}", new Object[] {other.task, label, node});
+                        LOGGER.finer(() -> other.task + "’s label " + label + " does not match " + node);
                     }
                 } else {
                     LOGGER.finer(() -> other.task + " is not continued, so it would not block " + item.task);
                 }
             }
-            LOGGER.log(Level.FINER, "no reason to block {0}", item.task);
+            LOGGER.finer(() -> "no reason to block " + item.task);
             return null;
         }
 
