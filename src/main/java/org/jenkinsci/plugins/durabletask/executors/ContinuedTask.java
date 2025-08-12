@@ -73,7 +73,7 @@ public interface ContinuedTask extends Queue.Task {
                         LOGGER.log(Level.FINER, "{0}’s label {1} does not match {2}", new Object[] {other.task, label, node});
                     }
                 } else {
-                    LOGGER.log(Level.FINER, "{0} is not continued, so it would not block {1}", new Object[] {other.task, item.task});
+                    LOGGER.finer(() -> other.task + " is not continued, so it would not block " + item.task);
                 }
             }
             LOGGER.log(Level.FINER, "no reason to block {0}", item.task);
