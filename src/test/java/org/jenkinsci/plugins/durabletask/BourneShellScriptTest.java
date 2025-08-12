@@ -46,7 +46,6 @@ import hudson.util.StreamTaskListener;
 import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.TeeOutputStream;
-import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.plugins.durabletask.fixtures.AlpineFixture;
 import org.jenkinsci.plugins.durabletask.fixtures.CentOSFixture;
 import org.jenkinsci.plugins.durabletask.fixtures.SlimFixture;
@@ -503,7 +502,9 @@ class BourneShellScriptTest {
         }
 
         String version = j.getPluginManager().getPlugin("durable-task").getVersion();
-        version = StringUtils.substringBefore(version, "-");
+        if (version != null && version.contains("-")) {
+            version = version.substring(0, version.indexOf("-"));
+        }
         String binaryName = "durable_task_monitor_" + version + "_" + os + "_" + architecture;
         FilePath binaryPath = s.getRootPath().child("caches/durable-task/" + binaryName);
         assertFalse(binaryPath.exists());

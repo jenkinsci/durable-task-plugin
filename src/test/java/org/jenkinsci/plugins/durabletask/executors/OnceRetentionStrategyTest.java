@@ -46,6 +46,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.arrayWithSize;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
+import org.jenkinsci.plugins.workflow.support.steps.ExecutorStepExecution;
 
 @WithJenkins
 class OnceRetentionStrategyTest {
@@ -66,6 +67,8 @@ class OnceRetentionStrategyTest {
         // (because the ping command and its parent cmd.exe get killed :-o )
         WindowsBatchScript.USE_BINARY_WRAPPER = true;
         BourneShellScript.USE_BINARY_WRAPPER = true;
+        // Longer than retention strategy idle time, shorter than test timeout (default 5m in prod but only 15s in test):
+        ExecutorStepExecution.TIMEOUT_WAITING_FOR_NODE_MILLIS = Duration.ofMinutes(2).toMillis();
     }
 
     @BeforeEach
