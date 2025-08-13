@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -58,6 +59,22 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     private boolean capturingOutput;
     private static final Logger LOGGER = Logger.getLogger(WindowsBatchScript.class.getName());
     private static final String LAUNCH_DIAGNOSTICS_PROP = WindowsBatchScript.class.getName() + ".LAUNCH_DIAGNOSTICS";
+
+    /**
+     * Seconds between heartbeat checks, where we check to see if
+     * {@code jenkins-log.txt} is still being modified.
+     */
+    static int HEARTBEAT_CHECK_INTERVAL = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_CHECK_INTERVAL", 300);
+
+    /**
+     * Minimum timestamp difference on {@code jenkins-log.txt} that is
+     * considered an actual modification. Theoretically could be zero (if
+     * {@code <} became {@code <=}, else infinitesimal positive) but on some
+     * platforms file timestamps are not that precise.
+     */
+    @SuppressWarnings("FieldMayBeFinal")
+    private static int HEARTBEAT_MINIMUM_DELTA = Integer.getInteger(BourneShellScript.class.getName() + ".HEARTBEAT_MINIMUM_DELTA", 2);
+
 
     /**
      * Used by the binary wrapper, this enables the debug flag.
@@ -163,6 +180,12 @@ public final class WindowsBatchScript extends FileMonitoringTask {
     }
 
     private static final class BatchController extends FileMonitoringController {
+
+        /** Last time we checked the timestamp, in nanoseconds on the master. */
+        private transient long lastCheck;
+        /** Last-observed modification time of {@link FileMonitoringTask.FileMonitoringController#getLogFile(FilePath)} on remote computer, in milliseconds. */
+        private transient long checkedTimestamp;
+
         private BatchController(FilePath ws, @NonNull String cookieValue) throws IOException, InterruptedException {
             super(ws, cookieValue);
         }
@@ -175,8 +198,67 @@ public final class WindowsBatchScript extends FileMonitoringTask {
             return controlDir(ws).child("jenkins-main.bat");
         }
 
+        /** Only here for compatibility. */
+        private FilePath pidFile(FilePath ws) throws IOException, InterruptedException {
+            return controlDir(ws).child("pid");
+        }
+
+
+        @Override protected Integer exitStatus(FilePath workspace, TaskListener listener) throws IOException, InterruptedException {
+            Integer status;
+
+                status = super.exitStatus(workspace, listener);
+
+            if (status != null) {
+                LOGGER.log(Level.FINE, "found exit code {0} in {1}", new Object[] {status, controlDir});
+                return status;
+            }
+            long now = System.nanoTime();
+            if (lastCheck == 0) {
+                LOGGER.log(Level.FINE, "starting check in {0}", controlDir);
+                lastCheck = now;
+            } else if (now > lastCheck + TimeUnit.SECONDS.toNanos(HEARTBEAT_CHECK_INTERVAL)) {
+                lastCheck = now;
+                long currentTimestamp = getLogFile(workspace).lastModified();
+                if (currentTimestamp == 0) {
+                    listener.getLogger().println("process apparently never started in " + controlDir);
+                    if (!LAUNCH_DIAGNOSTICS) {
+                        listener.getLogger().println("(running Jenkins temporarily with -D" + LAUNCH_DIAGNOSTICS_PROP + "=true might make the problem clearer)");
+                    }
+                    return recordExitStatus(workspace, -2);
+                } else if (checkedTimestamp > 0) {
+                    if (currentTimestamp < checkedTimestamp) {
+                        listener.getLogger().println("apparent clock skew in " + controlDir);
+                    } else if (currentTimestamp < checkedTimestamp + TimeUnit.SECONDS.toMillis(HEARTBEAT_MINIMUM_DELTA)) {
+                            //FilePath pidFile = pidFile(workspace);
+                          //  if (pidFile.exists()) {
+                          //      listener.getLogger().println("still have " + pidFile + " so heartbeat checks unreliable; process may or may not be alive");
+                          //  } else {
+                                listener.getLogger().println("wrapper script does not seem to be touching the log file in " + controlDir);
+                                listener.getLogger().println("(JENKINS-48300: if on an extremely laggy filesystem, consider -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=86400)");
+                                return recordExitStatus(workspace, -1);
+                           // }
+
+                    }
+                } else {
+                    LOGGER.log(Level.FINE, "seeing recent log file modifications in {0}", controlDir);
+                }
+                checkedTimestamp = currentTimestamp;
+            }
+            return null;
+        }
+
+        private int recordExitStatus(FilePath workspace, int code) throws IOException, InterruptedException {
+            getResultFile(workspace).write(Integer.toString(code), null);
+            return code;
+        }
+
         private static final long serialVersionUID = 1L;
     }
+
+
+    private static final long serialVersionUID = 1L;
+    
 
     @Extension public static final class DescriptorImpl extends DurableTaskDescriptor {
 
