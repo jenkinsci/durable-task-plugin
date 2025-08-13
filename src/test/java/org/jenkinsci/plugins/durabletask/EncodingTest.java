@@ -24,7 +24,6 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import com.cloudbees.plugins.credentials.Credentials;
 import com.cloudbees.plugins.credentials.CredentialsScope;
 import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
 import com.cloudbees.plugins.credentials.domains.Domain;
@@ -35,8 +34,25 @@ import hudson.Launcher;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.DumbSlave;
 import hudson.util.StreamTaskListener;
+import jenkins.security.MasterToSlaveCallable;
+import org.apache.commons.io.output.TeeOutputStream;
+import org.jenkinsci.plugins.durabletask.fixtures.UbuntuFixture;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.params.Parameter;
+import org.junit.jupiter.params.ParameterizedClass;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.jvnet.hudson.test.Issue;
+import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.LogRecorder;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -46,68 +62,62 @@ import java.util.Locale;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
-import jenkins.security.MasterToSlaveCallable;
-import org.apache.commons.io.output.TeeOutputStream;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
-import org.jenkinsci.test.acceptance.docker.DockerRule;
-import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
-import org.junit.*;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assume.*;
-
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.jvnet.hudson.test.Issue;
-import org.jvnet.hudson.test.JenkinsRule;
-import org.jvnet.hudson.test.LoggerRule;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 @Issue({"JENKINS-31096", "JENKINS-52165"})
-@RunWith(Parameterized.class)
-public class EncodingTest {
+@DisabledOnOs(OS.WINDOWS)
+@ParameterizedClass(name = "testCase={0}, output={1}, watch={2}")
+@MethodSource("parameters")
+@WithJenkins
+@Testcontainers(disabledWithoutDocker = true)
+class EncodingTest {
 
-    @Rule public LoggerRule logging = new LoggerRule().recordPackage(EncodingTest.class, Level.FINE);
-    @Rule public JenkinsRule r = new JenkinsRule();
-    @Rule public DockerRule<JavaContainer> dockerUbuntu = new DockerRule<>(JavaContainer.class);
+    private final LogRecorder logging = new LogRecorder().recordPackage(EncodingTest.class, Level.FINE);
+
+    @Container
+    public final UbuntuFixture dockerUbuntu = new UbuntuFixture();
 
     private static DumbSlave s;
     private static StreamTaskListener listener;
     private static FilePath ws;
     private static Launcher launcher;
 
-    @BeforeClass public static void unix() throws Exception {
-        assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
-    }
-    @Before public void setUp() throws Exception {
+    private JenkinsRule j;
+
+    @BeforeEach
+    void setUp(JenkinsRule rule) throws Exception {
+        j = rule;
+
         BourneShellScript.USE_BINARY_WRAPPER = true;
-        s = null;
-        BourneShellScriptTest.unix();
-        BourneShellScriptTest.assumeDocker();
+
         listener = StreamTaskListener.fromStdout();
-        launcher = r.jenkins.createLauncher(listener);
-        JavaContainer container = dockerUbuntu.get();
-        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.<Credentials>singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
-        SSHLauncher sshLauncher = new SSHLauncher(container.ipBound(22), container.port(22), "test");
+        launcher = j.jenkins.createLauncher(listener);
+        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
+        SSHLauncher sshLauncher = new SSHLauncher(dockerUbuntu.getHost(), dockerUbuntu.getMappedPort(22), "test");
         sshLauncher.setJvmOptions("-Dfile.encoding=ISO-8859-1");
         s = new DumbSlave("docker", "/home/test", sshLauncher);
-        r.jenkins.addNode(s);
-        r.waitOnline(s);
+        j.jenkins.addNode(s);
+        j.waitOnline(s);
         assertEquals("ISO-8859-1", s.getChannel().call(new DetectCharset()));
         ws = s.getWorkspaceRoot();
         launcher = s.createLauncher(listener);
     }
 
     private static class DetectCharset extends MasterToSlaveCallable<String, RuntimeException> {
-        @Override public String call() throws RuntimeException {
+        @Override
+        public String call() throws RuntimeException {
             return Charset.defaultCharset().name();
         }
     }
 
-    @After public void tearDown() throws Exception {
+    @AfterEach
+    void tearDown() throws Exception {
         if (s != null) {
-            r.jenkins.removeNode(s);
+            j.jenkins.removeNode(s);
         }
     }
 
@@ -118,6 +128,7 @@ public class EncodingTest {
         final String charset;
         final String expectedLine;
         final String expectedEncoding;
+
         TestCase(String description, String actualEncoding, String actualLine, String charset, String expectedLine, String expectedEncoding) {
             this.description = description;
             this.actualEncoding = actualEncoding;
@@ -126,39 +137,45 @@ public class EncodingTest {
             this.expectedLine = expectedLine;
             this.expectedEncoding = expectedEncoding;
         }
-        @Override public String toString() {
+
+        @Override
+        public String toString() {
             return description;
         }
     }
 
     private static final TestCase[] CASES = {
-        new TestCase("(control) no transcoding", "ISO-8859-1", "¡Ole!", null, "¡Ole!", "ISO-8859-1"),
-        new TestCase("specify particular charset (UTF-8)", "UTF-8", "¡Čau → there!", "UTF-8", "¡Čau → there!", "UTF-8"),
-        new TestCase("specify particular charset (unrelated)", "ISO-8859-2", "Čau!", "ISO-8859-2", "Čau!", "UTF-8"),
-        new TestCase("specify agent default charset", "ISO-8859-1", "¡Ole!", "", "¡Ole!", "UTF-8"),
-        new TestCase("inappropriate charset, some replacement characters", "UTF-8", "¡Čau → there!", "US-ASCII", "����au ��� there!", "UTF-8"),
+            new TestCase("(control) no transcoding", "ISO-8859-1", "¡Ole!", null, "¡Ole!", "ISO-8859-1"),
+            new TestCase("specify particular charset (UTF-8)", "UTF-8", "¡Čau → there!", "UTF-8", "¡Čau → there!", "UTF-8"),
+            new TestCase("specify particular charset (unrelated)", "ISO-8859-2", "Čau!", "ISO-8859-2", "Čau!", "UTF-8"),
+            new TestCase("specify agent default charset", "ISO-8859-1", "¡Ole!", "", "¡Ole!", "UTF-8"),
+            new TestCase("inappropriate charset, some replacement characters", "UTF-8", "¡Čau → there!", "US-ASCII", "����au ��� there!", "UTF-8"),
     };
 
-    @Parameterized.Parameter(0) public TestCase testCase;
+    @Parameter(0)
+    private TestCase testCase;
 
-    @Parameterized.Parameter(1) public boolean output;
+    @Parameter(1)
+    private boolean output;
 
-    @Parameterized.Parameter(2) public boolean watch;
+    @Parameter(2)
+    private boolean watch;
 
-    @Parameterized.Parameters(name = "testCase={0}, output={1}, watch={2}") public static Iterable<Object[]> parameters() {
+    static Iterable<Object[]> parameters() {
         // TODO is there no utility method to produce the cross-product?
         List<Object[]> params = new ArrayList<>();
         for (TestCase testCase : CASES) {
-            for (boolean output : new boolean[] {false, true}) {
-                for (boolean watch : new boolean[] {false, true}) {
-                    params.add(new Object[] {testCase, output, watch});
+            for (boolean output : new boolean[]{false, true}) {
+                for (boolean watch : new boolean[]{false, true}) {
+                    params.add(new Object[]{testCase, output, watch});
                 }
             }
         }
         return params;
     }
 
-    @Test public void run() throws Exception {
+    @Test
+    void run() throws Exception {
         ws.child("file").write(testCase.actualLine + '\n', testCase.actualEncoding);
         BourneShellScript dt = new BourneShellScript("set +x; cat file; sleep 1; tr '[a-z]' '[A-Z]' < file");
         if (testCase.charset != null) {
@@ -167,9 +184,9 @@ public class EncodingTest {
             } else {
                 dt.charset(Charset.forName(testCase.charset));
             }
-            assertEquals("MockHandler is UTF-8 only", "UTF-8", testCase.expectedEncoding);
+            assertEquals("UTF-8", testCase.expectedEncoding, "MockHandler is UTF-8 only");
         } else {
-            assumeFalse("Callers which use watch are expected to also specify an encoding", watch);
+            assumeFalse(watch, "Callers which use watch are expected to also specify an encoding");
         }
         if (output) {
             dt.captureOutput();
