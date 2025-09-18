@@ -152,7 +152,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 shell = "sh";
             }
         } else {
-            shf.chmod(0755);
+            interpreter = script.split("[\\r\\n]")[0].replaceAll("#!", "");
         }
 
         String scriptPath = shf.getRemote();
