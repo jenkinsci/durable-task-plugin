@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2018 CloudBees, Inc.
+ * Copyright 2017 CloudBees, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,15 +22,22 @@
  * THE SOFTWARE.
  */
 
-package org.jenkinsci.plugins.durabletask;
+package org.jenkinsci.plugins.durabletask.fixtures;
 
-import org.jenkinsci.test.acceptance.docker.DockerContainer;
-import org.jenkinsci.test.acceptance.docker.DockerFixture;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.images.builder.ImageFromDockerfile;
 
-/** Analog of {@link JavaContainer} but using Debian Slim. */
-@DockerFixture(id = "slim", ports = 22)
-public class SlimFixture extends DockerContainer {
+import java.util.List;
 
-    public static final String SLIM_JAVA_LOCATION = "/usr/lib/jvm/java-17-openjdk-amd64/bin/java";
+/**
+ * Container using UBI (formerly CentOS).
+ */
+public class CentOSFixture extends GenericContainer<CentOSFixture> {
 
+    public CentOSFixture() {
+        super(new ImageFromDockerfile("centos", false)
+                .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/CentOSFixture/Dockerfile"));
+        setExposedPorts(List.of(22));
+    }
 }
+
