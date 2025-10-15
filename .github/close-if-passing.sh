@@ -21,7 +21,7 @@ echo "Check conclusion: $check_run_conclusion"
 
 # Get the PR associated with this commit
 pr_data=$(gh api graphql -f query='
-  query($owner: String!, $repo: String!, $sha: String!) {
+  query($owner: String!, $repo: String!, $sha: GitObjectID!) {
     repository(owner: $owner, name: $repo) {
       object(oid: $sha) {
         ... on Commit {
