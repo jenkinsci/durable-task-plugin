@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":semanticCommitsDisabled",
+    "schedule:earlyMondays"
+  ],
+  "automerge": false,
+  "labels": [
+    "dependencies"
+  ],
+  "rebaseWhen": "conflicted",
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "io.jenkins.tools.incrementals:git-changelist-maven-extension",
+        "org.jenkins-ci.plugins:plugin"
+      ],
+      "automerge": true
+    },
+    {
+      "matchPackagePatterns": [
+        "^io\\.jenkins\\.tools\\.bom:bom-.*"
+      ],
+      "draftPR": true,
+      "addLabels": [
+        "close-if-passing"
+      ]
+    }
+  ]
+}
