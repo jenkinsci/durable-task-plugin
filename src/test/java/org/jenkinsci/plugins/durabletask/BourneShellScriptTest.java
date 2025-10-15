@@ -85,24 +85,12 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.junit.runners.Parameterized.Parameters;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.LoggerRule;
 import org.jvnet.hudson.test.SimpleCommandLauncher;
 
-enum TestPlatform {
-    ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
-}
-
-@RunWith(Parameterized.class)
-public class BourneShellScriptTest {
-    @Parameters(name = "{index}: {0}")
-    public static Object[] data() {
-        return TestPlatform.values();
-    }
+public abstract class BourneShellScriptTest {
 
     @Rule public JenkinsRule j = new JenkinsRule();
     @Rule public DockerRule<JavaContainer> dockerUbuntu = new DockerRule<>(JavaContainer.class);
@@ -123,13 +111,18 @@ public class BourneShellScriptTest {
 
     @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINEST);
 
+    // TODO progressively delete, and instead create methods overridden by various concrete test classes
+    enum TestPlatform {
+        ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
+    }
     private TestPlatform platform;
+
     private StreamTaskListener listener;
     private Node s;
     private FilePath ws;
     private Launcher launcher;
 
-    public BourneShellScriptTest(TestPlatform platform) throws Exception {
+    protected BourneShellScriptTest(TestPlatform platform) {
         this.platform = platform;
         this.listener = StreamTaskListener.fromStdout();
     }
