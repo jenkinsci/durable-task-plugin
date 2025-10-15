@@ -24,10 +24,17 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-public final class BourneShellScriptUbuntuNoBinaryTest extends BourneShellScriptTest {
+import hudson.model.Node;
+
+public final class BourneShellScriptUbuntuNoBinaryTest extends BourneShellScriptUbuntuTest {
 
     public BourneShellScriptUbuntuNoBinaryTest() {
         super(TestPlatform.UBUNTU_NO_BINARY);
+    }
+
+    @Override
+    protected boolean useBinaryWrapper() {
+        return false;
     }
 
 }

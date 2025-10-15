@@ -24,10 +24,22 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-public final class BourneShellScriptAlpineTest extends BourneShellScriptTest {
+import org.jenkinsci.test.acceptance.docker.DockerRule;
+
+public final class BourneShellScriptAlpineTest extends DockerRuleBourneShellScriptTest {
 
     public BourneShellScriptAlpineTest() {
         super(TestPlatform.ALPINE);
+    }
+
+    @Override
+    protected DockerRule<?> createDockerRule() {
+        return new DockerRule<>(AlpineFixture.class);
+    }
+
+    @Override
+    protected String customJavaPath() {
+        return AlpineFixture.ALPINE_JAVA_LOCATION;
     }
 
 }

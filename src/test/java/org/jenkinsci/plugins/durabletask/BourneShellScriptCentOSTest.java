@@ -24,10 +24,17 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-public final class BourneShellScriptCentOSTest extends BourneShellScriptTest {
+import org.jenkinsci.test.acceptance.docker.DockerRule;
+
+public final class BourneShellScriptCentOSTest extends DockerRuleBourneShellScriptTest {
 
     public BourneShellScriptCentOSTest() {
         super(TestPlatform.CENTOS);
+    }
+
+    @Override
+    protected DockerRule<?> createDockerRule() {
+        return new DockerRule<>(CentOSFixture.class);
     }
 
 }

@@ -24,10 +24,22 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-public final class BourneShellScriptUbuntuTest extends BourneShellScriptTest {
+import org.jenkinsci.test.acceptance.docker.DockerRule;
+import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
+
+public class BourneShellScriptUbuntuTest extends DockerRuleBourneShellScriptTest {
 
     public BourneShellScriptUbuntuTest() {
-        super(TestPlatform.UBUNTU);
+        this(TestPlatform.UBUNTU);
+    }
+
+    protected BourneShellScriptUbuntuTest(TestPlatform platform) {
+        super(platform);
+    }
+
+    @Override
+    protected DockerRule<?> createDockerRule() {
+        return new DockerRule<>(JavaContainer.class);
     }
 
 }

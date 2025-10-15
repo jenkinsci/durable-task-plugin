@@ -24,10 +24,23 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import hudson.model.Node;
+import hudson.slaves.DumbSlave;
+import static org.jenkinsci.plugins.durabletask.BourneShellScriptTest.assumeDocker;
+import org.jvnet.hudson.test.SimpleCommandLauncher;
+
 public final class BourneShellScriptNoInitTest extends BourneShellScriptTest {
 
     public BourneShellScriptNoInitTest() {
         super(TestPlatform.NO_INIT);
+    }
+
+    @Override
+    protected Node createNode() throws Exception {
+        assumeDocker();
+        return new DumbSlave("docker",
+                "/home/jenkins/agent",
+                new SimpleCommandLauncher("docker run -i --rm jenkins/agent:latest-jdk17 java -jar /usr/share/jenkins/agent.jar"));
     }
 
 }
