@@ -28,16 +28,12 @@ pr_data=$(gh api graphql -f query='
           associatedPullRequests(first: 1) {
             nodes {
               number
-              author {
-                login
-              }
               labels(first: 10) {
                 nodes {
                   name
                 }
               }
               isDraft
-              state
             }
           }
         }
@@ -47,14 +43,11 @@ pr_data=$(gh api graphql -f query='
 
 # Extract PR data
 pr_number=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].number // empty')
-pr_author=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].author.login // empty')
 pr_labels=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].labels.nodes[].name' | tr '\n' ',' | sed 's/,$//')
 pr_draft=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].isDraft // empty')
-pr_state=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].state // empty')
 
-echo "Found PR: #$pr_number by $pr_author"
 echo "Labels: $pr_labels"
-echo "Draft: $pr_draft, State: $pr_state"
+echo "Draft: $pr_draft"
 
 # Check if this PR has the close-if-passing label
 if [[ "$pr_labels" != *"close-if-passing"* ]]; then
