@@ -43,6 +43,13 @@ pr_data=$(gh api graphql -f query='
 
 # Extract PR data
 pr_number=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].number // empty')
+
+# Exit early if no associated PR found
+if [[ -z "$pr_number" ]]; then
+  echo "No associated pull request found for commit $check_run_sha, exiting"
+  exit 0
+fi
+
 pr_labels=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].labels.nodes[].name' | tr '\n' ',' | sed 's/,$//')
 pr_draft=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].isDraft // empty')
 
