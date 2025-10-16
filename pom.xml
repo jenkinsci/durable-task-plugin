@@ -50,7 +50,7 @@
         <dependency>
             <groupId>io.jenkins.plugins</groupId>
             <artifactId>lib-durable-task</artifactId>
-            <version>61.v4ddb_ee885789</version> <!-- https://github.com/jenkinsci/lib-durable-task/pull/124 --!>
+            <version>61.v4ddb_ee885789</version>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.test</groupId>
