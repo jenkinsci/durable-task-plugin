@@ -24,6 +24,11 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import com.cloudbees.plugins.credentials.CredentialsScope;
+import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
+import com.cloudbees.plugins.credentials.domains.Domain;
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.EnvVars;
 import hudson.ExtensionList;
 import hudson.FilePath;
@@ -32,18 +37,21 @@ import hudson.Platform;
 import hudson.Proc;
 import hudson.model.Node;
 import hudson.model.Slave;
+import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.Channel;
+import hudson.remoting.TeeOutputStream;
 import hudson.remoting.VirtualChannel;
+import hudson.slaves.DumbSlave;
 import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import jenkins.security.MasterToSlaveCallable;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.Serial;
 import java.io.StringWriter;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -55,70 +63,97 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.io.output.TeeOutputStream;
 
+import static hudson.Functions.isWindows;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import org.jenkinsci.test.acceptance.docker.Docker;
+import org.apache.commons.io.IOUtils;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.junit.Assume.*;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
-import org.jvnet.hudson.test.LoggerRule;
+import org.jvnet.hudson.test.LogRecorder;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
+import org.testcontainers.DockerClientFactory;
+import org.testcontainers.containers.GenericContainer;
 
-public abstract class BourneShellScriptTest {
+@WithJenkins
+abstract class BourneShellScriptTest {
 
-    @Rule public JenkinsRule j = new JenkinsRule();
+    protected JenkinsRule j;
 
-    @BeforeClass public static void unix() throws Exception {
-        assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
-    }
+    @SuppressWarnings("unused")
+    private final LogRecorder logging = new LogRecorder().recordPackage(BourneShellScript.class, Level.FINEST);
+    private final TestPlatform platform = getPlatform();
+    private final StreamTaskListener listener = StreamTaskListener.fromStdout();
 
-    static void assumeDocker() throws Exception {
-        assumeTrue("Docker is available", new Docker().isAvailable());
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        assumeThat("`docker version` could be run", new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}").stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join(), is(0));
-        assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
-    }
-
-    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINEST);
-
-    // TODO progressively delete, and instead create methods overridden by various concrete test classes
-    enum TestPlatform {
-        ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
-    }
-    private TestPlatform platform;
-
-    private StreamTaskListener listener;
+    private GenericContainer<?> container;
     private Node s;
     private FilePath ws;
     private Launcher launcher;
 
-    protected BourneShellScriptTest(TestPlatform platform) {
-        this.platform = platform;
-        this.listener = StreamTaskListener.fromStdout();
+    enum TestPlatform {
+        ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
+    }
+
+    static void assumeDocker() throws Exception {
+        assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker is available");
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        assumeTrue(new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}")
+                .stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join() == 0, "`docker version` could be run");
+        assumeTrue(new VersionNumber(baos.toString().trim()).isNewerThanOrEqualTo(new VersionNumber("1.13.0")), "Docker must be at least 1.13.0 for this test (uses --init)");
     }
 
     protected boolean useBinaryWrapper() {
         return true;
     }
 
-    protected abstract Node createNode() throws Exception;
+    protected Node createNode() throws Exception {
+        assumeDocker();
+        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(
+                Domain.global(), Collections.singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
+        var sshLauncher = new SSHLauncher(container.getHost(), container.getMappedPort(22), "test");
+        sshLauncher.setJavaPath(customJavaPath());
+        return new DumbSlave("docker", "/home/test", sshLauncher);
+    }
 
-    @Before public void prepareAgentForPlatform() throws Exception {
+    protected abstract TestPlatform getPlatform();
+
+    protected GenericContainer<?> createContainer() {
+        return null;
+    }
+
+    protected String customJavaPath() {
+        return null;
+    }
+
+    @BeforeAll
+    static void beforeAll() {
+        assumeFalse(isWindows(), "This test is only for Unix");
+    }
+
+    @BeforeEach
+    void beforeEach(JenkinsRule rule) throws Exception {
+        j = rule;
+
+        container = createContainer();
+        if (container != null) {
+            container.start();
+        }
+
         BourneShellScript.USE_BINARY_WRAPPER = useBinaryWrapper();
         s = createNode();
         if (s instanceof Slave slave) {
@@ -131,39 +166,31 @@ public abstract class BourneShellScriptTest {
         launcher = s.createLauncher(listener);
     }
 
-    @After public void agentCleanup() throws IOException, InterruptedException {
+    @AfterEach
+    void afterEach() throws Exception {
         if (s != null) {
             j.jenkins.removeNode(s);
         }
         BourneShellScript.USE_BINARY_WRAPPER = false;
+
+        if (container != null) {
+            container.stop();
+        }
     }
 
-    @Test public void smokeTest() throws Exception {
-        int sleepSeconds;
-        switch (platform) {
-            case ON_CONTROLLER:
-            case NATIVE:
-                sleepSeconds = 0;
-                break;
-            case CENTOS:
-            case UBUNTU:
-            case UBUNTU_NO_BINARY:
-            case NO_INIT:
-                sleepSeconds = 10;
-                break;
-            case ALPINE:
-            case SLIM:
-                sleepSeconds = 45;
-                break;
-            default:
-                throw new AssertionError(platform);
-        }
+    @Test
+    void smokeTest() throws Exception {
+        int sleepSeconds = switch (platform) {
+            case ON_CONTROLLER, NATIVE -> 0;
+            case CENTOS, UBUNTU, UBUNTU_NO_BINARY, NO_INIT -> 10;
+            case ALPINE, SLIM -> 45;
+        };
 
         String script = String.format("echo hello world; sleep %s", sleepSeconds);
         Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws,baos);
+        c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertTrue(baos.toString().contains("hello world"));
         c.cleanup(ws);
@@ -171,7 +198,8 @@ public abstract class BourneShellScriptTest {
         assertNoProcessPipeInputStreamInRemoteExportTable();
     }
 
-    @Test public void stop() throws Exception {
+    @Test
+    void stop() throws Exception {
         // Have observed both SIGTERM and SIGCHLD, perhaps depending on which process (the written sh, or sleep) gets the signal first.
         // TODO without the `trap … EXIT` the other handlers do not seem to get run, and we get exit code 143 (~ uncaught SIGTERM). Why?
         // Also on jenkins.ci neither signal trap is encountered, only EXIT.
@@ -190,7 +218,8 @@ public abstract class BourneShellScriptTest {
         assertNoZombies();
     }
 
-    @Test public void reboot() throws Exception {
+    @Test
+    void reboot() throws Exception {
         int orig = BourneShellScript.HEARTBEAT_CHECK_INTERVAL;
         BourneShellScript.HEARTBEAT_CHECK_INTERVAL = 15;
         try {
@@ -214,7 +243,8 @@ public abstract class BourneShellScriptTest {
         assertNoZombies();
     }
 
-    @Test public void justSlow() throws Exception {
+    @Test
+    void justSlow() throws Exception {
         Controller c = new BourneShellScript("sleep 60").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         c.writeLog(ws, System.out);
@@ -224,7 +254,8 @@ public abstract class BourneShellScriptTest {
     }
 
     @Issue("JENKINS-27152")
-    @Test public void cleanWorkspace() throws Exception {
+    @Test
+    void cleanWorkspace() throws Exception {
         Controller c = new BourneShellScript("touch stuff && echo ---`ls -1a`---").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -235,7 +266,8 @@ public abstract class BourneShellScriptTest {
     }
 
     @Issue("JENKINS-26133")
-    @Test public void output() throws Exception {
+    @Test
+    void output() throws Exception {
         DurableTask task = new BourneShellScript("echo 42");
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
@@ -249,7 +281,8 @@ public abstract class BourneShellScriptTest {
     }
 
     @Issue("JENKINS-38381")
-    @Test public void watch() throws Exception {
+    @Test
+    void watch() throws Exception {
         DurableTask task = new BourneShellScript("set +x; for x in 1 2 3 4 5; do echo $x; sleep 1; done");
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
         BlockingQueue<Integer> status = new LinkedBlockingQueue<>();
@@ -273,37 +306,45 @@ public abstract class BourneShellScriptTest {
         c.cleanup(ws);
         assertNoZombies();
     }
+
     static class MockHandler extends Handler {
         final BlockingQueue<Integer> status;
         final BlockingQueue<String> output;
         final BlockingQueue<String> lines;
+
         @SuppressWarnings("unchecked")
         MockHandler(VirtualChannel channel, BlockingQueue<Integer> status, BlockingQueue<String> output, BlockingQueue<String> lines) {
             this.status = channel.export(BlockingQueue.class, status);
             this.output = channel.export(BlockingQueue.class, output);
             this.lines = channel.export(BlockingQueue.class, lines);
         }
-        @Override public void output(InputStream stream) throws Exception {
+
+        @Override
+        public void output(@NonNull InputStream stream) throws Exception {
             lines.addAll(IOUtils.readLines(stream, StandardCharsets.UTF_8));
         }
-        @Override public void exited(int code, byte[] data) throws Exception {
+
+        @Override
+        public void exited(int code, byte[] data) throws Exception {
             status.add(code);
             output.add(data != null ? new String(data, StandardCharsets.UTF_8) : "<no output>");
         }
     }
 
     @Issue("JENKINS-40734")
-    @Test public void envWithShellChar() throws Exception {
+    @Test
+    void envWithShellChar() throws Exception {
         Controller c = new BourneShellScript("echo \"value=$MYNEWVAR\"").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws,baos);
+        c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
         c.cleanup(ws);
     }
 
-    @Test public void shebang() throws Exception {
+    @Test
+    void shebang() throws Exception {
         ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("/bin/false"); // Should be overridden
         Controller c = new BourneShellScript("#!/bin/cat\nHello, world!").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
@@ -315,7 +356,8 @@ public abstract class BourneShellScriptTest {
     }
 
     @Issue("JENKINS-50902")
-    @Test public void configuredInterpreter() throws Exception {
+    @Test
+    void configuredInterpreter() throws Exception {
         ExtensionList.lookupSingleton(Shell.DescriptorImpl.class).setShell("/bin/bash");
         String script = "if [ ! -z \"$BASH_VERSION\" ]; then echo 'this is bash'; else echo 'this is not'; fi";
         Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, listener);
@@ -350,42 +392,32 @@ public abstract class BourneShellScriptTest {
      * Make sure the golang binary does not output to stdout/stderr when running in non-daemon mode,
      * otherwise binary will crash if Jenkins is terminated unexpectedly.
      */
-    @Test public void noStdout() throws Exception {
+    @Test
+    void noStdout() throws Exception {
         assumeTrue(!platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         System.setProperty(BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS", "true");
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         TeeOutputStream teeOut = new TeeOutputStream(baos, System.out);
         StreamTaskListener stdoutListener = new StreamTaskListener(teeOut, Charset.defaultCharset());
-        String script = String.format("echo hello world");
+        String script = "echo hello world";
         Controller c = new BourneShellScript(script).launch(new EnvVars(), ws, launcher, stdoutListener);
         awaitCompletion(c);
-        assertThat(baos.toString(), isEmptyString());
+        assertThat(baos.toString(), emptyString());
         c.cleanup(ws);
         System.clearProperty(BourneShellScript.class.getName() + ".LAUNCH_DIAGNOSTICS");
     }
 
     @Issue("JENKINS-58290")
-    @Test public void backgroundLaunch() throws IOException, InterruptedException {
-        int sleepSeconds;
-        switch (platform) {
-            case ON_CONTROLLER:
-            case NATIVE:
-            case CENTOS:
-            case UBUNTU:
-            case UBUNTU_NO_BINARY:
-            case NO_INIT:
-                sleepSeconds = 10;
-                break;
-            case ALPINE:
-            case SLIM:
-                sleepSeconds = 45;
-                break;
-            default:
-                throw new AssertionError(platform);
-        }
+    @Test
+    void backgroundLaunch() throws IOException, InterruptedException {
+        int sleepSeconds = switch (platform) {
+            case ON_CONTROLLER, NATIVE, CENTOS, UBUNTU, UBUNTU_NO_BINARY, NO_INIT -> 10;
+            case ALPINE, SLIM -> 45;
+        };
         final AtomicReference<Proc> proc = new AtomicReference<>();
         Launcher decorated = new Launcher.DecoratedLauncher(launcher) {
-            @Override public Proc launch(Launcher.ProcStarter starter) throws IOException {
+            @Override
+            public Proc launch(Launcher.ProcStarter starter) throws IOException {
                 Proc delegate = super.launch(starter);
                 assertTrue(proc.compareAndSet(null, delegate));
                 return delegate;
@@ -399,7 +431,7 @@ public abstract class BourneShellScriptTest {
             c.writeLog(ws, baos);
             if (baos.toString().contains("long since started")) {
                 assertNotNull(proc.get());
-                assertFalse("JENKINS-58290: wrapper process still running:\n" + baos, proc.get().isAlive());
+                assertFalse(proc.get().isAlive(), "JENKINS-58290: wrapper process still running:\n" + baos);
             }
             Thread.sleep(100);
         }
@@ -409,13 +441,13 @@ public abstract class BourneShellScriptTest {
         assertNoZombies();
     }
 
-    @Test public void binaryCaching() throws Exception {
+    @Test
+    void binaryCaching() throws Exception {
         assumeFalse(platform.equals(TestPlatform.UBUNTU_NO_BINARY));
         String os;
         String architecture;
         switch (platform) {
-            case ON_CONTROLLER:
-            case NATIVE:
+            case ON_CONTROLLER, NATIVE:
                 if (Platform.isDarwin()) {
                     os = "darwin";
                     String macArch = System.getProperty("os.arch");
@@ -466,13 +498,9 @@ public abstract class BourneShellScriptTest {
 
         binaryPath.delete();
         binaryPath.touch(Instant.now().toEpochMilli());
-        try {
-            c = script.launch(envVars, ws, launcher, listener);
-            fail("binary was copied over");
-        } catch (Exception e) {
-            assertThat(e, instanceOf(IOException.class));
-            assertThat(e.getMessage(), containsString("Cannot run program"));
-        }
+
+        IOException e = assertThrows(IOException.class, () -> script.launch(envVars, ws, launcher, listener), "binary was copied over");
+        assertThat(e.getMessage(), containsString("Cannot run program"));
     }
 
     /**
@@ -483,8 +511,8 @@ public abstract class BourneShellScriptTest {
      * @throws IOException
      */
     private void assertNoZombies() throws InterruptedException, IOException {
-        String exitString = null;
-        String zombieString = null;
+        String exitString;
+        String zombieString;
         switch (platform) {
             case SLIM:
                 // Debian slim does not have ps
@@ -501,7 +529,7 @@ public abstract class BourneShellScriptTest {
         }
 
         String psFormat = setPsFormat();
-        String psString = null;
+        String psString;
         do {
             Thread.sleep(1000);
             psString = psOut(psFormat);
@@ -540,18 +568,11 @@ public abstract class BourneShellScriptTest {
      * @return String of the `ps -o` column format
      */
     private String setPsFormat() {
-        String cmdCol = null;
-        switch (platform) {
-            case ON_CONTROLLER:
-            case NATIVE:
-                cmdCol = Platform.isDarwin() ? "comm" : "cmd";
-                break;
-            case ALPINE:
-                cmdCol = "args";
-                break;
-            default:
-                cmdCol = "cmd";
-        }
+        String cmdCol = switch (platform) {
+            case ON_CONTROLLER, NATIVE -> Platform.isDarwin() ? "comm" : "cmd";
+            case ALPINE -> "args";
+            default -> "cmd";
+        };
         return "pid,ppid,stat," + cmdCol;
     }
 
@@ -571,9 +592,7 @@ public abstract class BourneShellScriptTest {
     private void assertNoProcessPipeInputStreamInRemoteExportTable()
             throws IOException, InterruptedException {
         VirtualChannel virtualChannel = launcher.getChannel();
-        if (virtualChannel instanceof Channel) {
-            @SuppressWarnings("resource")
-            Channel channel = (Channel) virtualChannel;
+        if (virtualChannel instanceof Channel channel) {
             String remoteExportTable = channel.call(new DumpExportTableCallable());
             if (remoteExportTable.contains("object=java.lang.UNIXProcess$ProcessPipeInputStream")) {
                 fail("remote ExportTable contains some java.lang.UNIXProcess$ProcessPipeInputStream objects\n"
@@ -583,6 +602,7 @@ public abstract class BourneShellScriptTest {
     }
 
     private static final class DumpExportTableCallable extends MasterToSlaveCallable<String, IOException> {
+        @Serial
         private static final long serialVersionUID = 1L;
 
         @Override

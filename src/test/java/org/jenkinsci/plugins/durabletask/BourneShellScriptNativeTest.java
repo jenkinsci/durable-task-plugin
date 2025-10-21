@@ -26,15 +26,15 @@ package org.jenkinsci.plugins.durabletask;
 
 import hudson.model.Node;
 
-public final class BourneShellScriptNativeTest extends BourneShellScriptTest {
+class BourneShellScriptNativeTest extends BourneShellScriptTest {
 
-    public BourneShellScriptNativeTest() {
-        super(TestPlatform.NATIVE);
+    @Override
+    protected TestPlatform getPlatform() {
+        return TestPlatform.NATIVE;
     }
 
     @Override
     protected Node createNode() throws Exception {
         return j.createOnlineSlave();
     }
-
 }

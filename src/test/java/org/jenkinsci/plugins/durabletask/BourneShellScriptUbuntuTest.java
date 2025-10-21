@@ -24,22 +24,18 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import org.jenkinsci.test.acceptance.docker.DockerRule;
-import org.jenkinsci.test.acceptance.docker.fixtures.JavaContainer;
+import org.jenkinsci.plugins.durabletask.fixtures.UbuntuFixture;
+import org.testcontainers.containers.GenericContainer;
 
-public class BourneShellScriptUbuntuTest extends DockerRuleBourneShellScriptTest {
+class BourneShellScriptUbuntuTest extends BourneShellScriptTest {
 
-    public BourneShellScriptUbuntuTest() {
-        this(TestPlatform.UBUNTU);
-    }
-
-    protected BourneShellScriptUbuntuTest(TestPlatform platform) {
-        super(platform);
+    @Override
+    protected TestPlatform getPlatform() {
+        return TestPlatform.UBUNTU;
     }
 
     @Override
-    protected DockerRule<?> createDockerRule() {
-        return new DockerRule<>(JavaContainer.class);
+    protected GenericContainer<?> createContainer() {
+        return new UbuntuFixture();
     }
-
 }

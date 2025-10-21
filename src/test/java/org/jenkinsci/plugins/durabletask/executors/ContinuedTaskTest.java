@@ -31,57 +31,77 @@ import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import hudson.model.Label;
 import hudson.model.queue.QueueTaskFuture;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.LogRecorder;
+import org.jvnet.hudson.test.TestBuilder;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
+
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
-import org.junit.Test;
-import static org.junit.Assert.*;
-import org.junit.Rule;
-import org.jvnet.hudson.test.JenkinsRule;
-import org.jvnet.hudson.test.LoggerRule;
-import org.jvnet.hudson.test.TestBuilder;
 
-public class ContinuedTaskTest {
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-    @Rule public JenkinsRule r = new JenkinsRule();
-    @Rule public LoggerRule logging = new LoggerRule().record(ContinuedTask.class, Level.FINER);
+@WithJenkins
+class ContinuedTaskTest {
 
-    @Test public void basics() throws Exception {
-        FreeStyleProject p = r.createFreeStyleProject();
+    @SuppressWarnings("unused")
+    private final LogRecorder logging = new LogRecorder().record(ContinuedTask.class, Level.FINER);
+
+    private JenkinsRule j;
+
+    @BeforeEach
+    void beforeEach(JenkinsRule rule) {
+        j = rule;
+    }
+
+    @Test
+    void basics() throws Exception {
+        FreeStyleProject p = j.createFreeStyleProject();
         Label label = Label.get("test");
         p.setAssignedLabel(label);
         final AtomicInteger cntA = new AtomicInteger();
         final AtomicInteger cntB = new AtomicInteger();
         p.getBuildersList().add(new TestBuilder() {
-            @Override public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
+            @Override
+            public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
                 assertEquals(1, cntB.get());
                 return true;
             }
         });
         QueueTaskFuture<FreeStyleBuild> b1 = p.scheduleBuild2(0);
-        r.jenkins.getQueue().schedule(new TestTask(cntA, false), 0);
-        r.jenkins.getQueue().schedule(new TestTask(cntB, true), 0);
+        j.jenkins.getQueue().schedule(new TestTask(cntA, false), 0);
+        j.jenkins.getQueue().schedule(new TestTask(cntB, true), 0);
         // cntB task ought to run first, then b1 and the cntA task in either order
-        r.createSlave(label);
-        r.assertBuildStatusSuccess(b1);
-        r.waitUntilNoActivity();
+        j.createSlave(label);
+        j.assertBuildStatusSuccess(b1);
+        j.waitUntilNoActivity();
         assertEquals(1, cntA.get());
         assertEquals(1, cntB.get());
     }
 
     private static final class TestTask extends MockTask implements ContinuedTask {
         private final boolean continued;
+
         TestTask(AtomicInteger cnt, boolean continued) {
             super(cnt);
             this.continued = continued;
         }
-        @Override public boolean isContinued() {
+
+        @Override
+        public boolean isContinued() {
             return continued;
         }
-        @Override public Label getAssignedLabel() {
+
+        @Override
+        public Label getAssignedLabel() {
             return Label.get("test");
         }
-        @Override public String toString() {
+
+        @Override
+        public String toString() {
             return "TestTask:" + continued;
         }
     }

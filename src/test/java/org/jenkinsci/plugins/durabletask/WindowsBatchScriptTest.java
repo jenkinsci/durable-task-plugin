@@ -28,48 +28,54 @@ import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.util.StreamTaskListener;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import org.junit.Assume;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.params.Parameter;
+import org.junit.jupiter.params.ParameterizedClass;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+import static hudson.Functions.isWindows;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-@RunWith(Parameterized.class)
-public class WindowsBatchScriptTest {
-    @Parameterized.Parameters(name = "{index}: USE_BINARY={0}")
-    public static Object[] parameters() {
-        return new Object[] {true, false};
-    }
-
-    @Rule public JenkinsRule j = new JenkinsRule();
-
-    @BeforeClass public static void windows() {
-        Assume.assumeTrue("These tests are only for Windows", File.pathSeparatorChar == ';');
-    }
+@WithJenkins
+@EnabledOnOs(OS.WINDOWS)
+@ParameterizedClass(name = "{index}: USE_BINARY={0}")
+@ValueSource(booleans = {true, false})
+class WindowsBatchScriptTest {
 
     private StreamTaskListener listener;
     private FilePath ws;
     private Launcher launcher;
+
+    @Parameter
     private boolean enableBinary;
 
-    public WindowsBatchScriptTest(boolean enableBinary) {
-        this.enableBinary = enableBinary;
+    private JenkinsRule j;
+
+    @BeforeAll
+    static void beforeAll() {
+        assumeTrue(isWindows(), "This test is only for Windows");
     }
 
-    @Before public void vars() {
+    @BeforeEach
+    void beforeEach(JenkinsRule rule) {
+        j = rule;
+
         WindowsBatchScript.USE_BINARY_WRAPPER = enableBinary;
         listener = StreamTaskListener.fromStdout();
         ws = j.jenkins.getRootPath().child("ws");
@@ -77,17 +83,20 @@ public class WindowsBatchScriptTest {
     }
 
     @Issue("JENKINS-25678")
-    @Test public void spaceInPath() throws Exception {
+    @Test
+    void spaceInPath() throws Exception {
         testWithPath("space in path");
     }
 
     @Issue("JENKINS-25678")
-    @Test public void spaceInPath2() throws Exception {
+    @Test
+    void spaceInPath2() throws Exception {
         testWithPath("space in path@2");
     }
 
     @Issue("JENKINS-32701")
-    @Test public void percentInPath() throws Exception {
+    @Test
+    void percentInPath() throws Exception {
         testWithPath("percent%in%path");
     }
 
@@ -100,23 +109,25 @@ public class WindowsBatchScriptTest {
         assertEquals(Integer.valueOf(0), c.exitStatus(wsWithPath, launcher, listener));
         String log = baos.toString();
         System.err.print(log);
-        assertTrue(log, log.contains("hello world"));
+        assertTrue(log.contains("hello world"), log);
         c.cleanup(wsWithPath);
     }
 
     @Issue("JENKINS-27419")
-    @Test public void exitCommand() throws Exception {
+    @Test
+    void exitCommand() throws Exception {
         Controller c = new WindowsBatchScript("echo hello world\r\nexit 1").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher, listener));
         String log = baos.toString();
-        assertTrue(log, log.contains("hello world"));
+        assertTrue(log.contains("hello world"), log);
         c.cleanup(ws);
     }
 
-    @Test public void exitCommandUnsignedInt() throws Exception {
+    @Test
+    void exitCommandUnsignedInt() throws Exception {
         Controller c = new WindowsBatchScript("echo hello world\r\nexit 3221225477").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -128,11 +139,12 @@ public class WindowsBatchScriptTest {
         }
 
         String log = baos.toString();
-        assertTrue(log, log.contains("hello world"));
+        assertTrue(log.contains("hello world"), log);
         c.cleanup(ws);
     }
 
-    @Test public void exitBCommandAfterError() throws Exception {
+    @Test
+    void exitBCommandAfterError() throws Exception {
         Controller c = new WindowsBatchScript("cmd /c exit 42\r\nexit /b").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -142,7 +154,8 @@ public class WindowsBatchScriptTest {
     }
 
     @Issue("JENKINS-26133")
-    @Test public void output() throws Exception {
+    @Test
+    void output() throws Exception {
         DurableTask task = new WindowsBatchScript("@echo 42"); // http://stackoverflow.com/a/8486061/12916
         task.captureOutput();
         Controller c = task.launch(new EnvVars(), ws, launcher, listener);
@@ -155,37 +168,39 @@ public class WindowsBatchScriptTest {
     }
 
     @Issue("JENKINS-40734")
-    @Test public void envWithShellChar() throws Exception {
+    @Test
+    void envWithShellChar() throws Exception {
         Controller c = new WindowsBatchScript("echo value=%MYNEWVAR%").launch(new EnvVars("MYNEWVAR", "foo$$bar"), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        c.writeLog(ws,baos);
+        c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         assertThat(baos.toString(), containsString("value=foo$$bar"));
         c.cleanup(ws);
     }
 
-    @Test public void scriptAffectedByLineEndings() throws Exception {
+    @Test
+    void scriptAffectedByLineEndings() throws Exception {
         char[] pad254 = new char[254];
         char[] pad231 = new char[231];
         Arrays.fill(pad254, '#');
         Arrays.fill(pad231, '#');
         // script is found on https://www.dostips.com/forum/viewtopic.php?f=3&t=8988#p58860
         String script =
-            "@echo off\n" +
-            "goto :zwei\n" +
-            ":" + new String(pad254) + "\n" +
-            ":" + new String(pad254) + "\n" +
-            ":" + new String(pad254) + "\n" +
-            ":" + new String(pad231) + "\n" +
-            "\n" +
-            ":eins\n" +
-            "ECHO eins\n" +
-            "goto :eof\n" +
-            "\n" +
-            ":zwei\n" +
-            "echo zwei\n" +
-            "goto :eins\n";
+                "@echo off\n" +
+                        "goto :zwei\n" +
+                        ":" + new String(pad254) + "\n" +
+                        ":" + new String(pad254) + "\n" +
+                        ":" + new String(pad254) + "\n" +
+                        ":" + new String(pad231) + "\n" +
+                        "\n" +
+                        ":eins\n" +
+                        "ECHO eins\n" +
+                        "goto :eof\n" +
+                        "\n" +
+                        ":zwei\n" +
+                        "echo zwei\n" +
+                        "goto :eins\n";
         Controller c = new WindowsBatchScript(script).launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -194,14 +209,15 @@ public class WindowsBatchScriptTest {
         c.cleanup(ws);
     }
 
-    @Test public void unicodeChars() throws Exception {
+    @Test
+    void unicodeChars() throws Exception {
         Controller c = new WindowsBatchScript("echo Helló, Wõrld ®").launch(new EnvVars(), ws, launcher, listener);
         awaitCompletion(c);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
-        String log = baos.toString("UTF-8");
-        assertTrue(log, log.contains("Helló, Wõrld ®"));
+        String log = baos.toString(StandardCharsets.UTF_8);
+        assertTrue(log.contains("Helló, Wõrld ®"), log);
         c.cleanup(ws);
     }
 

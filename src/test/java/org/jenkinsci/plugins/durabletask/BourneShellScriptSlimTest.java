@@ -24,22 +24,23 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import org.jenkinsci.test.acceptance.docker.DockerRule;
+import org.jenkinsci.plugins.durabletask.fixtures.SlimFixture;
+import org.testcontainers.containers.GenericContainer;
 
-public final class BourneShellScriptSlimTest extends DockerRuleBourneShellScriptTest {
+class BourneShellScriptSlimTest extends BourneShellScriptTest {
 
-    public BourneShellScriptSlimTest() {
-        super(TestPlatform.SLIM);
+    @Override
+    protected TestPlatform getPlatform() {
+        return TestPlatform.SLIM;
     }
 
     @Override
-    protected DockerRule<?> createDockerRule() {
-        return new DockerRule<>(SlimFixture.class);
+    protected GenericContainer<?> createContainer() {
+        return new SlimFixture();
     }
 
     @Override
     protected String customJavaPath() {
         return SlimFixture.SLIM_JAVA_LOCATION;
     }
-
 }

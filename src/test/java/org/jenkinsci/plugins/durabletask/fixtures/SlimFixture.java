@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2025 CloudBees, Inc.
+ * Copyright 2018 CloudBees, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,25 +22,24 @@
  * THE SOFTWARE.
  */
 
-package org.jenkinsci.plugins.durabletask;
+package org.jenkinsci.plugins.durabletask.fixtures;
 
-import hudson.model.Node;
-import hudson.slaves.DumbSlave;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.images.builder.ImageFromDockerfile;
 
-import org.jvnet.hudson.test.SimpleCommandLauncher;
+import java.util.List;
 
-class BourneShellScriptNoInitTest extends BourneShellScriptTest {
+/**
+ * Container using Debian Slim.
+ */
+public class SlimFixture extends GenericContainer<SlimFixture> {
 
-    @Override
-    protected TestPlatform getPlatform() {
-        return TestPlatform.NO_INIT;
+    public static final String SLIM_JAVA_LOCATION = "/usr/lib/jvm/java-17-openjdk-amd64/bin/java";
+
+    public SlimFixture() {
+        super(new ImageFromDockerfile("slim", false)
+                .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/SlimFixture/Dockerfile"));
+        setExposedPorts(List.of(22));
     }
 
-    @Override
-    protected Node createNode() throws Exception {
-        assumeDocker();
-        return new DumbSlave("docker",
-                "/home/jenkins/agent",
-                new SimpleCommandLauncher("docker run -i --rm jenkins/agent:latest-jdk17 java -jar /usr/share/jenkins/agent.jar"));
-    }
 }

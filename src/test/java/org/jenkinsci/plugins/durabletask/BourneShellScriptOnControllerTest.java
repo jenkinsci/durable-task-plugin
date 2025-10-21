@@ -26,15 +26,15 @@ package org.jenkinsci.plugins.durabletask;
 
 import hudson.model.Node;
 
-public final class BourneShellScriptOnControllerTest extends BourneShellScriptTest {
+class BourneShellScriptOnControllerTest extends BourneShellScriptTest {
 
-    public BourneShellScriptOnControllerTest() {
-        super(TestPlatform.ON_CONTROLLER);
+    @Override
+    protected TestPlatform getPlatform() {
+        return TestPlatform.ON_CONTROLLER;
     }
 
     @Override
-    protected Node createNode() throws Exception {
+    protected Node createNode() {
         return j.jenkins;
     }
-
 }
