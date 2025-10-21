@@ -134,20 +134,18 @@ public final class OnceRetentionStrategy extends CloudRetentionStrategy implemen
         }
         LOGGER.log(Level.FINE, new Throwable(), () -> "terminating " + c + " idle? " + c.isIdle() + " idleStartMilliseconds=" + new Date(c.getIdleStartMilliseconds()));
         Computer.threadPoolForRemoting.submit(() -> {
-            Queue.withLock(() -> {
-                try {
-                    AbstractCloudSlave node = c.getNode();
-                    if (node != null) {
-                        LOGGER.fine(() -> "terminating " + c + " now");
-                        node.terminate();
-                    }
-                } catch (InterruptedException | IOException e) {
-                    LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
-                    synchronized (OnceRetentionStrategy.this) {
-                        terminating = false;
-                    }
+            try {
+                AbstractCloudSlave node = c.getNode();
+                if (node != null) {
+                    LOGGER.fine(() -> "terminating " + c + " now");
+                    node.terminate();
                 }
-            });
+            } catch (InterruptedException | IOException e) {
+                LOGGER.log(Level.WARNING, "Failed to terminate " + c.getName(), e);
+                synchronized (OnceRetentionStrategy.this) {
+                    terminating = false;
+                }
+            }
         });
     }
 

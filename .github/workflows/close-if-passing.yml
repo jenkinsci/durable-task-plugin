@@ -1,0 +1,30 @@
+name: Close If Passing
+
+on:
+  check_run:
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  handle-ci-status:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download and run close-if-passing script
+        run: |
+          # Download the script from the repository
+          gh api repos/$GITHUB_REPOSITORY/contents/.github/close-if-passing.sh \
+            --jq '.content' | base64 -d > close-if-passing.sh
+          chmod +x close-if-passing.sh
+          ./close-if-passing.sh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}

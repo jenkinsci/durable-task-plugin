@@ -24,11 +24,6 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import com.cloudbees.plugins.credentials.CredentialsScope;
-import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
-import com.cloudbees.plugins.credentials.domains.Domain;
-import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
-import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.EnvVars;
 import hudson.ExtensionList;
 import hudson.FilePath;
@@ -37,40 +32,18 @@ import hudson.Platform;
 import hudson.Proc;
 import hudson.model.Node;
 import hudson.model.Slave;
-import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.Channel;
 import hudson.remoting.VirtualChannel;
-import hudson.slaves.DumbSlave;
 import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
+import hudson.util.VersionNumber;
 import jenkins.security.MasterToSlaveCallable;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.io.output.TeeOutputStream;
-import org.jenkinsci.plugins.durabletask.fixtures.AlpineFixture;
-import org.jenkinsci.plugins.durabletask.fixtures.CentOSFixture;
-import org.jenkinsci.plugins.durabletask.fixtures.SlimFixture;
-import org.jenkinsci.plugins.durabletask.fixtures.UbuntuFixture;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledOnOs;
-import org.junit.jupiter.api.condition.OS;
-import org.junit.jupiter.params.Parameter;
-import org.junit.jupiter.params.ParameterizedClass;
-import org.junit.jupiter.params.provider.EnumSource;
-import org.jvnet.hudson.test.Issue;
-import org.jvnet.hudson.test.JenkinsRule;
-import org.jvnet.hudson.test.LogRecorder;
-import org.jvnet.hudson.test.SimpleCommandLauncher;
-import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
-import org.testcontainers.DockerClientFactory;
-import org.testcontainers.containers.GenericContainer;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
-import java.io.Serial;
 import java.io.StringWriter;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -84,123 +57,82 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.emptyString;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.hamcrest.Matchers.*;
 
-enum TestPlatform {
-    ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
-}
+import org.jenkinsci.test.acceptance.docker.Docker;
 
-@WithJenkins
-@ParameterizedClass(name = "{index}: {0}")
-@EnumSource(TestPlatform.class)
-@DisabledOnOs(OS.WINDOWS)
-class BourneShellScriptTest {
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.junit.Assume.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
+import org.jvnet.hudson.test.Issue;
+import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.LoggerRule;
 
-    private final LogRecorder logging = new LogRecorder().recordPackage(BourneShellScript.class, Level.FINEST);
-    private final StreamTaskListener listener = StreamTaskListener.fromStdout();
+public abstract class BourneShellScriptTest {
 
-    private GenericContainer<?> container;
+    @Rule public JenkinsRule j = new JenkinsRule();
 
-    @Parameter
+    @BeforeClass public static void unix() throws Exception {
+        assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
+    }
+
+    static void assumeDocker() throws Exception {
+        assumeTrue("Docker is available", new Docker().isAvailable());
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        assumeThat("`docker version` could be run", new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}").stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join(), is(0));
+        assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
+    }
+
+    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINEST);
+
+    // TODO progressively delete, and instead create methods overridden by various concrete test classes
+    enum TestPlatform {
+        ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
+    }
     private TestPlatform platform;
 
+    private StreamTaskListener listener;
     private Node s;
     private FilePath ws;
     private Launcher launcher;
 
-    private JenkinsRule j;
+    protected BourneShellScriptTest(TestPlatform platform) {
+        this.platform = platform;
+        this.listener = StreamTaskListener.fromStdout();
+    }
 
-    @BeforeEach
-    void setUp(JenkinsRule rule) throws Exception {
-        j = rule;
-        switch (platform) {
-            case ON_CONTROLLER:
-                BourneShellScript.USE_BINARY_WRAPPER = true;
-                s = j.jenkins;
-                break;
-            case NATIVE:
-                BourneShellScript.USE_BINARY_WRAPPER = true;
-                s = j.createOnlineSlave();
-                break;
-            case SLIM:
-            case ALPINE:
-            case CENTOS:
-            case UBUNTU:
-            case NO_INIT:
-                BourneShellScript.USE_BINARY_WRAPPER = true;
-            case UBUNTU_NO_BINARY:
-                assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker is available");
-                s = prepareAgentDocker();
-                j.jenkins.addNode(s);
-                j.waitOnline((Slave) s);
-                break;
-            default:
-                throw new AssertionError(platform);
+    protected boolean useBinaryWrapper() {
+        return true;
+    }
+
+    protected abstract Node createNode() throws Exception;
+
+    @Before public void prepareAgentForPlatform() throws Exception {
+        BourneShellScript.USE_BINARY_WRAPPER = useBinaryWrapper();
+        s = createNode();
+        if (s instanceof Slave slave) {
+            j.jenkins.addNode(s);
+            j.waitOnline(slave);
+            ws = slave.getWorkspaceRoot().child("ws");
+        } else {
+            ws = j.jenkins.getRootPath().child("ws");
         }
-        ws = (s instanceof Slave ? ((Slave) s).getWorkspaceRoot() : j.jenkins.getRootPath()).child("ws");
         launcher = s.createLauncher(listener);
     }
 
-    private Slave prepareAgentDocker() throws Exception {
-        return switch (platform) {
-            case SLIM, ALPINE, CENTOS, UBUNTU, UBUNTU_NO_BINARY -> prepareDockerPlatforms();
-            case NO_INIT -> new DumbSlave("docker",
-                    "/home/jenkins/agent",
-                    new SimpleCommandLauncher("docker run -i --rm jenkins/agent:latest-jdk17 java -jar /usr/share/jenkins/agent.jar"));
-            default -> throw new AssertionError(platform);
-        };
-    }
-
-    private Slave prepareDockerPlatforms() throws Exception {
-        String customJavaPath = null;
-        switch (platform) {
-            case SLIM:
-                container = new SlimFixture();
-                customJavaPath = SlimFixture.SLIM_JAVA_LOCATION;
-                break;
-            case ALPINE:
-                container = new AlpineFixture();
-                customJavaPath = AlpineFixture.ALPINE_JAVA_LOCATION;
-                break;
-            case CENTOS:
-                container = new CentOSFixture();
-                break;
-            case UBUNTU:
-            case UBUNTU_NO_BINARY:
-                container = new UbuntuFixture();
-                break;
-            default:
-                throw new AssertionError(platform);
-        }
-
-        container.start();
-
-        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(Domain.global(), Collections.singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
-        SSHLauncher sshLauncher = new SSHLauncher(container.getHost(), container.getMappedPort(22), "test");
-        sshLauncher.setJavaPath(customJavaPath);
-        return new DumbSlave("docker", "/home/test", sshLauncher);
-    }
-
-    @AfterEach
-    void tearDown() throws Exception {
+    @After public void agentCleanup() throws IOException, InterruptedException {
         if (s != null) {
             j.jenkins.removeNode(s);
         }
-
-        if (container != null) {
-            container.stop();
-        }
-
         BourneShellScript.USE_BINARY_WRAPPER = false;
     }
 
