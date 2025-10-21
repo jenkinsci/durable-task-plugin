@@ -47,12 +47,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @WithJenkins
 class ContinuedTaskTest {
 
+    @SuppressWarnings("unused")
     private final LogRecorder logging = new LogRecorder().record(ContinuedTask.class, Level.FINER);
 
     private JenkinsRule j;
 
     @BeforeEach
-    void setUp(JenkinsRule rule) {
+    void beforeEach(JenkinsRule rule) {
         j = rule;
     }
 

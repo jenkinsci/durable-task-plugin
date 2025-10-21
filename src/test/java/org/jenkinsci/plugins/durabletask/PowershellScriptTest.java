@@ -31,10 +31,9 @@ import hudson.Proc;
 import hudson.model.TaskListener;
 import hudson.util.StreamTaskListener;
 import org.apache.commons.io.IOUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledOnOs;
-import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.params.Parameter;
 import org.junit.jupiter.params.ParameterizedClass;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -52,6 +51,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
+import static hudson.Functions.isWindows;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -59,7 +59,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @WithJenkins
-@EnabledOnOs(OS.WINDOWS)
 @ParameterizedClass(name = "{index}: USE_BINARY={0}")
 @ValueSource(booleans = {true, false})
 class PowershellScriptTest {
@@ -75,8 +74,13 @@ class PowershellScriptTest {
 
     private JenkinsRule j;
 
+    @BeforeAll
+    static void beforeAll() {
+        assumeTrue(isWindows(), "This test is only for Windows");
+    }
+
     @BeforeEach
-    void setUp(JenkinsRule rule) throws Exception {
+    void beforeEach(JenkinsRule rule) throws Exception {
         j = rule;
 
         PowershellScript.USE_BINARY_WRAPPER = enableBinary;

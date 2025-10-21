@@ -24,22 +24,23 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import org.jenkinsci.test.acceptance.docker.DockerRule;
+import org.jenkinsci.plugins.durabletask.fixtures.AlpineFixture;
+import org.testcontainers.containers.GenericContainer;
 
-public final class BourneShellScriptAlpineTest extends DockerRuleBourneShellScriptTest {
+class BourneShellScriptAlpineTest extends BourneShellScriptTest {
 
-    public BourneShellScriptAlpineTest() {
-        super(TestPlatform.ALPINE);
+    @Override
+    protected TestPlatform getPlatform() {
+        return TestPlatform.ALPINE;
     }
 
     @Override
-    protected DockerRule<?> createDockerRule() {
-        return new DockerRule<>(AlpineFixture.class);
+    protected GenericContainer<?> createContainer() {
+        return new AlpineFixture();
     }
 
     @Override
     protected String customJavaPath() {
         return AlpineFixture.ALPINE_JAVA_LOCATION;
     }
-
 }

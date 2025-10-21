@@ -16,8 +16,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledOnOs;
-import org.junit.jupiter.api.condition.OS;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.LogRecorder;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
@@ -30,18 +28,20 @@ import java.util.Collections;
 import java.util.Properties;
 import java.util.logging.Level;
 
+import static hudson.Functions.isWindows;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @WithJenkins
-@DisabledOnOs(OS.WINDOWS)
 class PowerShellCoreScriptTest {
 
     private final PowerShellCoreFixture dockerPWSH = new PowerShellCoreFixture();
 
+    @SuppressWarnings("unused")
     private final LogRecorder logging = new LogRecorder().recordPackage(PowershellScript.class, Level.FINE);
 
     private StreamTaskListener listener;
@@ -53,7 +53,8 @@ class PowerShellCoreScriptTest {
     private JenkinsRule j;
 
     @BeforeAll
-    static void setUp() {
+    static void beforeAll() {
+        assumeFalse(isWindows(), "This test is only for Unix");
         checkPwsh();
         assumeTrue(pwshExists || DockerClientFactory.instance().isDockerAvailable(), "This test should only run on Docker or if pwsh is available");
     }
@@ -75,7 +76,7 @@ class PowerShellCoreScriptTest {
     }
 
     @BeforeEach
-    void setUp(JenkinsRule rule) throws Exception {
+    void beforeEach(JenkinsRule rule) throws Exception {
         j = rule;
 
         listener = StreamTaskListener.fromStdout();
@@ -98,7 +99,7 @@ class PowerShellCoreScriptTest {
     }
 
     @AfterEach
-    void tearDown() throws Exception {
+    void afterEach() throws Exception {
         if (s != null) {
             j.jenkins.removeNode(s);
         }

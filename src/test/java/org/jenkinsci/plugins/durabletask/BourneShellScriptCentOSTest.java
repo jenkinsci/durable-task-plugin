@@ -24,17 +24,18 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import org.jenkinsci.test.acceptance.docker.DockerRule;
+import org.jenkinsci.plugins.durabletask.fixtures.CentOSFixture;
+import org.testcontainers.containers.GenericContainer;
 
-public final class BourneShellScriptCentOSTest extends DockerRuleBourneShellScriptTest {
+class BourneShellScriptCentOSTest extends BourneShellScriptTest {
 
-    public BourneShellScriptCentOSTest() {
-        super(TestPlatform.CENTOS);
+    @Override
+    protected TestPlatform getPlatform() {
+        return TestPlatform.CENTOS;
     }
 
     @Override
-    protected DockerRule<?> createDockerRule() {
-        return new DockerRule<>(CentOSFixture.class);
+    protected GenericContainer<?> createContainer() {
+        return new CentOSFixture();
     }
-
 }

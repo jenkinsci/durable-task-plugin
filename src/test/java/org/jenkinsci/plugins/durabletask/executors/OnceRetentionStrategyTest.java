@@ -53,6 +53,7 @@ class OnceRetentionStrategyTest {
 
     private static final Logger LOGGER = Logger.getLogger(OnceRetentionStrategyTest.class.getName());
 
+    @SuppressWarnings("unused")
     private final LogRecorder lr = new LogRecorder().record(LOGGER, Level.ALL);
 
     @TempDir(cleanup = CleanupMode.NEVER)
@@ -61,7 +62,7 @@ class OnceRetentionStrategyTest {
     private JenkinsRule j;
 
     @BeforeAll
-    static void setUp() {
+    static void beforeAll() {
         LoadStatistics.CLOCK = 100; // 100ms for the LoadStatistics so we have quick provisioning
         // deadConnectionsShouldReLaunched seems to fail always when run as part of the suite - but passes always when run individually without the binary wrapper
         // (because the ping command and its parent cmd.exe get killed :-o )
@@ -72,7 +73,7 @@ class OnceRetentionStrategyTest {
     }
 
     @BeforeEach
-    void setUp(JenkinsRule rule) {
+    void bforeEach(JenkinsRule rule) {
         j = rule;
     }
 

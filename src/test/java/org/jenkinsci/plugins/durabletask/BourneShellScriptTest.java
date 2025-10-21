@@ -24,6 +24,11 @@
 
 package org.jenkinsci.plugins.durabletask;
 
+import com.cloudbees.plugins.credentials.CredentialsScope;
+import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
+import com.cloudbees.plugins.credentials.domains.Domain;
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.EnvVars;
 import hudson.ExtensionList;
 import hudson.FilePath;
@@ -32,18 +37,21 @@ import hudson.Platform;
 import hudson.Proc;
 import hudson.model.Node;
 import hudson.model.Slave;
+import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.remoting.Channel;
+import hudson.remoting.TeeOutputStream;
 import hudson.remoting.VirtualChannel;
+import hudson.slaves.DumbSlave;
 import hudson.tasks.Shell;
 import hudson.util.StreamTaskListener;
 import hudson.util.VersionNumber;
 import jenkins.security.MasterToSlaveCallable;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.Serial;
 import java.io.StringWriter;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -56,67 +64,96 @@ import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static hudson.Functions.isWindows;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import org.jenkinsci.test.acceptance.docker.Docker;
+import org.apache.commons.io.IOUtils;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.junit.Assume.*;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
-import org.jvnet.hudson.test.LoggerRule;
+import org.jvnet.hudson.test.LogRecorder;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
+import org.testcontainers.DockerClientFactory;
+import org.testcontainers.containers.GenericContainer;
 
-public abstract class BourneShellScriptTest {
+@WithJenkins
+abstract class BourneShellScriptTest {
 
-    @Rule public JenkinsRule j = new JenkinsRule();
+    protected JenkinsRule j;
 
-    @BeforeClass public static void unix() throws Exception {
-        assumeTrue("This test is only for Unix", File.pathSeparatorChar==':');
-    }
+    @SuppressWarnings("unused")
+    private final LogRecorder logging = new LogRecorder().recordPackage(BourneShellScript.class, Level.FINEST);
+    private final TestPlatform platform = getPlatform();
+    private final StreamTaskListener listener = StreamTaskListener.fromStdout();
 
-    static void assumeDocker() throws Exception {
-        assumeTrue("Docker is available", new Docker().isAvailable());
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        assumeThat("`docker version` could be run", new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}").stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join(), is(0));
-        assumeThat("Docker must be at least 1.13.0 for this test (uses --init)", new VersionNumber(baos.toString().trim()), greaterThanOrEqualTo(new VersionNumber("1.13.0")));
-    }
-
-    @Rule public LoggerRule logging = new LoggerRule().recordPackage(BourneShellScript.class, Level.FINEST);
-
-    // TODO progressively delete, and instead create methods overridden by various concrete test classes
-    enum TestPlatform {
-        ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
-    }
-    private TestPlatform platform;
-
-    private StreamTaskListener listener;
+    private GenericContainer<?> container;
     private Node s;
     private FilePath ws;
     private Launcher launcher;
 
-    protected BourneShellScriptTest(TestPlatform platform) {
-        this.platform = platform;
-        this.listener = StreamTaskListener.fromStdout();
+    enum TestPlatform {
+        ON_CONTROLLER, NATIVE, ALPINE, CENTOS, UBUNTU, NO_INIT, UBUNTU_NO_BINARY, SLIM
+    }
+
+    static void assumeDocker() throws Exception {
+        assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker is available");
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        assumeTrue(new Launcher.LocalLauncher(StreamTaskListener.fromStderr()).launch().cmds("docker", "version", "--format", "{{.Client.Version}}")
+                .stdout(new TeeOutputStream(baos, System.err)).stderr(System.err).join() == 0, "`docker version` could be run");
+        assumeTrue(new VersionNumber(baos.toString().trim()).isNewerThanOrEqualTo(new VersionNumber("1.13.0")), "Docker must be at least 1.13.0 for this test (uses --init)");
     }
 
     protected boolean useBinaryWrapper() {
         return true;
     }
 
-    protected abstract Node createNode() throws Exception;
+    protected Node createNode() throws Exception {
+        assumeDocker();
+        SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(
+                Domain.global(), Collections.singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
+        var sshLauncher = new SSHLauncher(container.getHost(), container.getMappedPort(22), "test");
+        sshLauncher.setJavaPath(customJavaPath());
+        return new DumbSlave("docker", "/home/test", sshLauncher);
+    }
 
-    @Before public void prepareAgentForPlatform() throws Exception {
+    protected abstract TestPlatform getPlatform();
+
+    protected GenericContainer<?> createContainer() {
+        return null;
+    }
+
+    protected String customJavaPath() {
+        return null;
+    }
+
+    @BeforeAll
+    static void beforeAll() {
+        assumeFalse(isWindows(), "This test is only for Unix");
+    }
+
+    @BeforeEach
+    void beforeEach(JenkinsRule rule) throws Exception {
+        j = rule;
+
+        container = createContainer();
+        if (container != null) {
+            container.start();
+        }
+
         BourneShellScript.USE_BINARY_WRAPPER = useBinaryWrapper();
         s = createNode();
         if (s instanceof Slave slave) {
@@ -129,11 +166,16 @@ public abstract class BourneShellScriptTest {
         launcher = s.createLauncher(listener);
     }
 
-    @After public void agentCleanup() throws IOException, InterruptedException {
+    @AfterEach
+    void afterEach() throws Exception {
         if (s != null) {
             j.jenkins.removeNode(s);
         }
         BourneShellScript.USE_BINARY_WRAPPER = false;
+
+        if (container != null) {
+            container.stop();
+        }
     }
 
     @Test
@@ -405,8 +447,7 @@ public abstract class BourneShellScriptTest {
         String os;
         String architecture;
         switch (platform) {
-            case ON_CONTROLLER:
-            case NATIVE:
+            case ON_CONTROLLER, NATIVE:
                 if (Platform.isDarwin()) {
                     os = "darwin";
                     String macArch = System.getProperty("os.arch");

@@ -38,10 +38,9 @@ import jenkins.security.MasterToSlaveCallable;
 import org.apache.commons.io.output.TeeOutputStream;
 import org.jenkinsci.plugins.durabletask.fixtures.UbuntuFixture;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledOnOs;
-import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.params.Parameter;
 import org.junit.jupiter.params.ParameterizedClass;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -63,13 +62,13 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
 
+import static hudson.Functions.isWindows;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 @Issue({"JENKINS-31096", "JENKINS-52165"})
-@DisabledOnOs(OS.WINDOWS)
 @ParameterizedClass(name = "testCase={0}, output={1}, watch={2}")
 @MethodSource("parameters")
 @WithJenkins
@@ -88,8 +87,13 @@ class EncodingTest {
 
     private JenkinsRule j;
 
+    @BeforeAll
+    static void beforeAll() {
+        assumeFalse(isWindows(), "This test is only for Unix");
+    }
+
     @BeforeEach
-    void setUp(JenkinsRule rule) throws Exception {
+    void beforeEach(JenkinsRule rule) throws Exception {
         j = rule;
 
         BourneShellScript.USE_BINARY_WRAPPER = true;
@@ -115,7 +119,7 @@ class EncodingTest {
     }
 
     @AfterEach
-    void tearDown() throws Exception {
+    void afterEach() throws Exception {
         if (s != null) {
             j.jenkins.removeNode(s);
         }

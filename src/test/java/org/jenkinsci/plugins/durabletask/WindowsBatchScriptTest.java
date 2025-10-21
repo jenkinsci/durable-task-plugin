@@ -28,6 +28,7 @@ import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.util.StreamTaskListener;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
@@ -44,10 +45,12 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+import static hudson.Functions.isWindows;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @WithJenkins
 @EnabledOnOs(OS.WINDOWS)
@@ -64,8 +67,13 @@ class WindowsBatchScriptTest {
 
     private JenkinsRule j;
 
+    @BeforeAll
+    static void beforeAll() {
+        assumeTrue(isWindows(), "This test is only for Windows");
+    }
+
     @BeforeEach
-    void setUp(JenkinsRule rule) {
+    void beforeEach(JenkinsRule rule) {
         j = rule;
 
         WindowsBatchScript.USE_BINARY_WRAPPER = enableBinary;
