@@ -11,12 +11,6 @@
   "rebaseWhen": "conflicted",
   "packageRules": [
     {
-      "matchPackageNames": [
-        "io.jenkins.tools.incrementals:git-changelist-maven-extension",
-        "org.jenkins-ci.plugins:plugin"
-      ]
-    },
-    {
       "matchPackagePatterns": [
         "^io\\.jenkins\\.tools\\.bom:bom-.*"
       ],
