@@ -14,8 +14,7 @@
       "matchPackageNames": [
         "io.jenkins.tools.incrementals:git-changelist-maven-extension",
         "org.jenkins-ci.plugins:plugin"
-      ],
-      "automerge": true
+      ]
     },
     {
       "matchPackagePatterns": [
