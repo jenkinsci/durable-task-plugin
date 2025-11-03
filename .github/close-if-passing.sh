@@ -34,6 +34,7 @@ pr_data=$(gh api graphql -f query='
                 }
               }
               isDraft
+              headRefOid
             }
           }
         }
@@ -43,6 +44,7 @@ pr_data=$(gh api graphql -f query='
 
 # Extract PR data
 pr_number=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].number // empty')
+pr_head_sha=$(echo "$pr_data" | jq -r '.data.repository.object.associatedPullRequests.nodes[0].headRefOid // empty')
 
 # Exit early if no associated PR found
 if [[ -z "$pr_number" ]]; then
@@ -64,9 +66,9 @@ fi
 
 echo "PR has close-if-passing label, processing..."
 
-# Verify commit matches (similar to the referenced script)
-if [[ "$check_run_sha" != "$GITHUB_SHA" ]]; then
-  echo "Head SHA mismatch (check: $check_run_sha, expected: $GITHUB_SHA), exiting"
+# Verify commit matches the PR head
+if [[ "$check_run_sha" != "$pr_head_sha" ]]; then
+  echo "Head SHA mismatch (check: $check_run_sha, PR head: $pr_head_sha), exiting"
   exit 0
 fi
 
