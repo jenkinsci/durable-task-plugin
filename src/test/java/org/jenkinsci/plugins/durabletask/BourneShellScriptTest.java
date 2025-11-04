@@ -122,7 +122,6 @@ abstract class BourneShellScriptTest {
     }
 
     protected Node createNode() throws Exception {
-        assumeDocker();
         SystemCredentialsProvider.getInstance().setDomainCredentialsMap(Collections.singletonMap(
                 Domain.global(), Collections.singletonList(new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "test", null, "test", "test"))));
         var sshLauncher = new SSHLauncher(container.getHost(), container.getMappedPort(22), "test");
@@ -151,6 +150,7 @@ abstract class BourneShellScriptTest {
 
         container = createContainer();
         if (container != null) {
+            assumeDocker();
             container.start();
         }
 
