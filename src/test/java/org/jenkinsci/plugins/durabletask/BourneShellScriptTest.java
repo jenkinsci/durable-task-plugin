@@ -514,6 +514,9 @@ abstract class BourneShellScriptTest {
         String exitString;
         String zombieString;
         switch (platform) {
+            case ON_CONTROLLER:
+            case NATIVE:
+                return; // cannot control the CI environment
             case SLIM:
                 // Debian slim does not have ps
             case NO_INIT:
