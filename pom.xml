@@ -25,6 +25,8 @@
         <jenkins.baseline>2.504</jenkins.baseline>
         <jenkins.version>${jenkins.baseline}.3</jenkins.version>
         <gitHubRepo>jenkinsci/${project.artifactId}-plugin</gitHubRepo>
+        <hpi.bundledArtifacts>lib-durable-task</hpi.bundledArtifacts>
+        <hpi.strictBundledArtifacts>true</hpi.strictBundledArtifacts>
         <ban-junit4-imports.skip>false</ban-junit4-imports.skip>
     </properties>
 
