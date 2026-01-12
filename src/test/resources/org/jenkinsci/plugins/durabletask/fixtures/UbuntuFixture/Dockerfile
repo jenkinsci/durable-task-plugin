@@ -1,7 +1,7 @@
 FROM ubuntu:noble
 RUN apt-get update -y && \
     apt-get install -y \
-        openjdk-21-jre-headless \
+        openjdk-25-jre-headless \
         openssh-server \
         locales
 RUN mkdir -p /var/run/sshd
