@@ -34,7 +34,7 @@ import java.util.List;
  */
 public class SlimFixture extends GenericContainer<SlimFixture> {
 
-    public static final String SLIM_JAVA_LOCATION = "/usr/lib/jvm/java-21-openjdk-amd64/bin/java";
+    public static final String SLIM_JAVA_LOCATION = "/usr/lib/jvm/java-25-openjdk-amd64/bin/java";
 
     public SlimFixture() {
         super(new ImageFromDockerfile("slim", false)

@@ -41,6 +41,6 @@ class BourneShellScriptNoInitTest extends BourneShellScriptTest {
         assumeDocker();
         return new DumbSlave("docker",
                 "/home/jenkins/agent",
-                new SimpleCommandLauncher("docker run -i --rm jenkins/agent:latest-jdk21 java -jar /usr/share/jenkins/agent.jar"));
+                new SimpleCommandLauncher("docker run -i --rm jenkins/agent:latest-jdk25 java -jar /usr/share/jenkins/agent.jar"));
     }
 }
