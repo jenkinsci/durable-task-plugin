@@ -28,6 +28,20 @@ import hudson.EnvVars;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.util.StreamTaskListener;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.Duration;
+import java.util.Arrays;
+import org.apache.commons.io.output.TeeOutputStream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,18 +54,15 @@ import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-
 import static hudson.Functions.isWindows;
-import java.time.Duration;
-import org.apache.commons.io.output.TeeOutputStream;
 import static org.awaitility.Awaitility.await;
+import static org.hamcrest.CoreMatchers.anyOf;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.number.OrderingComparison.greaterThan;
+import static org.hamcrest.number.OrderingComparison.lessThan;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -230,18 +241,58 @@ class WindowsBatchScriptTest {
         await().atMost(Duration.ofMinutes(1)).pollInterval(Duration.ofMillis(500)).until(() -> binaryInactive(launcher));
     }
 
+    /*
+     * flag that we set to false if we need an alternative to tasklist to list commands
+     * see https://github.com/jenkinsci/durable-task-plugin/pull/541
+     */
+    private static boolean functionalTaskListCommand = true;
+
     /**
-     * Determines if the windows binary is not running by checking the tasklist
+     * Determines if the windows binary is not running by checking the running processes
      */
     private static boolean binaryInactive(Launcher launcher) throws IOException, InterruptedException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        int status = launcher.launch().cmds("tasklist", "/fi", "\"imagename eq durable_task_monitor_*\"").stdout(new TeeOutputStream(baos, System.err)).join();
-        var out = baos.toString();
-        if (status == 1 && out.contains("Access denied")) {
-            return true; // https://github.com/jenkinsci/durable-task-plugin/pull/541
+        if (functionalTaskListCommand) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            int status = launcher.launch().cmds("tasklist", "/fi", "\"imagename eq durable_task_monitor_*\"").stdout(new TeeOutputStream(baos, System.err)).join();
+            var out = baos.toString();
+            if (status == 1 && out.contains("Access denied")) {
+                functionalTaskListCommand = false;
+                return false; // we will try again
+            }
+            assertEquals(0, status, out);
+            return out.contains("No tasks");
         }
-        assertEquals(0, status, out);
-        return out.contains("No tasks");
+        // fallback to pslist
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        String pslistExe = downloadPSListIfNeeded();
+        int status = launcher.launch().cmds(pslistExe, "-accepteula", "-nobanner", "durable_task_monitor_").stdout(new TeeOutputStream(baos, System.err)).join();
+        var out = baos.toString();
+        // exit code is 1 when the command is not running (no matches) or 0 when it is found.
+        assertThat(out, status, not(anyOf(lessThan(0), greaterThan(1))));
+        return out.contains("was not found on");
+    }
+
+    private static String downloadPSListIfNeeded() throws IOException {
+        // download a file from https://live.sysinternals.com/pslist64.exe to a temporary file
+        // if the file names pslist.exe does not exist in the temporary directory then move the file atomically to there
+        Path tempDir = Paths.get(System.getProperty("java.io.tmpdir"));
+        Path pslist = tempDir.resolve("pslist.exe");
+        if (Files.isExecutable(pslist)) {
+            // file was already downloaded in a previous invocation of maven
+            return pslist.toString();
+        }
+        // createTempFile ignores java.io.tmpdir property so we need to pass in the temp directory otherwise we could try and move across file systems.
+        Path tempDownload = Files.createTempFile(tempDir, "pslist-", ".exe");
+        URL url = new URL("https://live.sysinternals.com/pslist64.exe");
+        try (InputStream is = url.openStream()) {
+            Files.copy(is, tempDownload, StandardCopyOption.REPLACE_EXISTING);
+        }
+        try {
+            Files.move(tempDownload, pslist, StandardCopyOption.ATOMIC_MOVE);
+        } catch (FileAlreadyExistsException ignored) {
+            // already downloaded (running multiple tests in parallel for example)
+        }
+        return pslist.toString();
     }
 
 }
