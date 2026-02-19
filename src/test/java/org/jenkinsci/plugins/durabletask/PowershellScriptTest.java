@@ -43,7 +43,6 @@ import org.opentest4j.TestAbortedException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -130,7 +129,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(1), c.exitStatus(ws, launcher, TaskListener.NULL));
@@ -145,7 +144,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, TaskListener.NULL));
@@ -160,7 +159,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, TaskListener.NULL) != 0);
@@ -175,7 +174,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         assertEquals(0, (int) c.exitStatus(ws, launcher, TaskListener.NULL));
         c.cleanup(ws);
     }
@@ -187,7 +186,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener) != 0);
@@ -202,7 +201,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener) != 0);
@@ -217,7 +216,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener) != 0);
@@ -232,7 +231,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener) != 0);
@@ -247,7 +246,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener) != 0);
@@ -261,7 +260,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, (int) c.exitStatus(ws, launcher, listener));
@@ -276,7 +275,7 @@ class PowershellScriptTest {
         }
         s.captureOutput();
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener) != 0);
@@ -296,7 +295,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertTrue(c.exitStatus(ws, launcher, listener) != 0);
@@ -318,7 +317,7 @@ class PowershellScriptTest {
         }
         s.captureOutput();
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, (int) c.exitStatus(ws, launcher, listener));
@@ -345,7 +344,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, TaskListener.NULL).intValue());
@@ -363,7 +362,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         assertEquals(0, c.exitStatus(newWs, launcher, TaskListener.NULL).intValue());
         c.cleanup(ws);
     }
@@ -375,7 +374,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars("MYVAR", "power$hell"), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
@@ -390,7 +389,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         c.writeLog(ws, baos);
         assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, TaskListener.NULL));
@@ -406,7 +405,7 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         assertEquals(Integer.valueOf(5), c.exitStatus(ws, launcher, TaskListener.NULL));
         c.cleanup(ws);
     }
@@ -418,37 +417,15 @@ class PowershellScriptTest {
             s.setPowershellBinary("pwsh");
         }
         Controller c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
 
         s.setLoadProfile(true);
         c = s.launch(new EnvVars(), ws, launcher, listener);
-        awaitCompletion(c);
+        WindowsBatchScriptTest.awaitCompletion(c, ws, launcher, listener);
         assertEquals(1, c.exitStatus(ws, launcher, listener).intValue());
         c.cleanup(ws);
     }
 
-    private void awaitCompletion(Controller c) throws IOException, InterruptedException {
-        while (c.exitStatus(ws, launcher, listener) == null) {
-            Thread.sleep(100);
-        }
-        int retries = 0;
-        while (retries < 6) {
-            if (binaryInactive()) {
-                break;
-            }
-            Thread.sleep(500);
-            retries++;
-        }
-    }
-
-    /**
-     * Determines if the windows binary is not running by checking the tasklist
-     */
-    private boolean binaryInactive() throws IOException, InterruptedException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        assertEquals(0, launcher.launch().cmds("tasklist", "/fi", "\"imagename eq durable_task_monitor_*\"").stdout(baos).join());
-        return baos.toString().contains("No tasks");
-    }
 }
