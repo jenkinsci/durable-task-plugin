@@ -235,8 +235,13 @@ class WindowsBatchScriptTest {
      */
     private static boolean binaryInactive(Launcher launcher) throws IOException, InterruptedException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        assertEquals(0, launcher.launch().cmds("tasklist", "/fi", "\"imagename eq durable_task_monitor_*\"").stdout(new TeeOutputStream(baos, System.err)).join());
-        return baos.toString().contains("No tasks");
+        int status = launcher.launch().cmds("tasklist", "/fi", "\"imagename eq durable_task_monitor_*\"").stdout(new TeeOutputStream(baos, System.err)).join();
+        var out = baos.toString();
+        if (status == 1 && out.contains("Access denied")) {
+            return true; // https://github.com/jenkinsci/durable-task-plugin/pull/541
+        }
+        assertEquals(0, status, out);
+        return out.contains("No tasks");
     }
 
 }
