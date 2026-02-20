@@ -36,7 +36,6 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.stream.Stream;
-import org.hamcrest.CoreMatchers;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -229,14 +228,14 @@ class WindowsBatchScriptTest {
 
     static void awaitCompletion(Controller c, FilePath ws, Launcher launcher, StreamTaskListener listener) throws IOException, InterruptedException {
         await().atMost(Duration.ofMinutes(2)).until(() -> c.exitStatus(ws, launcher, listener), notNullValue());
-        await().atMost(Duration.ofMinutes(1)).pollInterval(Duration.ofMillis(500)).until(() -> binaryInactive(launcher));
+        await().atMost(Duration.ofMinutes(1)).pollInterval(Duration.ofMillis(500)).until(() -> binaryInactive());
     }
 
 
     /**
      * Determines if the windows binary is not running by checking the running processes
      */
-    private static boolean binaryInactive(Launcher launcher) throws IOException, InterruptedException {
+    private static boolean binaryInactive() throws IOException {
         try (Stream<ProcessHandle> processHandles = ProcessHandle.allProcesses()) {
             Optional<Info> any = processHandles.
                     filter(p -> p.info().command().isPresent()).
@@ -244,11 +243,7 @@ class WindowsBatchScriptTest {
                     filter(info -> info.command().get().contains("durable_task_monitor_")).
                     findAny();
             return any.isEmpty();
-        } catch (UnsupportedOperationException ohno) {
-            // should not occur - this appears to be supported on my windows box so fail hard so that this does not regress
-            assertThat(ohno, CoreMatchers.is(null));
         }
-        return false;
     }
 
 }
