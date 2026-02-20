@@ -29,6 +29,7 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.Proc;
 import hudson.model.TaskListener;
+import hudson.remoting.Which;
 import hudson.util.StreamTaskListener;
 import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,6 +40,7 @@ import org.junit.jupiter.params.ParameterizedClass;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
+import org.jvnet.winp.WinProcess;
 import org.opentest4j.TestAbortedException;
 
 import java.io.ByteArrayOutputStream;
@@ -412,7 +414,31 @@ class PowershellScriptTest {
 
     @Test
     void checkProfile() throws Exception {
-        PowershellScript s = new PowershellScript("if ((Get-CimInstance Win32_Process -Filter \"ProcessId = $PID\").CommandLine.split(\" \").Contains(\"-NoProfile\")) { exit 0; } else { exit 1; } ");
+        // CI is unable to use Get-CimInstance or Get-WMIObject
+        // so use WinProcess itself
+        // we can not pipe directly to jshell as a powershell pipe is object based.
+        File jarFile = Which.jarFile(WinProcess.class);
+        String script =  "";
+        PowershellScript s = new PowershellScript("""
+                $TempFile = New-TemporaryFile
+                $java = 
+                @"
+                System.out.println(new org.jvnet.winp.WinProcess($PID).getCommandLine())
+                /exit
+                "@
+                echo $java | Out-File -FilePath $TempFile -Encoding ascii
+                
+                $cmdLine = jshell -s --class-path "%%jarFile%%" $TempFile
+                Write-Output "CommandLine is: $cmdLine";
+                Remove-Item -Path $TempFile
+                if ($cmdLine.split(" ").Contains("-NoProfile")) {
+                    Write-Output "found exiting zero"
+                    exit 0;
+                } else {
+                    Write-Output "not found exiting one"
+                    exit 1;
+                }
+                """.replace("%%jarFile%%", jarFile.toString()));
         if (enablePwsh) {
             s.setPowershellBinary("pwsh");
         }
