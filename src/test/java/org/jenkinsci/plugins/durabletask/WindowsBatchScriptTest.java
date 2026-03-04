@@ -30,11 +30,9 @@ import hudson.Launcher;
 import hudson.util.StreamTaskListener;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.lang.ProcessHandle.Info;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -237,12 +235,9 @@ class WindowsBatchScriptTest {
      */
     private static boolean binaryInactive() throws IOException {
         try (Stream<ProcessHandle> processHandles = ProcessHandle.allProcesses()) {
-            Optional<Info> any = processHandles.
-                    filter(p -> p.info().command().isPresent()).
-                    map(ProcessHandle::info).
-                    filter(info -> info.command().get().contains("durable_task_monitor_")).
-                    findAny();
-            return any.isEmpty();
+            return processHandles.
+                flatMap(p -> p.info().command().stream()).
+                noneMatch(cmd -> cmd.contains("durable_task_monitor_"));
         }
     }
 
