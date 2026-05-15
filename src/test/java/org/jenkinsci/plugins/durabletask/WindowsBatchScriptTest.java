@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -221,6 +222,47 @@ class WindowsBatchScriptTest {
         assertEquals(0, c.exitStatus(ws, launcher, listener).intValue());
         String log = baos.toString(StandardCharsets.UTF_8);
         assertTrue(log.contains("Helló, Wõrld ®"), log);
+        c.cleanup(ws);
+    }
+
+    /**
+     * SSH session drop causes ssh-shellhost.exe Job Object to kill child processes.
+     * Binary wrapper with CREATE_BREAKAWAY_FROM_JOB survives this; shell wrapper does not.
+     */
+    @Test
+    void processKilledByJobObject() throws Exception {
+        String marker = "KILL_MARKER_" + System.nanoTime();
+        EnvVars env = new EnvVars(marker, "true");
+        // Short-lived for binary (should survive and finish), infinite for shell (will be killed)
+        String script = enableBinary ? "ping -n 3 127.0.0.1" : "ping -t 127.0.0.1";
+        FileMonitoringTask.FileMonitoringController c = (FileMonitoringTask.FileMonitoringController)
+                new WindowsBatchScript(script).launch(env, ws, launcher, listener);
+
+        // Wait for process to start
+        await().atMost(Duration.ofSeconds(30)).until(() -> {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            c.writeLog(ws, baos);
+            return baos.toString().contains("Reply from");
+        });
+
+        // Simulate Job Object teardown on SSH disconnect
+        launcher.kill(Collections.singletonMap(marker, "true"));
+        Thread.sleep(2000);
+
+        if (enableBinary) {
+            // Binary wrapper detaches from Job Object, process survives and completes
+            awaitCompletion(c, ws, launcher, listener);
+            assertEquals(Integer.valueOf(0), c.exitStatus(ws, launcher, listener),
+                    "Process should survive Job Object kill via BREAKAWAY flag");
+        } else {
+            // Shell wrapper stays in Job Object, process killed, no result file written
+            FilePath resultFile = c.getResultFile(ws);
+            assertTrue(!resultFile.exists() || resultFile.length() == 0,
+                    "Result file should not exist after external kill");
+            assertEquals(null, c.exitStatus(ws, launcher, listener),
+                    "Exit status unknown when process killed without writing result");
+        }
+
         c.cleanup(ws);
     }
 
