@@ -35,7 +35,7 @@ import java.util.List;
 public class CentOSFixture extends GenericContainer<CentOSFixture> {
 
     public CentOSFixture() {
-        super(new ImageFromDockerfile("centos", false)
+        super(new ImageFromDockerfile("localhost/testcontainers/durable-task/centos", false)
                 .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/CentOSFixture/Dockerfile"));
         setExposedPorts(List.of(22));
     }
