@@ -9,7 +9,7 @@ public class PowerShellCoreFixture extends GenericContainer<PowerShellCoreFixtur
     public static final String PWSH_JAVA_LOCATION = "/usr/lib/jvm/java-25-openjdk-amd64/bin/java";
 
     public PowerShellCoreFixture() {
-        super(new ImageFromDockerfile("pwsh", false)
+        super(new ImageFromDockerfile("localhost/testcontainers/durable-task/pwsh", false)
                 .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/PowerShellCoreFixture/Dockerfile"));
         setExposedPorts(List.of(22));
     }
