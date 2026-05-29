@@ -24,20 +24,17 @@
 
 package org.jenkinsci.plugins.durabletask;
 
-import edu.umd.cs.findbugs.annotations.NonNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.PluginWrapper;
 import hudson.Proc;
 import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
 import hudson.tasks.Shell;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.File;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -56,7 +53,9 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.Nullable;
+import hudson.AbortException;
 import jenkins.MasterToSlaveFileCallable;
+import jenkins.util.SystemProperties;
 
 /**
  * Runs a Bourne shell script on a Unix node using {@code nohup}.
@@ -82,9 +81,7 @@ public final class BourneShellScript extends FileMonitoringTask {
      *
      * For the binary wrapper, this enables the debug flag.
      */
-    @SuppressWarnings("FieldMayBeFinal")
-    // TODO use SystemProperties if and when unrestricted
-    private static boolean LAUNCH_DIAGNOSTICS = Boolean.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
+    private final boolean LAUNCH_DIAGNOSTICS = SystemProperties.getBoolean(LAUNCH_DIAGNOSTICS_PROP);
 
     /**
      * Seconds between heartbeat checks, where we check to see if
@@ -170,11 +167,14 @@ public final class BourneShellScript extends FileMonitoringTask {
         }
 
         LOGGER.log(Level.FINE, "launching {0}", launcherCmd);
-        Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws).quiet(true);
+        Launcher.ProcStarter ps = launcher.launch().cmds(launcherCmd).envs(escape(envVars)).pwd(ws);
         if (LAUNCH_DIAGNOSTICS) {
-            ps.stdout(listener);
-            ps.start();
+            int status = ps.join();
+            if (status != 0) {
+                throw new AbortException("Failed to launch wrapper: " + status);
+            }
         } else {
+            ps.quiet(true);
             ps.readStdout().readStderr(); // TODO RemoteLauncher.launch fails to check ps.stdout == NULL_OUTPUT_STREAM, so it creates a useless thread even if you never called stdout(…)
             Proc p = ps.start();
             // Make sure these stream will get closed later, to release their remote counterpart from the agent's ExportTable. See JENKINS-60960.
@@ -324,7 +324,7 @@ public final class BourneShellScript extends FileMonitoringTask {
                 long currentTimestamp = getLogFile(workspace).lastModified();
                 if (currentTimestamp == 0) {
                     listener.getLogger().println("process apparently never started in " + controlDir);
-                    if (!LAUNCH_DIAGNOSTICS) {
+                    if (!SystemProperties.getBoolean(LAUNCH_DIAGNOSTICS_PROP)) {
                         listener.getLogger().println("(running Jenkins temporarily with -D" + LAUNCH_DIAGNOSTICS_PROP + "=true might make the problem clearer)");
                     }
                     return recordExitStatus(workspace, -2);
