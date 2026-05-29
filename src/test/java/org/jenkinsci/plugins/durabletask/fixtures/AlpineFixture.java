@@ -36,7 +36,7 @@ public class AlpineFixture extends GenericContainer<AlpineFixture> {
     public static final String ALPINE_JAVA_LOCATION = "/opt/java/openjdk/bin/java";
 
     public AlpineFixture() {
-        super(new ImageFromDockerfile("alpine", false)
+        super(new ImageFromDockerfile("localhost/testcontainers/durable-task/alpine", false)
                 .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/AlpineFixture/Dockerfile"));
         setExposedPorts(List.of(22));
     }

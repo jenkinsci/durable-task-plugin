@@ -37,7 +37,7 @@ public class SlimFixture extends GenericContainer<SlimFixture> {
     public static final String SLIM_JAVA_LOCATION = "/usr/lib/jvm/java-25-openjdk-amd64/bin/java";
 
     public SlimFixture() {
-        super(new ImageFromDockerfile("slim", false)
+        super(new ImageFromDockerfile("localhost/testcontainers/durable-task/slim", false)
                 .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/SlimFixture/Dockerfile"));
         setExposedPorts(List.of(22));
     }

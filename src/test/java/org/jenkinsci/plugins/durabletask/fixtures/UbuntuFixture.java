@@ -35,7 +35,7 @@ import java.util.List;
 public class UbuntuFixture extends GenericContainer<UbuntuFixture> {
 
     public UbuntuFixture() {
-        super(new ImageFromDockerfile("ubuntu", false)
+        super(new ImageFromDockerfile("localhost/testcontainers/durable-task/ubuntu", false)
                 .withFileFromClasspath("Dockerfile", "org/jenkinsci/plugins/durabletask/fixtures/UbuntuFixture/Dockerfile"));
         setExposedPorts(List.of(22));
     }
