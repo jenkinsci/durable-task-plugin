@@ -30,6 +30,9 @@ import hudson.model.BuildListener;
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import hudson.model.Label;
+import hudson.model.Node;
+import hudson.model.Queue;
+import hudson.model.queue.CauseOfBlockage;
 import hudson.model.queue.QueueTaskFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,10 +42,14 @@ import org.jvnet.hudson.test.TestBuilder;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
 import java.io.IOException;
+import java.util.Calendar;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 @WithJenkins
 class ContinuedTaskTest {
@@ -82,6 +89,28 @@ class ContinuedTaskTest {
         assertEquals(1, cntB.get());
     }
 
+    @Test
+    void cacheDropsTasksThatAreNoLongerContinued() throws Exception {
+        Label label = Label.get("continued-cache");
+        Node node = j.createSlave(label);
+        ContinuedTask.Scheduler.Listener listener = new ContinuedTask.Scheduler.Listener();
+        ContinuedTask.Scheduler scheduler = new ContinuedTask.Scheduler();
+        MutableTestTask continued = new MutableTestTask(new AtomicInteger(), true, label);
+        Queue.BuildableItem continuedItem = buildableItem(continued);
+        Queue.BuildableItem regularItem = buildableItem(new LabelledTask(new AtomicInteger(), label));
+
+        listener.onEnterBuildable(continuedItem);
+        CauseOfBlockage blockage = scheduler.canTake(node, regularItem);
+        assertNotNull(blockage);
+
+        continued.continued = false;
+        assertNull(scheduler.canTake(node, regularItem));
+    }
+
+    private static Queue.BuildableItem buildableItem(Queue.Task task) {
+        return new Queue.BuildableItem(new Queue.WaitingItem(Calendar.getInstance(), task, Collections.emptyList()));
+    }
+
     private static final class TestTask extends MockTask implements ContinuedTask {
         private final boolean continued;
 
@@ -103,6 +132,41 @@ class ContinuedTaskTest {
         @Override
         public String toString() {
             return "TestTask:" + continued;
+        }
+    }
+
+    private static final class MutableTestTask extends MockTask implements ContinuedTask {
+        private boolean continued;
+        private final Label label;
+
+        MutableTestTask(AtomicInteger cnt, boolean continued, Label label) {
+            super(cnt);
+            this.continued = continued;
+            this.label = label;
+        }
+
+        @Override
+        public boolean isContinued() {
+            return continued;
+        }
+
+        @Override
+        public Label getAssignedLabel() {
+            return label;
+        }
+    }
+
+    private static final class LabelledTask extends MockTask {
+        private final Label label;
+
+        LabelledTask(AtomicInteger cnt, Label label) {
+            super(cnt);
+            this.label = label;
+        }
+
+        @Override
+        public Label getAssignedLabel() {
+            return label;
         }
     }
 
