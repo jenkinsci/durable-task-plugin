@@ -30,6 +30,8 @@ import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.queue.CauseOfBlockage;
 import hudson.model.queue.QueueTaskDispatcher;
+
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -58,24 +60,34 @@ public interface ContinuedTask extends Queue.Task {
         }
 
         @Override public CauseOfBlockage canTake(Node node, Queue.BuildableItem item) {
+            // as this method can be a hostspot, do not use a Supplier in logging statements
+            // rather guard the logging statement inside an if
+            final boolean isFiner = LOGGER.isLoggable(Level.FINER);
             if (isContinued(item.task)) {
-                LOGGER.finer(() -> item.task + " is a continued task, so we are not blocking it");
+                if (isFiner) {
+                    LOGGER.finer(item.task + " is a continued task, so we are not blocking it");
+                }
                 return null;
             }
+            final boolean isFine = LOGGER.isLoggable(Level.FINE);
             for (Queue.BuildableItem other : Queue.getInstance().getBuildableItems()) {
                 if (isContinued(other.task)) {
                     Label label = other.task.getAssignedLabel();
                     if (label == null || label.matches(node)) { // conservative; might actually go to a different node
-                        LOGGER.fine(() -> "blocking " + item.task + " in favor of " + other.task);
+                        if (isFine) {
+                            LOGGER.fine("blocking " + item.task + " in favor of " + other.task);
+                        }
                         return new HoldOnPlease(other.task);
-                    } else {
-                        LOGGER.finer(() -> other.task + "’s label " + label + " does not match " + node);
+                    } else if (isFiner) {
+                        LOGGER.finer(other.task + "’s label " + label + " does not match " + node);
                     }
-                } else {
-                    LOGGER.finer(() -> other.task + " is not continued, so it would not block " + item.task);
+                } else if (isFiner) {
+                    LOGGER.finer(other.task + " is not continued, so it would not block " + item.task);
                 }
             }
-            LOGGER.finer(() -> "no reason to block " + item.task);
+            if (isFiner) {
+                LOGGER.finer("no reason to block " + item.task);
+            }
             return null;
         }
 
