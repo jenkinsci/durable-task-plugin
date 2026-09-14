@@ -29,8 +29,9 @@ import hudson.model.Label;
 import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.queue.CauseOfBlockage;
+import hudson.model.queue.QueueListener;
 import hudson.model.queue.QueueTaskDispatcher;
-
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.kohsuke.accmod.Restricted;
@@ -55,6 +56,14 @@ public interface ContinuedTask extends Queue.Task {
 
         private static final Logger LOGGER = Logger.getLogger(ContinuedTask.class.getName());
 
+        /**
+         * Number of {@link ContinuedTask} instances currently in the buildable queue.
+         * Tracked by {@link CountingListener} on {@code instanceof ContinuedTask} (stable over the
+         * buildable lifecycle), not on the dynamic {@link ContinuedTask#isContinued()} value.
+         * Drift only causes the fast path to miss; it never produces an incorrect block decision.
+         */
+        private static final AtomicInteger continuedBuildableCount = new AtomicInteger();
+
         private static boolean isContinued(Queue.Task task) {
             return task instanceof ContinuedTask && ((ContinuedTask) task).isContinued();
         }
@@ -67,6 +76,9 @@ public interface ContinuedTask extends Queue.Task {
                 if (isFiner) {
                     LOGGER.finer(item.task + " is a continued task, so we are not blocking it");
                 }
+                return null;
+            }
+            if (continuedBuildableCount.get() == 0) {
                 return null;
             }
             final boolean isFine = LOGGER.isLoggable(Level.FINE);
@@ -89,6 +101,30 @@ public interface ContinuedTask extends Queue.Task {
                 LOGGER.finer("no reason to block " + item.task);
             }
             return null;
+        }
+
+        static int continuedBuildableCount() {
+            return continuedBuildableCount.get();
+        }
+
+        @Extension
+        public static final class CountingListener extends QueueListener {
+            @Override public void onEnterBuildable(Queue.BuildableItem item) {
+                if (item.task instanceof ContinuedTask) {
+                    continuedBuildableCount.incrementAndGet();
+                }
+            }
+            @Override public void onLeaveBuildable(Queue.BuildableItem item) {
+                if (item.task instanceof ContinuedTask) {
+                    int previous = continuedBuildableCount.getAndUpdate(c -> c > 0 ? c - 1 : 0);
+                    if (previous <= 0) {
+                        // Indicates a missed onEnterBuildable or a stray callback. Clamp at 0
+                        // rather than letting the counter drift negative — a negative counter
+                        // would keep the fast path armed forever and silently lose the win.
+                        LOGGER.warning(() -> "ContinuedTask buildable counter underflow on leave of " + item.task + "; clamped at 0");
+                    }
+                }
+            }
         }
 
         private static final class HoldOnPlease extends CauseOfBlockage {

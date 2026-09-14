@@ -24,12 +24,14 @@
 
 package org.jenkinsci.plugins.durabletask.executors;
 
+import hudson.ExtensionList;
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import hudson.model.Label;
+import hudson.model.Queue;
 import hudson.model.queue.QueueTaskFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,6 +84,89 @@ class ContinuedTaskTest {
         assertEquals(1, cntB.get());
     }
 
+    @Test
+    void counterTracksContinuedTaskBuildableLifecycle() throws Exception {
+        int initial = ContinuedTask.Scheduler.continuedBuildableCount();
+        long id = j.jenkins.getQueue().schedule(new TestTask(new AtomicInteger(), true), 0).getId();
+        j.jenkins.getQueue().maintain();
+        waitForCounter(initial + 1);
+        assertEquals(initial + 1, ContinuedTask.Scheduler.continuedBuildableCount());
+
+        cancelById(id);
+        j.jenkins.getQueue().maintain();
+        waitForCounter(initial);
+        assertEquals(initial, ContinuedTask.Scheduler.continuedBuildableCount());
+    }
+
+    @Test
+    void counterIgnoresNonContinuedTasks() throws Exception {
+        int initial = ContinuedTask.Scheduler.continuedBuildableCount();
+        long id = j.jenkins.getQueue().schedule(new LabelledMockTask(new AtomicInteger()), 0).getId();
+        j.jenkins.getQueue().maintain();
+        // Give the listener a window to fire if it were buggy.
+        Thread.sleep(200);
+        assertEquals(initial, ContinuedTask.Scheduler.continuedBuildableCount());
+        cancelById(id);
+    }
+
+    @Test
+    void counterClampsAtZeroOnSpuriousLeaveBuildable() throws Exception {
+        // Drive the counter to 1, capture a real BuildableItem, then cancel so the counter goes
+        // back to 0. The retained item reference lets us simulate a duplicate/stray
+        // onLeaveBuildable callback, which must clamp at 0 rather than going negative.
+        long id = j.jenkins.getQueue().schedule(new TestTask(new AtomicInteger(), true), 0).getId();
+        j.jenkins.getQueue().maintain();
+        waitForCounter(1);
+        Queue.BuildableItem captured = (Queue.BuildableItem) j.jenkins.getQueue().getItem(id);
+        cancelById(id);
+        j.jenkins.getQueue().maintain();
+        waitForCounter(0);
+        assertEquals(0, ContinuedTask.Scheduler.continuedBuildableCount());
+
+        // Spurious extra callback: counter would go to -1 without the clamp.
+        ContinuedTask.Scheduler.CountingListener listener =
+                ExtensionList.lookupSingleton(ContinuedTask.Scheduler.CountingListener.class);
+        listener.onLeaveBuildable(captured);
+        assertEquals(0, ContinuedTask.Scheduler.continuedBuildableCount());
+
+        // And again — still clamped.
+        listener.onLeaveBuildable(captured);
+        assertEquals(0, ContinuedTask.Scheduler.continuedBuildableCount());
+    }
+
+    @Test
+    void counterIgnoresLeaveBuildableForNonContinuedTaskAtZero() throws Exception {
+        // Schedule, capture, cancel — same pattern as above, but with a non-ContinuedTask.
+        // The leave callback must not warn (item isn't a ContinuedTask) and the counter must
+        // remain at 0.
+        assertEquals(0, ContinuedTask.Scheduler.continuedBuildableCount());
+        long id = j.jenkins.getQueue().schedule(new LabelledMockTask(new AtomicInteger()), 0).getId();
+        j.jenkins.getQueue().maintain();
+        Queue.BuildableItem captured = (Queue.BuildableItem) j.jenkins.getQueue().getItem(id);
+        cancelById(id);
+
+        ContinuedTask.Scheduler.CountingListener listener =
+                ExtensionList.lookupSingleton(ContinuedTask.Scheduler.CountingListener.class);
+        listener.onLeaveBuildable(captured);
+        assertEquals(0, ContinuedTask.Scheduler.continuedBuildableCount());
+    }
+
+    private void cancelById(long id) {
+        Queue.Item current = j.jenkins.getQueue().getItem(id);
+        if (current != null) {
+            j.jenkins.getQueue().cancel(current);
+        }
+    }
+
+    private static void waitForCounter(int target) throws InterruptedException {
+        for (int i = 0; i < 100; i++) {
+            if (ContinuedTask.Scheduler.continuedBuildableCount() == target) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+    }
+
     private static final class TestTask extends MockTask implements ContinuedTask {
         private final boolean continued;
 
@@ -103,6 +188,18 @@ class ContinuedTaskTest {
         @Override
         public String toString() {
             return "TestTask:" + continued;
+        }
+    }
+
+    /** Non-ContinuedTask pinned to a label with no agent, so it stays in the queue. */
+    private static final class LabelledMockTask extends MockTask {
+        LabelledMockTask(AtomicInteger cnt) {
+            super(cnt);
+        }
+
+        @Override
+        public Label getAssignedLabel() {
+            return Label.get("nonexistent-counter-test-label");
         }
     }
 
